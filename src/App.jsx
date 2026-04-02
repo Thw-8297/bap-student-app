@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Papa from "papaparse";
 
 // ============================================================
@@ -20,6 +20,7 @@ const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";  // ← Paste y
 
 const DEFAULT_DATA = {
   semester: "Fall 2026",
+  lastUpdated: "",
   classes: [
     { code: "IES 300", title: "Argentine History & Society", professor: "Prof. García", days: ["Mon", "Wed"], time: "9:00–10:30", location: "Classroom A", color: "#0057B8", email: "garcia@pepperdine.edu" },
     { code: "SPA 201", title: "Intermediate Spanish II", professor: "Prof. Martínez", days: ["Mon", "Tue", "Thu"], time: "11:00–12:00", location: "Classroom B", color: "#64B5F6", email: "martinez@pepperdine.edu" },
@@ -29,10 +30,10 @@ const DEFAULT_DATA = {
   ],
   calendarEvents: [
     { date: "2026-08-10", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner" },
-    { date: "2026-08-11", title: "Orientation begins", type: "milestone", description: "Three-day orientation program" },
+    { date: "2026-08-11", title: "Orientation begins", type: "orientation", description: "Three-day orientation program", endDate: "2026-08-13" },
     { date: "2026-08-14", title: "Classes begin", type: "academic", description: "First day of classes" },
     { date: "2026-08-17", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday — no classes" },
-    { date: "2026-09-05", title: "Mendoza Excursion", type: "excursion", description: "Three-day trip to Mendoza wine region" },
+    { date: "2026-09-05", title: "Mendoza Excursion", type: "excursion", description: "Three-day trip to Mendoza wine region", endDate: "2026-09-07" },
     { date: "2026-09-21", title: "Día del Estudiante", type: "holiday", description: "Student Day — no classes" },
     { date: "2026-10-09", title: "Midterm exams begin", type: "academic", description: "Midterms through Oct 16" },
     { date: "2026-10-12", title: "Día del Respeto a la Diversidad Cultural", type: "holiday", description: "National holiday" },
@@ -65,6 +66,13 @@ const DEFAULT_DATA = {
     { name: "John Smith", role: "Program Director", phone: "+54 9 11 5555-0001", whatsapp: "https://wa.me/5491155550001", email: "john.smith@pepperdine.edu", address: "", maps: "", type: "staff" },
     { name: "María López", role: "Student Life Coordinator", phone: "+54 9 11 5555-0002", whatsapp: "https://wa.me/5491155550002", email: "maria.lopez@pepperdine.edu", address: "", maps: "", type: "staff" },
   ],
+  explore: [
+    { name: "Teatro Colón", type: "Landmark", description: "One of the world's finest opera houses; guided tours daily.", address: "Cerrito 628", hours: "Tours daily 9am–5pm", link: "https://teatrocolon.org.ar" },
+    { name: "MALBA", type: "Museum", description: "Premier Latin American art, from Frida Kahlo to contemporary works.", address: "Av. Figueroa Alcorta 3415", hours: "Wed 11am–8pm; Thu–Mon 12–8pm", link: "https://www.malba.org.ar" },
+    { name: "Cementerio de la Recoleta", type: "Historic Site", description: "Ornate 19th-century cemetery; final resting place of Eva Perón.", address: "Junín 1760, Recoleta", hours: "Daily 9am–5pm", link: "" },
+    { name: "Casa Rosada", type: "Historic Site", description: "The iconic pink presidential palace on Plaza de Mayo.", address: "Balcarce 50", hours: "Tours Sat–Sun (book online)", link: "https://www.casarosada.gob.ar" },
+    { name: "El Ateneo Grand Splendid", type: "Landmark", description: "A 1920s theater converted into one of the world's most beautiful bookstores.", address: "Av. Santa Fe 1860", hours: "Mon–Sat 9am–9pm; Sun 12–9pm", link: "https://www.yenny-elateneo.com/local/grand-splendid/" },
+  ],
 };
 
 // ============================================================
@@ -84,7 +92,7 @@ async function fetchTab(tabName) {
 }
 
 async function fetchAllData() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw] =
+  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
     await Promise.all([
       fetchTab("Settings"),
       fetchTab("Classes"),
@@ -93,6 +101,7 @@ async function fetchAllData() {
       fetchTab("Churches"),
       fetchTab("Policies"),
       fetchTab("Contacts"),
+      fetchTab("Explore"),
     ]);
 
   const settings = {};
@@ -100,6 +109,7 @@ async function fetchAllData() {
 
   return {
     semester: settings.semester || "Fall 2026",
+    lastUpdated: settings.last_updated || "",
     classes: classesRaw.filter(r => r.code).map((r) => ({
       code: r.code.trim(),
       title: r.title.trim(),
@@ -115,6 +125,7 @@ async function fetchAllData() {
       title: r.title.trim(),
       type: r.type.trim(),
       description: r.description ? r.description.trim() : "",
+      endDate: r.end_date ? r.end_date.trim() : "",
     })),
     healthProviders: healthRaw.filter(r => r.name).map((r) => ({
       name: r.name.trim(),
@@ -147,6 +158,14 @@ async function fetchAllData() {
       maps: r.maps ? r.maps.trim() : "",
       type: r.type ? r.type.trim() : "staff",
     })),
+    explore: exploreRaw.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      type: r.type ? r.type.trim() : "",
+      description: r.description ? r.description.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      hours: r.hours ? r.hours.trim() : "",
+      link: r.link ? r.link.trim() : "",
+    })),
   };
 }
 
@@ -170,10 +189,12 @@ const DAYS_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const EVENT_STYLES = {
-  milestone: { bg: "#FFF3E0", border: C.pepOrange, icon: "★", label: "Milestone" },
-  academic:  { bg: C.ice, border: C.ocean, icon: "◆", label: "Academic" },
-  excursion: { bg: "#E8F5E9", border: "#388E3C", icon: "▲", label: "Excursion" },
-  holiday:   { bg: "#FCE4EC", border: "#C62828", icon: "●", label: "Holiday" },
+  milestone:   { bg: "#FFF3E0", border: C.pepOrange, icon: "★", label: "Milestone" },
+  academic:    { bg: C.ice, border: C.ocean, icon: "◆", label: "Academic" },
+  excursion:   { bg: "#E8F5E9", border: "#388E3C", icon: "▲", label: "Excursion" },
+  holiday:     { bg: "#FCE4EC", border: "#C62828", icon: "●", label: "Holiday" },
+  orientation: { bg: "#EDE7F6", border: "#5E35B1", icon: "◎", label: "Orientation" },
+  program:     { bg: "#FFF8E1", border: "#F9A825", icon: "✦", label: "Program" },
 };
 
 function formatDate(dateStr) {
@@ -269,8 +290,19 @@ function ActionBtn({ href, icon, label, variant }) {
 function ScheduleView({ data }) {
   const [view, setView] = useState("week");
   const [expanded, setExpanded] = useState(null);
+  const todayRef = useRef(null);
   const classesForDay = (day) =>
     data.classes.filter((c) => c.days.includes(day)).sort((a, b) => getSortTime(a.time, day).localeCompare(getSortTime(b.time, day)));
+
+  // Today's day abbreviation
+  const todayDay = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+
+  // Scroll to today's section on mount
+  useEffect(() => {
+    if (view === "week" && todayRef.current) {
+      setTimeout(() => todayRef.current.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    }
+  }, [view]);
 
   return (
     <div>
@@ -282,9 +314,12 @@ function ScheduleView({ data }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {DAYS_ORDER.map((day) => {
             const classes = classesForDay(day);
+            const isToday = day === todayDay;
             return (
-              <div key={day}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>{day}</div>
+              <div key={day} ref={isToday ? todayRef : undefined}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: isToday ? C.pepBlue : C.stone, fontWeight: isToday ? 700 : 400, marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${isToday ? C.bapBlue : C.fog}` }}>
+                  {day}{isToday ? " · today" : ""}
+                </div>
                 {classes.length === 0 ? (
                   <div style={{ padding: "10px 0", color: C.fog, fontStyle: "italic", fontSize: 14, fontFamily: "'Roboto', sans-serif" }}>No classes</div>
                 ) : (
@@ -361,10 +396,22 @@ function ScheduleView({ data }) {
 // ─── Calendar ───
 function CalendarView({ data }) {
   const [filter, setFilter] = useState("all");
+  const [expanded, setExpanded] = useState(null);
+  const [hasScrolled, setHasScrolled] = useState(false);
+  const anchorRef = useRef(null);
   const types = ["all", ...Object.keys(EVENT_STYLES)];
+  // Only show filter pills for types that have events
+  const usedTypes = new Set(data.calendarEvents.map((e) => e.type));
+  const visibleTypes = types.filter((t) => t === "all" || usedTypes.has(t));
+
   const events = data.calendarEvents
     .filter((e) => filter === "all" || e.type === filter)
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Find the anchor event: first event on or after today, or last event if all past
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const anchorIdx = events.findIndex((e) => e.date >= todayStr);
+  const anchorDate = anchorIdx >= 0 ? events[anchorIdx].date : (events.length ? events[events.length - 1].date : null);
 
   const grouped = {};
   events.forEach((e) => {
@@ -373,14 +420,35 @@ function CalendarView({ data }) {
     grouped[mk].push(e);
   });
 
+  // Scroll to anchor on first render only
+  useEffect(() => {
+    if (!hasScrolled && anchorRef.current) {
+      setTimeout(() => {
+        anchorRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        setHasScrolled(true);
+      }, 150);
+    }
+  }, [hasScrolled, anchorDate]);
+
+  // Format a date range like "May 15–18" or "May 28 – Jun 2"
+  function dateRange(startStr, endStr) {
+    if (!endStr) return null;
+    const s = new Date(startStr + "T12:00:00");
+    const e = new Date(endStr + "T12:00:00");
+    const sMonth = MONTHS[s.getMonth()];
+    const eMonth = MONTHS[e.getMonth()];
+    if (sMonth === eMonth) return `${sMonth} ${s.getDate()}–${e.getDate()}`;
+    return `${sMonth} ${s.getDate()} – ${eMonth} ${e.getDate()}`;
+  }
+
   return (
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        {types.map((t) => {
+        {visibleTypes.map((t) => {
           const active = filter === t;
           const s = t === "all" ? { bg: C.pepBlue, border: C.pepBlue } : EVENT_STYLES[t];
           return (
-            <button key={t} onClick={() => setFilter(t)} style={{
+            <button key={t} onClick={() => { setFilter(t); setExpanded(null); }} style={{
               padding: "5px 13px", borderRadius: 20,
               border: active ? `2px solid ${s.border}` : "2px solid transparent",
               background: active ? (t === "all" ? C.pepBlue : s.bg) : C.ice,
@@ -399,15 +467,44 @@ function CalendarView({ data }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {monthEvents.map((e, i) => {
                 const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
+                const key = `${monthKey}-${i}`;
+                const isOpen = expanded === key;
+                const hasDetails = e.description && e.description.length > 0;
+                const isMultiDay = !!e.endDate;
+                const range = dateRange(e.date, e.endDate);
+                const isAnchor = e.date === anchorDate && !hasScrolled;
+
                 return (
-                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <div key={key} ref={isAnchor ? anchorRef : undefined} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                     <div style={{ minWidth: 44, textAlign: "right", paddingTop: 2 }}>
                       <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700, color: C.pepBlack }}>{formatDate(e.date).split(" ")[1]}</div>
                       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{getDayOfWeek(e.date)}</div>
                     </div>
-                    <div style={{ flex: 1, background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
-                      <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
-                      {e.description && <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5 }}>{e.description}</div>}
+                    <div style={{ flex: 1, overflow: "hidden" }}>
+                      {hasDetails ? (
+                        <button onClick={() => setExpanded(isOpen ? null : key)} style={{
+                          width: "100%", background: s.bg, borderRadius: 10, padding: "10px 14px",
+                          borderLeft: `3px solid ${s.border}`, border: `1px solid ${isOpen ? s.border : "transparent"}`,
+                          borderLeftWidth: 3, cursor: "pointer", textAlign: "left", display: "block",
+                          transition: "border-color 0.2s",
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                            <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
+                            <span style={{ fontSize: 10, color: C.stone, fontFamily: "'DM Mono', monospace", marginLeft: 8, flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</span>
+                          </div>
+                          {isMultiDay && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: s.border, marginTop: 3 }}>{range}</div>}
+                          {isOpen && (
+                            <div style={{ fontSize: 13, color: C.mountain, marginTop: 8, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, borderTop: `1px solid ${s.border}30`, paddingTop: 8, whiteSpace: "pre-line" }}>
+                              {e.description}
+                            </div>
+                          )}
+                        </button>
+                      ) : (
+                        <div style={{ background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
+                          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
+                          {isMultiDay && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: s.border, marginTop: 3 }}>{range}</div>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -442,11 +539,13 @@ function LinkButton({ url }) {
 // ─── Local ───
 function LocalView({ data }) {
   const [sub, setSub] = useState("health");
+  const [exploreFilter, setExploreFilter] = useState("all");
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        <Pill active={sub === "health"} onClick={() => setSub("health")}>Health Providers</Pill>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <Pill active={sub === "health"} onClick={() => setSub("health")}>Health</Pill>
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
+        <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Exploring BA</Pill>
       </div>
       {sub === "health" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -465,7 +564,7 @@ function LocalView({ data }) {
             </Card>
           ))}
         </div>
-      ) : (
+      ) : sub === "churches" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {data.churches.map((ch, i) => (
             <Card key={i}>
@@ -481,6 +580,36 @@ function LocalView({ data }) {
               <LinkButton url={ch.link} />
             </Card>
           ))}
+        </div>
+      ) : (
+        <div>
+          {/* Category filter for Exploring BA */}
+          {(() => {
+            const cats = [...new Set((data.explore || []).map((e) => e.type).filter(Boolean))];
+            if (cats.length <= 1) return null;
+            return (
+              <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+                <Pill active={exploreFilter === "all"} onClick={() => setExploreFilter("all")}>All</Pill>
+                {cats.map((c) => <Pill key={c} active={exploreFilter === c} onClick={() => setExploreFilter(c)}>{c}</Pill>)}
+              </div>
+            );
+          })()}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(data.explore || []).filter((e) => exploreFilter === "all" || e.type === exploreFilter).map((e, i) => (
+              <Card key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{e.name}</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: "#EDE7F6", color: "#5E35B1", padding: "2px 10px", borderRadius: 12, flexShrink: 0, marginLeft: 8 }}>{e.type}</span>
+                </div>
+                {e.description && <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5, marginBottom: 6 }}>{e.description}</div>}
+                <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                  {e.address && <>{e.address}<br /></>}
+                  {e.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{e.hours}</span>}
+                </div>
+                <LinkButton url={e.link} />
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -641,6 +770,9 @@ export default function App() {
   const [tab, setTab] = useState("schedule");
   const [data, setData] = useState(DEFAULT_DATA);
   const [status, setStatus] = useState(SHEET_ID ? "loading" : "default");
+  const [lastFetch, setLastFetch] = useState(0);
+
+  const REFRESH_COOLDOWN = 60 * 60 * 1000; // 1 hour
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -649,18 +781,43 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
 
-  useEffect(() => {
+  // Fetch data from Google Sheets
+  const doFetch = useCallback((silent) => {
     if (!SHEET_ID) return;
-    setStatus("loading");
+    if (!silent) setStatus("loading");
     fetchAllData()
-      .then((d) => { setData(d); setStatus("live"); })
-      .catch((err) => { console.error("Sheet fetch failed:", err); setStatus("fallback"); });
+      .then((d) => { setData(d); setStatus("live"); setLastFetch(Date.now()); })
+      .catch((err) => { console.error("Sheet fetch failed:", err); if (!silent) setStatus("fallback"); });
   }, []);
 
-  const statusLabel = status === "live" ? "Live from Google Sheets"
-    : status === "loading" ? "Loading..."
-    : status === "fallback" ? "Using saved data (sheet unavailable)"
-    : "Preview mode";
+  // Initial fetch
+  useEffect(() => { doFetch(false); }, [doFetch]);
+
+  // Auto-refresh when app returns to foreground (PWA home screen fix)
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible" && Date.now() - lastFetch > REFRESH_COOLDOWN) {
+        doFetch(true);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [doFetch, lastFetch]);
+
+  // Format the "Updated" label from the last_updated field in Settings
+  function formatUpdatedLabel() {
+    if (status === "loading") return "Loading...";
+    if (status === "fallback") return "Offline";
+    if (status === "default") return "Preview";
+    const raw = data.lastUpdated;
+    if (!raw) return "Updated";
+    // Parse YYYY-MM-DD or similar
+    const d = new Date(raw + "T12:00:00");
+    if (isNaN(d)) return `Updated ${raw}`;
+    return `Updated ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  }
+
+  const statusLabel = formatUpdatedLabel();
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.parchment, display: "flex", flexDirection: "column" }}>
