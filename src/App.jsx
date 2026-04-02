@@ -1,18 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Papa from "papaparse";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
 // ============================================================
-// STEP 1: Upload the template spreadsheet to Google Sheets
-// STEP 2: File > Share > Publish to web > Entire Document > CSV
-// STEP 3: Paste JUST the spreadsheet ID below (the long string
-//         between /d/ and /edit in your Google Sheets URL)
-//
-// Example URL: https://docs.google.com/spreadsheets/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/edit
-// You'd paste: 1aBcDeFgHiJkLmNoPqRsTuVwXyZ
-
-const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";  // ← Paste your Google Sheet ID here
+const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";
 
 // ============================================================
 // DEFAULT DATA — Used when no Google Sheet is connected
@@ -20,58 +12,33 @@ const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";  // ← Paste y
 
 const DEFAULT_DATA = {
   semester: "Fall 2026",
-  lastUpdated: "",
   classes: [
-    { code: "IES 300", title: "Argentine History & Society", professor: "Prof. García", days: ["Mon", "Wed"], time: "9:00–10:30", location: "Classroom A", color: "#0057B8", email: "garcia@pepperdine.edu" },
-    { code: "SPA 201", title: "Intermediate Spanish II", professor: "Prof. Martínez", days: ["Mon", "Tue", "Thu"], time: "11:00–12:00", location: "Classroom B", color: "#64B5F6", email: "martinez@pepperdine.edu" },
-    { code: "REL 100", title: "The Way of Jesus", professor: "Prof. Smith", days: ["Tue", "Thu"], time: "14:00–15:30", location: "Classroom A", color: "#425563", email: "smith@pepperdine.edu" },
-    { code: "COM 300", title: "Intercultural Communication", professor: "Prof. Álvarez", days: ["Wed", "Fri"], time: "14:00–15:30", location: "Classroom C", color: "#6CACE4", email: "alvarez@pepperdine.edu" },
-    { code: "ART 280", title: "Tango & Argentine Arts", professor: "Prof. Reyes", days: ["Fri"], time: "10:00–12:30", location: "Studio", color: "#E35205", email: "reyes@pepperdine.edu" },
+    { code: "IES 300", title: "Argentine History & Society", professor: "García", honorific: "Prof.", firstname: "Ana", days: ["Mon", "Wed"], time: "9:00–10:30", location: "Classroom A", color: "#0057B8", email: "" },
+    { code: "SPA 201", title: "Intermediate Spanish II", professor: "Martínez", honorific: "Prof.", firstname: "Carlos", days: ["Mon", "Tue", "Thu"], time: "11:00–12:00", location: "Classroom B", color: "#64B5F6", email: "" },
+    { code: "REL 100", title: "The Way of Jesus", professor: "Smith", honorific: "Dr.", firstname: "John", days: ["Tue", "Thu"], time: "14:00–15:30", location: "Classroom A", color: "#425563", email: "" },
+    { code: "COM 300", title: "Intercultural Communication", professor: "Álvarez", honorific: "Prof.", firstname: "María", days: ["Wed", "Fri"], time: "14:00–15:30", location: "Classroom C", color: "#6CACE4", email: "" },
+    { code: "ART 280", title: "Tango & Argentine Arts", professor: "Reyes", honorific: "Prof.", firstname: "Lucía", days: ["Fri"], time: "10:00–12:30", location: "Studio", color: "#E35205", email: "" },
   ],
   calendarEvents: [
-    { date: "2026-08-10", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner" },
-    { date: "2026-08-11", title: "Orientation begins", type: "orientation", description: "Three-day orientation program", endDate: "2026-08-13" },
-    { date: "2026-08-14", title: "Classes begin", type: "academic", description: "First day of classes" },
-    { date: "2026-08-17", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday — no classes" },
-    { date: "2026-09-05", title: "Mendoza Excursion", type: "excursion", description: "Three-day trip to Mendoza wine region", endDate: "2026-09-07" },
-    { date: "2026-09-21", title: "Día del Estudiante", type: "holiday", description: "Student Day — no classes" },
-    { date: "2026-10-09", title: "Midterm exams begin", type: "academic", description: "Midterms through Oct 16" },
-    { date: "2026-10-12", title: "Día del Respeto a la Diversidad Cultural", type: "holiday", description: "National holiday" },
-    { date: "2026-11-07", title: "Iguazú Falls Excursion", type: "excursion", description: "Weekend trip to Iguazú Falls" },
-    { date: "2026-11-20", title: "Día de la Soberanía Nacional", type: "holiday", description: "National holiday" },
-    { date: "2026-12-04", title: "Final exams begin", type: "academic", description: "Finals through Dec 11" },
-    { date: "2026-12-12", title: "Farewell Dinner", type: "milestone", description: "End-of-semester celebration" },
-    { date: "2026-12-13", title: "Departure Day", type: "milestone", description: "Airport transfers" },
+    { date: "2026-08-10", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "" },
+    { date: "2026-08-11", title: "Orientation begins", type: "orientation", description: "Three-day orientation program", start_time: "", end_time: "" },
+    { date: "2026-08-14", title: "Classes begin", type: "academic", description: "First day of classes", start_time: "", end_time: "" },
+    { date: "2026-08-17", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday; no classes", start_time: "", end_time: "" },
+    { date: "2026-08-21", title: "City Tour", type: "excursion", description: "Guided walking tour of downtown BA", start_time: "10:00", end_time: "13:00" },
+    { date: "2026-09-04", title: "Asado", type: "program", description: "Weekly asado", start_time: "13:40", end_time: "14:40" },
   ],
   healthProviders: [
-    { name: "Clínica Zabala (Swiss Medical)", type: "Hospital/Clinic", address: "Av. Cabildo 1295, Belgrano", phone: "+54 11 5236-8500", notes: "24hr emergency; Swiss Medical Group", link: "https://www.swissmedical.com.ar/clinewsite/zabala/" },
-    { name: "Dr. Alejandra Vidal", type: "General Practitioner", address: "Consultorio: Av. Santa Fe 2340, 3B", phone: "+54 9 11 4419-7092", notes: "English-speaking; house calls available", link: "https://wa.me/5491144197092" },
-    { name: "Farmacia Belgrano", type: "Pharmacy", address: "Av. Cabildo 1502, Belgrano", phone: "+54 11 4783-0021", notes: "24hr pharmacy; accepts most insurance", link: "" },
+    { name: "Dr. Example", type: "Doctor", address: "Av. Santa Fe 1234", phone: "+54 11 1234-5678", notes: "GeoBlue", link: "" },
   ],
   churches: [
-    { name: "Saddleback Buenos Aires", denomination: "Non-denom.", address: "Mario Bravo 559", service: "11AM, 5PM, 7PM (Spanish & English)", notes: "35 mins by subte/bus", link: "https://saddleback.com/visit/locations/buenos-aires" },
-    { name: "Catedral Metropolitana", denomination: "Catholic", address: "San Martín 27, Microcentro", service: "Mon–Sat 8:00, 10:00; Sun 9:00, 11:00, 18:00", notes: "Historic cathedral on Plaza de Mayo", link: "" },
-    { name: "Iglesia Bautista del Centro", denomination: "Baptist", address: "Av. Rivadavia 3268, Balvanera", service: "Sun 10:30 (Spanish), 17:00 (English)", notes: "Active young adults ministry", link: "https://wa.me/5491155551234" },
-    { name: "Comunidad Cristiana", denomination: "Evangelical", address: "Av. Medrano 951, Almagro", service: "Sun 11:00 (Spanish)", notes: "Young congregation; contemporary worship", link: "" },
+    { name: "Saddleback Buenos Aires", denomination: "Non-denom.", address: "Mario Bravo 559", service: "11AM, 5PM, 7PM (Spanish & English)", notes: "35 mins by subte/bus", link: "" },
+    { name: "Comunidad Cristiana BA", denomination: "Non-denom.", address: "Av. Medrano 951, Almagro", service: "Sun 11:00 (Spanish)", notes: "Young congregation; contemporary worship", link: "" },
   ],
   policies: [
     { title: "Independent Travel", content: "Students may travel independently on weekends and during break. A travel form must be submitted 48 hours in advance via the program portal. Group travel of 2+ is strongly encouraged.", link: "https://example.com/handbook/travel-policy" },
     { title: "Curfew", content: "There is no formal curfew, but students must be reachable by phone at all times. Quiet hours in the residences are 11:00 PM – 7:00 AM.", link: "" },
     { title: "Attendance", content: "Attendance is mandatory for all classes and program excursions. Two unexcused absences per course may result in a grade reduction.", link: "https://example.com/handbook/attendance" },
     { title: "Emergency Contact", content: "Program Director is available 24/7 at the emergency number provided during orientation. In a life-threatening emergency, call 107 (SAME ambulance) or 911.", link: "https://example.com/handbook/emergency" },
-  ],
-  contacts: [
-    { name: "Buenos Aires Program", role: "Program Office", phone: "+54 11 5555-1234", whatsapp: "", email: "bap@pepperdine.edu", address: "Av. Callao 1234, Recoleta, Buenos Aires", maps: "https://maps.google.com/?q=Av.+Callao+1234,+Recoleta,+Buenos+Aires", type: "office" },
-    { name: "Emergency Line", role: "24/7 Emergency", phone: "+54 9 11 5555-9999", whatsapp: "https://wa.me/5491155559999", email: "", address: "", maps: "", type: "emergency" },
-    { name: "John Smith", role: "Program Director", phone: "+54 9 11 5555-0001", whatsapp: "https://wa.me/5491155550001", email: "john.smith@pepperdine.edu", address: "", maps: "", type: "staff" },
-    { name: "María López", role: "Student Life Coordinator", phone: "+54 9 11 5555-0002", whatsapp: "https://wa.me/5491155550002", email: "maria.lopez@pepperdine.edu", address: "", maps: "", type: "staff" },
-  ],
-  explore: [
-    { name: "Teatro Colón", type: "Landmark", description: "One of the world's finest opera houses; guided tours daily.", address: "Cerrito 628", hours: "Tours daily 9am–5pm", link: "https://teatrocolon.org.ar" },
-    { name: "MALBA", type: "Museum", description: "Premier Latin American art, from Frida Kahlo to contemporary works.", address: "Av. Figueroa Alcorta 3415", hours: "Wed 11am–8pm; Thu–Mon 12–8pm", link: "https://www.malba.org.ar" },
-    { name: "Cementerio de la Recoleta", type: "Historic Site", description: "Ornate 19th-century cemetery; final resting place of Eva Perón.", address: "Junín 1760, Recoleta", hours: "Daily 9am–5pm", link: "" },
-    { name: "Casa Rosada", type: "Historic Site", description: "The iconic pink presidential palace on Plaza de Mayo.", address: "Balcarce 50", hours: "Tours Sat–Sun (book online)", link: "https://www.casarosada.gob.ar" },
-    { name: "El Ateneo Grand Splendid", type: "Landmark", description: "A 1920s theater converted into one of the world's most beautiful bookstores.", address: "Av. Santa Fe 1860", hours: "Mon–Sat 9am–9pm; Sun 12–9pm", link: "https://www.yenny-elateneo.com/local/grand-splendid/" },
   ],
 };
 
@@ -92,7 +59,7 @@ async function fetchTab(tabName) {
 }
 
 async function fetchAllData() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
+  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw] =
     await Promise.all([
       fetchTab("Settings"),
       fetchTab("Classes"),
@@ -100,8 +67,6 @@ async function fetchAllData() {
       fetchTab("Health"),
       fetchTab("Churches"),
       fetchTab("Policies"),
-      fetchTab("Contacts"),
-      fetchTab("Explore"),
     ]);
 
   const settings = {};
@@ -109,11 +74,12 @@ async function fetchAllData() {
 
   return {
     semester: settings.semester || "Fall 2026",
-    lastUpdated: settings.last_updated || "",
     classes: classesRaw.filter(r => r.code).map((r) => ({
       code: r.code.trim(),
       title: r.title.trim(),
-      professor: r.professor.trim(),
+      professor: r.professor ? r.professor.trim() : "",
+      honorific: r.honorific ? r.honorific.trim() : "",
+      firstname: r.firstname ? r.firstname.trim() : "",
       days: r.days.split(",").map((d) => d.trim()),
       time: r.time.trim(),
       location: r.location.trim(),
@@ -123,9 +89,10 @@ async function fetchAllData() {
     calendarEvents: calendarRaw.filter(r => r.date).map((r) => ({
       date: r.date.trim(),
       title: r.title.trim(),
-      type: r.type.trim(),
+      type: r.type ? r.type.trim() : "academic",
       description: r.description ? r.description.trim() : "",
-      endDate: r.end_date ? r.end_date.trim() : "",
+      start_time: r.start_time ? r.start_time.trim() : "",
+      end_time: r.end_time ? r.end_time.trim() : "",
     })),
     healthProviders: healthRaw.filter(r => r.name).map((r) => ({
       name: r.name.trim(),
@@ -148,24 +115,6 @@ async function fetchAllData() {
       content: r.content ? r.content.trim() : "",
       link: r.link ? r.link.trim() : "",
     })),
-    contacts: contactsRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      role: r.role ? r.role.trim() : "",
-      phone: r.phone ? r.phone.trim() : "",
-      whatsapp: r.whatsapp ? r.whatsapp.trim() : "",
-      email: r.email ? r.email.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      maps: r.maps ? r.maps.trim() : "",
-      type: r.type ? r.type.trim() : "staff",
-    })),
-    explore: exploreRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      type: r.type ? r.type.trim() : "",
-      description: r.description ? r.description.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      hours: r.hours ? r.hours.trim() : "",
-      link: r.link ? r.link.trim() : "",
-    })),
   };
 }
 
@@ -180,12 +129,11 @@ const C = {
   ice: "#E3F2FD", parchment: "#F5F3F0", white: "#FFFFFF",
 };
 
-// ============================================================
-// LOGO (base64-encoded SVG)
-// ============================================================
 
-const LOGO_URI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgMzc1IDM3NSI+PGRlZnM+PGNsaXBQYXRoIGlkPSJhIj48cGF0aCBkPSJNMTg3LjUgMGExODcuNiAxODcuNiAwIDEgMC0uMiAzNzUuMkExODcuNiAxODcuNiAwIDAgMCAxODcuNSAwbTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJjIj48cGF0aCBkPSJNMCAwaDM3NXYzNzVIMFptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImQiPjxwYXRoIGQ9Ik0xODcuNSAwYTE4Ny42IDE4Ny42IDAgMSAwLS4yIDM3NS4yQTE4Ny42IDE4Ny42IDAgMCAwIDE4Ny41IDBtMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImIiPjxwYXRoIGQ9Ik0wIDBoMzc1djM3NUgweiIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJlIj48cGF0aCBkPSJNOS4zIDkuNWgzNTYuNHYzNTYuNEg5LjNabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJmIj48cGF0aCBkPSJNMTg3LjUgOS41YTE3OC4xIDE3OC4xIDAgMSAwLS4yIDM1Ni4yIDE3OC4xIDE3OC4xIDAgMCAwIC4yLTM1Ni4ybTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJoIj48cGF0aCBkPSJNLjMuNWgzNTYuNHYzNTYuM0guM1ptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImkiPjxwYXRoIGQ9Ik0xNzguNS41YTE3OC4xIDE3OC4xIDAgMSAwLS4yIDM1Ni4yQTE3OC4xIDE3OC4xIDAgMCAwIDE3OC41LjVtMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImciPjxwYXRoIGQ9Ik0wIDBoMzU3djM1N0gweiIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJqIj48cGF0aCBkPSJNMTYgMjIzLjNoMzQzdjEzNS44SDE2Wm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0iayI+PHBhdGggZD0iTTE2IDE2LjJoMzQzdjEzNC4ySDE2Wm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0ibCI+PHBhdGggZD0iTTEzLjggMTU3LjZoMzQ3LjR2NTkuOEgxMy44Wm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0ibiI+PHBhdGggZD0iTS44LjZoMzQ3LjR2NTkuOEguOFptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9Im0iPjxwYXRoIGQ9Ik0wIDBoMzQ5djYxSDB6Ii8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9Im8iPjxwYXRoIGQ9Ik03Ny4zIDc3LjRIMjk4djIyMC4ySDc3LjNabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJwIj48cGF0aCBkPSJNMTg3LjUgNzcuNGExMTAuMiAxMTAuMiAwIDEgMC0uMSAyMjAuMyAxMTAuMiAxMTAuMiAwIDAgMCAuMS0yMjAuM20wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0iciI+PHBhdGggZD0iTS4zLjRoMjIwLjV2MjIwLjJILjNabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJzIj48cGF0aCBkPSJNMTEwLjUuNGExMTAuMiAxMTAuMiAwIDEgMC0uMSAyMjAuM0ExMTAuMiAxMTAuMiAwIDAgMCAxMTAuNS40bTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJxIj48cGF0aCBkPSJNMCAwaDIyMXYyMjFIMHoiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0idCI+PHBhdGggZD0iTTg1LjEgODZoMjA0Ljd2MjAzSDg1LjFabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJ1Ij48cGF0aCBkPSJNODUuMSA4NS41aDIwNC43djIwNEg4NS4xWm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0idiI+PHBhdGggZD0iTTAgMGgyOXYyNUgweiIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJ3Ij48cGF0aCBkPSJNMCAwaDM5djI1SDB6Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTS0zNy41LTM3LjVoNDUwdjQ1MGgtNDUweiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0tMzcuNS0zNy41aDQ1MHY0NTBoLTQ1MHoiLz48ZyBjbGlwLXBhdGg9InVybCgjYSkiPjxnIGNsaXAtcGF0aD0idXJsKCNiKSI+PGcgY2xpcC1wYXRoPSJ1cmwoI2MpIj48ZyBjbGlwLXBhdGg9InVybCgjZCkiPjxwYXRoIGZpbGw9IiM2NGI1ZjYiIGQ9Ik0tODIuNS04Mi41aDU0MHY1NDBoLTU0MHoiLz48L2c+PC9nPjwvZz48L2c+PGcgY2xpcC1wYXRoPSJ1cmwoI2UpIj48ZyBjbGlwLXBhdGg9InVybCgjZikiPjxnIGNsaXAtcGF0aD0idXJsKCNnKSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOSA5KSI+PGcgY2xpcC1wYXRoPSJ1cmwoI2gpIj48ZyBjbGlwLXBhdGg9InVybCgjaSkiPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0uMy41aDM1Ni40djM1Ni40SC4zWm0wIDAiLz48L2c+PC9nPjwvZz48L2c+PC9nPjxnIGNsaXAtcGF0aD0idXJsKCNqKSI+PHBhdGggZmlsbD0iIzY0YjVmNiIgZD0iTTM1OSAxODcuNWExNzEuNCAxNzEuNCAwIDEgMS0zNDMgMFptMCAwIi8+PC9nPjxnIGNsaXAtcGF0aD0idXJsKCNrKSI+PHBhdGggZmlsbD0iIzY0YjVmNiIgZD0iTTE2IDE4Ny41YTE3MS40IDE3MS40IDAgMSAxIDM0MyAwWm0wIDAiLz48L2c+PGcgY2xpcC1wYXRoPSJ1cmwoI2wpIj48ZyBjbGlwLXBhdGg9InVybCgjbSkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEzIDE1NykiPjxnIGNsaXAtcGF0aD0idXJsKCNuKSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTS44LjZoMzQ3LjR2NTkuOEguOFptMCAwIi8+PC9nPjwvZz48L2c+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTY4LjYgODcuOXEyLjMtMyA1LjctMy4yIDMuNi0uMyA2LjQgMmE4IDggMCAwIDEgMyA1LjZxLjUgMy41LTEuOSA2LjNsLTMuNCA0LjIgOC42IDctNC40IDUuNC0yMS45LTE3LjdabTggOHEuOS0xIC45LTIuMiAwLTEtMS0xLjgtMS0uNy0yLS42LTEgLjMtMiAxLjNMNzAgOTUuOWw0IDMuM1pNOTguOCA2Ny41bC04LjUgNy4xIDMuMiAzLjggNy4zLTYuMSA0IDQuNy03LjQgNi4xIDMuMiAzLjggOC41LTcuMSA0IDQuNi0xNCAxMS43LTE4LTIxLjcgMTMuOC0xMS42Wk0xMTUuMSA1MC41YTguNSA4LjUgMCAwIDEgMTEuNyAzLjQgOCA4IDAgMCAxIC44IDYuNXEtMSAzLjMtNC4yIDVsLTQuOCAyLjcgNS40IDkuNy02LjIgMy40LTEzLjYtMjQuN1ptNC41IDEwLjVxMS4yLS42IDEuNS0xLjcuNS0xLS4xLTItLjYtMS4yLTEuNy0xLjMtMS0uMi0yLjMuNGwtMy43IDIgMi42IDQuN1pNMTQzLjQgMzlxMy41LTEgNi42LjZ0NC4yIDUuMWE4IDggMCAwIDEtLjUgNi41cS0xLjcgMy01LjEgNC4xbC01LjIgMS43IDMuNCAxMC42LTYuNyAyLTguNS0yNi44Wm0yLjQgMTEuMnExLjItLjMgMS44LTEuM3QuMi0yLjEtMS40LTEuNi0yLjIgMGwtNC4xIDEuMyAxLjYgNVpNMTgwIDM4LjcgMTY4LjggNDBsLjUgNC45IDkuNS0xIC43IDYtOS41IDEgLjYgNSAxMS0xLjMuNyA2LTE4IDIuMS0zLjItMjggMTgtMlpNMjA0LjUgNTAuNmw2LjggMTItOC0uOC01LjYtMTFIMTk2bC0uOSAxMC4zLTctLjYgMi40LTI4IDEyLjQgMXEzLjguNCA2IDMgMi4xIDIuOSAxLjggNi42YTkgOSAwIDAgMS0xLjkgNC44IDggOCAwIDAgMS00LjMgMi43bS0zLjctNS4xcTEuMyAwIDIuMi0uN2EzIDMgMCAwIDAgMS0yIDMgMyAwIDAgMC0uNi0yLjNxLS43LTEtMi4xLTFMMTk3IDM5bC0uNSA2Wk0yMTQuNiA2My40bDguNS0yNyA5LjIgM3E2LjYgMiA5IDd0LjUgMTAuOGExNCAxNCAwIDAgMS02LjYgOC41cS00LjggMi43LTExLjQuNlptOC41LTMuOCAyLjIuN3EzLjUgMS4xIDYtLjQgMi40LTEuNSAzLjUtNSAxLjEtMy4zIDAtNi0xLjItMi42LTQuNy0zLjhsLTIuMi0uN1pNMjQzIDczLjdsMTMuMS0yNSA2LjIgMy4zLTEzIDI1Wk0yODkgNzAuNGw1LjUgNC40LTE3LjUgMjItNS43LTQuNSAxLTIyLTExLjIgMTQtNS40LTQuMyAxNy41LTIyLjEgNS43IDQuNS0xIDIyWk0zMDkuOCAxMDIuMWwtNy04LjctMy45IDMuMiA2IDcuNC00LjcgMy44LTYtNy40LTMuOSAzIDcgOC43LTQuNyAzLjktMTEuNC0xNC4xIDIyLTE3LjcgMTEuMyAxNFpNNjQgMjU2LjlxLjcgNS0zLjggNy4yYTcgNyAwIDAgMS02IC42cS0zLTEuMS00LjctNC4zbC02LTExLjMgMjUtMTMuMiA1LjMgMTBhOSA5IDAgMCAxIDEgNi4zcS0uOSAzLTQgNC44LTMuNyAyLTYuOC0uMW0zLjUtNC44YTMgMyAwIDAgMCAxLjMtNC40bC0yLjMtNC4yLTUuNiAzIDIuMiA0LjJxLjcgMS4yIDIgMS43YTMgMyAwIDAgMCAyLjQtLjNtLTEzLjggNWEzLjMgMy4zIDAgMCAwIDQuNCAxLjVxMS4yLS42IDEuNi0xLjkuMy0xLjMtLjMtMi41bC0yLjktNS41LTUuNiAzWk02Ny42IDI4N2ExMiAxMiAwIDAgMS0zLjMtOC4xcS0uMS00LjMgMi45LTdsMTQuNS0xMi40IDMuOCA0LjUtMTMuNyAxMS43YTUgNSAwIDAgMC0xLjggMy43cTAgMi4zIDEuNSA0LjEgMS42IDEuOSAzLjkgMi4xdDMuOS0xLjJMOTMgMjcyLjdsMy44IDQuNC0xNC41IDEyLjVhOCA4IDAgMCAxLTcuMyAxLjlxLTQuMi0uOC03LjQtNC42TTExMy40IDI5Ni44bC05LjItNy0zLjggNSA3LjkgNi0zLjIgNC4yLTcuOC02LTMuOCA1IDkgNy0zIDQtMTMuOS0xMC40IDE3LjEtMjIuNSAxMy44IDEwLjVaTTE0MC4yIDMwNC42bDUuMyAyLjUtMTEuNyAyNS42LTUuNS0yLjUtNC44LTIzLjYtOCAxNy44LTUuNC0yLjUgMTEuNy0yNS42IDUuNSAyLjUgNC45IDIzLjVaTTE2MC45IDMzOS43cS02LTEtOS40LTZBMTQgMTQgMCAwIDEgMTQ5IDMyM2ExNCAxNCAwIDAgMSA2LTkuNHE0LjctMy41IDEwLjctMi41YTE0IDE0IDAgMCAxIDkuNCA1LjlxMy40IDQuOCAyLjUgMTAuOC0xIDUuOS02IDkuNGExNCAxNCAwIDAgMS0xMC43IDIuNW0xLTUuN3EzLjUuNyA2LjUtMS41IDIuOC0yIDMuNS01LjcuNy0zLjYtMS41LTYuNWE4IDggMCAwIDAtNS43LTMuNXEtMy42LS42LTYuNSAxLjRhOSA5IDAgMCAwLTMuNSA1LjdxLS43IDMuNyAxLjQgNi42dDUuNyAzLjVNMTk2LjYgMzQxLjZhMTIgMTIgMCAwIDEtMTAuOC01LjZsNC42LTMuM3EuOCAxLjcgMi40IDIuN2E2IDYgMCAwIDAgMy41LjhxMS43IDAgMi44LTEgMS0uNy44LTIuMSAwLTEuNS0xLjQtMi4zdC0zLjQtMS41bC00LTEuMmE4IDggMCAwIDEtMy40LTIuNCA3IDcgMCAwIDEtMS42LTQuNHEtLjItMy44IDIuMy02YTkgOSAwIDAgMSA2LTIuNiAxMSAxMSAwIDAgMSA4LjggMy40bC0zLjcgMy45cS0yLjItMi40LTQuOC0yLjItMS4zIDAtMi4xLjgtMSAuOC0uOCAyIDAgMSAuOCAxLjguOC42IDIgMS4xbDIuNi44YTI1IDI1IDAgMCAxIDUuNSAyLjRxMS4yLjkgMiAyLjRhOSA5IDAgMCAxIDEgMy43cS4xIDMuNy0yLjUgNi4xdC02LjYgMi43TTI1MS44IDMyNy44bC0zLjgtNC40LTExLjYgNC41djUuOWwtNS45IDIuMy40LTMwLjQgNi0yLjQgMjAuOSAyMi4yWm0tMTUuNS01LjEgOC4yLTMuMi04LjQtOS40Wk0yNjYuNCAzMjBsLTE0LjctMjQgNS0zIDE0LjcgMjRaTTI4NS41IDI5MS42bDEzLjcgMy43LTUuMiA0LjQtMTIuNS0zLjktMiAxLjggNy4yIDguNC00LjUgMy44LTE4LjMtMjEuMyA4LjktNy43YTggOCAwIDAgMSA2LjEtMnEzLjUuMyA1LjggM2E4IDggMCAwIDEgLjggOS44bS01LjQtMWEzLjUgMy41IDAgMCAwIC41LTUgMyAzIDAgMCAwLTIuNC0xLjJxLTEuNCAwLTIuNi45bC0zLjkgMy4zIDQuNiA1LjNaTTI5OC44IDI1OS40bC03IDkgNSAzLjkgNi03LjggNCAzLjItNiA3LjggNSAzLjkgNy05IDQuMSAzLjEtMTAuNiAxMy43LTIyLjMtMTcuNCAxMC43LTEzLjZaTTMyNy41IDI1NmExMiAxMiAwIDAgMS0xMC4zIDYuNGwtLjQtNS42cTEuOCAwIDMuNS0uOCAxLjUtLjkgMi40LTIuNi45LTEuNi42LTIuOC0uMi0xLjMtMS40LTItMS4zLS42LTIuNy4yLTEuNS43LTMgMi4ybC0zIDIuN3EtMS42IDEuNC0zLjkgMS44YTcgNyAwIDAgMS00LjUtLjggNyA3IDAgMCAxLTQuMi01IDkgOSAwIDAgMSAxLTYuNiAxMSAxMSAwIDAgMSA3LjQtNS44bDEuNCA1LjFxLTMgLjctNC4zIDMtLjYgMS4yLS40IDIuM3QxLjQgMS43cS45LjUgMS45LjJ0Mi0xLjFsMi0xLjlhMjYgMjYgMCAwIDEgNC44LTMuNXExLjUtLjYgMy4xLS41IDEuOCAwIDMuNiAxYTcgNyAwIDAgMSA0LjEgNS4ycS43IDMuNi0xIDcuMW0wIDAiLz48ZyBjbGlwLXBhdGg9InVybCgjbykiPjxnIGNsaXAtcGF0aD0idXJsKCNwKSI+PGcgY2xpcC1wYXRoPSJ1cmwoI3EpIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3NyA3NykiPjxnIGNsaXAtcGF0aD0idXJsKCNyKSI+PGcgY2xpcC1wYXRoPSJ1cmwoI3MpIj48cGF0aCBmaWxsPSIjZmZmIiBkPSJNLjMuNGgyMjAuMnYyMjAuMkguM1ptMCAwIi8+PC9nPjwvZz48L2c+PC9nPjwvZz48ZyBjbGlwLXBhdGg9InVybCgjdCkiPjxwYXRoIGZpbGw9IiNmZmMxMDciIGQ9Ik0yMDEuNSAyMzIuMmMyLjggOS4yIDIuNyAxOC42IDIuOCAyOC4xIDAgMy44IDIuMSA3LjUgMyAxMS4zcTEuMyA1LjEgMS42IDEwLjJjMCAxLjctMS4zIDMuMy0yLjIgNWwtMi4xLS44YzEuOS02LjktMy0xMS43LTQuOS0xNy41YTQ4IDQ4IDAgMCAxLTIuMy0xMy45cS0uMS05LjEtMy43LTE3LjRjLS4yLS42LTEtMS0xLjUtMS41cS0uNS43LS43IDEuNy0uNSA0LS43IDhsLTEuMyAzOC40Yy0uMSAxLjkuOCA1LTIgNXMtMS44LTMuMS0xLjktNWwtMS4zLTM3LjJxLS4zLTUuNC0xLjUtMTAuOS0xLjQgMTItNi44IDIyLjVjLTIuNSA1LjEtMi45IDEwLjctMi42IDE2LjRxLjUgNi42LTQuNiAxMWMtLjcuNi0yLjEuNC0zLjIuNS4yLS45LjEtMiAuNi0yLjcgMi41LTMuMiAyLjctNi45IDEuOS0xMC42YTMwIDMwIDAgMCAxIDIuOC0xOS4zYzIuOS02IDMtMTIuMyAzLjQtMTguN3EtLjItLjctLjYtMS41LTEgLjQtMS40IDFsLTguNiAxOC42LTEwLjkgMjMuNnEtLjggMi0yIDMuOC0uOC44LTIgMS4xYy0uNC0uOC0xLjItMS44LTEtMi40cTIuNS03LjcgNS40LTE1LjJsMTAtMjYuNyAxLjItNC4ycTAtLjUtLjItMS4xLS44LjItMS4zLjctLjcuNy0xIDEuNWMtMy4zIDQuMi02LjQgOC43LTEwLjEgMTIuNWEzOSAzOSAwIDAgMC05LjcgMTQuMiAxNiAxNiAwIDAgMS03LjUgOS41cS0yIC44LTQgMWMtLjMgMC0uOS0yLjEtLjgtMi4xIDYtMyA2LjUtOS4yIDguNS0xNC42cTIuNS03LjEgOC4zLTEyLjFjNC44LTQuMiA3LjctOS42IDEwLTE1LjQuMy0uNSAwLTEuMiAwLTEuN3EtMSAwLTIgLjRsLTE5LjEgMTcuNy0xNS41IDE0LjJxLTEuNSAxLjMtMyAyYy0uNC4yLTEuOC0xLjQtMS43LTEuNnExLjItMi4yIDIuOS00bDMxLjktMzQuNi40LTEuMXEtLjggMC0xLjUuMmwtMS41IDEuMWE0NyA0NyAwIDAgMS0xNiA5IDMxIDMxIDAgMCAwLTE0IDkuMWMtMi42IDMtNS44IDUuMy05LjkgNS44cS0yLjEuMi00LjItLjNjLS40LS4xLTEtLjktMS0xLjRzLjYtMS4yIDEtMS4yYzUuOC0uNiA4LjYtNS4xIDEyLTkgMy41LTQuMiA3LjgtNy41IDEzLTkgNi4yLTIgMTAuOC02IDE1LjQtMTAuM3EuOC0uOCAxLjMtMmMtLjggMC0xLjYtLjMtMi4zLS4xbC04LjIgMi45LTM1LjQgMTMuMWMtMiAuNC00LjYgMi40LTUuNSAwLTEtMi41IDIuMy0zIDQtMy43bDQwLTE4LjRhMTAgMTAgMCAwIDAgMy44LTNsLTIuOC42Yy0zLjguNy03LjcgMi0xMS41IDItOS40LS4zLTE4LjUuNS0yNy4yIDQuN2ExMCAxMCAwIDAgMS0xMS4xLTEuM2MtLjUtLjMtLjYtMS4zLS45LTIgLjctLjMgMS42LS45IDItLjcgNC4xIDEuNiA3LjQtLjMgMTAuNy0yLjFhNDMgNDMgMCAwIDEgMjAuMS01YzUuOC0uMyAxMS42LTIuNCAxNy40LTMuOC42LS4yIDEuMS0xIDEuNy0xLjVxLTEtLjYtMi4xLS44bC0yOS43LTEuMmMtNC44LS4yLTkuNiAwLTE0LjMtLjUtMi43LS4yLTUuMy0xLjItOC0yIDItMyA1LTIgNy44LTIuMnE1LjgtLjMgMTEuNy0uNGwzMS42LTEuMXExLjQgMCAyLjktMS4ybC01LjItMWMtNC44LTEuNC05LjctMi4yLTE0LjItNC4xYTM5IDM5IDAgMCAwLTE4LTMuOGMtNSAuMy05LjQtMS0xMi45LTQuOC0uNy0uNy0uNi0yLjEtLjgtMy4ycTEuNiAwIDIuNy40YzIuNyAyIDUuNyAyLjIgOC45IDEuOXExMi4zLTEuNyAyMy41IDMuN2EzMiAzMiAwIDAgMCAxNi40IDIuM3EuNi0uMiAxLjItLjgtLjMtLjUtLjctLjktMi41LTEuMy01LTIuNGwtMzcuOC0xNy40Yy0xLjctLjgtNC40LTMuMi00LjMtMy41IDEuNi0yLjggNC0uOCA1LjktLjFxMTkuOCA3LjIgMzkuNSAxNC41IDIuOCAxLjEgNiAxLjJjLTguMy00LTE0LjMtMTAuNi0yMC43LTE2LjctMi40LTIuMy01LjktMy42LTktNS4zLTIuNC0xLjUtNS4zLTIuNS03LjQtNC4zLTEuOC0xLjYtMi45LTQtNC02LjEtLjMtLjYuNi0xLjcgMS0yLjYuNi40IDEuNi42IDEuOSAxLjEgMiAzLjcgNS40IDUgOSA2IDcuMiAyIDEzIDUuOSAxOC4zIDExIDQuMSAzLjkgOS42IDYuMyAxNC41IDkuMnEuOC4zIDEuNy4xIDAtLjktLjMtMS41bC0zLjMtMy44LTI5LTMxLjRjLTEtMS4yLTIuNC00LjItMi4xLTQuNSAyLjMtMiAzLjYuNyA1IDJsMzEuNCAyOSAzLjIgMi44cS41LjEgMS4xIDB2LTFjLTctNy04LjgtMTYuNy0xMy43LTI0LjgtMS40LTIuNS0zLjgtNC4zLTUuNi02LjYtMS44LTIuNC0zLjgtNC45LTUtNy43LS44LTEuNy0uNC00LS40LTYgMC0uNCAxLTEuMiAxLjItMS4xLjcuMSAxLjcuNyAxLjcgMS4yLjMgNSAzLjggNy42IDcuMiAxMC4zcTcuOCA1LjkgMTEgMTUuNGEzNCAzNCAwIDAgMCAxMyAxNi4ycS0xLjQtNC4yLTIuOS04LjVsLTE0LTM3LjhjLS40LTEuMS0xLTIuMy0xLTMuNS0uMi0uNy4yLTEuOC43LTIgLjUtLjMgMS43IDAgMi4xLjZxMS4yIDEuOCAyIDMuOGwxOC4yIDM5LjMgMiAzLjhxLjYtMS44LjUtMi41Yy0yLjctNy4xLTIuMi0xNC42LTIuNS0yMi0uMS00LjItMS44LTguNC0yLjctMTIuNnEtMS40LTUuMi0yLTEwLjhjMC0xLjYgMS4zLTMuMyAyLjEtNSAuMi0uMyAxLjItLjYgMS42LS40czEgMSAuOCAxLjRjLTEuNyA1LjYgMS40IDEwIDMuNyAxNC42cTQgOCAzLjUgMTYuOGEzOSAzOSAwIDAgMCAzLjcgMTcuNHEuNC43IDEuMiAxLjMuNi0uNy44LTEuNi42LTQuMi44LTguNi42LTE5LjIgMS40LTM4LjRjMC0xLjcgMS00LjcgMS42LTQuNyAzLjEgMCAyIDIuOSAyLjEgNC43bDEuNSAzOC40cS4xIDUgMS40IDkuOGMuNy05IDQuNi0xNi44IDcuNS0yNSAxLjUtNCAxLjUtOC44IDEuOC0xMy4zLjItMy42LjYtNyAzLTkuOHExLjYtMS41IDMuNS0yLjRjLjItLjEgMS42IDEuNSAxLjYgMS41LTQuNSA1LjEtMi4zIDExLTIuMyAxNi42IDAgNC42LTEgOS41LTIuOSAxMy44YTU0IDU0IDAgMCAwLTMuNyAxOGMwIDEuMS41IDIuMi43IDMuMnExLjItMSAxLjktMi4zbDcuOC0xNi44IDExLjEtMjQuMnEuNC0xLjMgMS0yLjMgMS41LTEuNCAzLjEtMi41Yy4yIDEuMy44IDIuNi41IDMuN3EtMS4xIDMuOS0yLjcgNy42UTIxOCAxMjEuMyAyMTIgMTM4cS0xLjEgMi43LS43IDUuNWwyLTIuOGMzLjMtNCA2LjItOC4zIDkuOC0xMS45IDQuMy00LjMgOC04LjggMTAtMTQuNyAxLjctNC41IDQuMy04LjYgOS4zLTEwIDEtLjQgMi4yLjMgMy40LjUtLjUuOC0uOCAxLjktMS41IDIuMy0zLjEgMS44LTQuNSA0LjYtNS41IDhhMzkgMzkgMCAwIDEtMTIgMTkuN2MtNC45IDQuMi03IDEwLjEtMTAgMTcuNCAyLjUtMS44IDMuOS0yLjggNS4xLTMuOWwzMi4zLTI5LjljMS41LTEuMyAyLjgtNCA1LjQtMi4yYTE0IDE0IDAgMCAxLTIuNiA0LjlxLTE0LjIgMTUuNS0yOC41IDMxLTEuOCAxLjgtMy4zIDMuN2MtLjMuMy0uMSAxLS4yIDEuNXEuNi0uMSAxLS41IDEuNC0uOCAyLjUtMS44IDYuNS01LjYgMTQuNS04LjEgOC42LTMgMTUtOS42YzIuNi0yLjUgNi4xLTQgOS40LTUuNiAxLjEtLjUgMi44IDAgNC4yLjMuNCAwIDEgLjcgMS4xIDEuMi4xLjMtLjUgMS4yLS45IDEuMi01LjcuOC04LjYgNS4yLTEyIDkuMmEzMSAzMSAwIDAgMS0xNC4yIDkuNWMtNiAxLjktMTAuMyA2LTE0LjcgMTAuMXEtLjUuNy0uOSAxLjZjLjguMSAxLjYuNiAyLjIuNGwyNy4zLTEwcTcuNS0zIDE1LjEtNS43IDIuNi0xIDUuNC0xLjRjLjUtLjEgMS41LjQgMS41LjcgMCAuNyAwIDEuNy0uNiAycS0yLjMgMS41LTUgMi42bC0zOS4zIDE4LjJxLTEuNi42LTMgMi40IDIuMi0uNiA0LjUtMWM0LjUtLjYgOS0xLjYgMTMuNS0xLjUgNy40LjEgMTQuNC0uNiAyMS4xLTMuOXEyLjktMS42IDYtMS42IDMuOC41IDcuNSAyYy41LjEgMSAxLjQuOSAyLS4xLjQtMS40IDEtMiAuOC00LjItMS42LTcuNi40LTExIDIuM2EzMyAzMyAwIDAgMS0xOSA0LjdjLTYuNi0uNS0xMi42IDItMTguNiA0LjFxLS43LjUtMS4yIDEuMmMuNi4zIDEuMi45IDEuOCAxbDQzLjQgMS41cTMuOCAwIDcuNC45Yy42IDAgMSAxIDEuNSAxLjUtLjUuNC0uOSAxLTEuNCAxcS0zLjMuNy02LjcgMWwtNDEgMS40cS0yLjggMC01LjkgMWMxLjYuNCAzLjIgMS4xIDQuOCAxLjFhNDEgNDEgMCAwIDEgMTguMiA1LjNjNC44IDIuNCAxMCAyLjUgMTUuMSAyLjggMy42LjIgNy4yIDEuMyAxMC43IDIuNSAxLjMuNSAyLjMgMi4yIDMuNCAzLjUuMy40LjMgMS41IDAgMS42LS42LjQtMS43LjctMiAuNC0zLjgtMy4yLTguMS0yLjYtMTIuNS0yLjJxLTEwIDEuMS0xOS4yLTMuM2EzNCAzNCAwIDAgMC0xNy0zcS0xLjEuMy0yLjIuNy44IDEgMS43IDEuNmwyNC43IDExLjQgMTggOC4zcTEuMy40IDIuMiAxLjEuOSAxLjIgMS40IDIuNWMtMSAuMi0yIC44LTIuOS42cS0yLjYtLjYtNS4zLTEuN0wyMzEuNiAyMTBxLS42IDAtMS4yLjIuMS41LjQuOWwxLjYgMWE0NiA0NiAwIDAgMSAxNS40IDEyLjJjMy41IDQgOCA2LjQgMTIuNyA4LjVhMzggMzggMCAwIDEgOSA2LjNjMSAxIDEuMyAzIDEuNyA0LjUuMS41LS4zIDEuNC0uNyAxLjZzLTEuNCAwLTEuNi0uNGMtMi44LTUuMS04LTYtMTMtNy42YTMwIDMwIDAgMCAxLTEzLjgtOSA0MSA0MSAwIDAgMC0xNi0xMC40Yy0uNC0uMi0xIC4yLTEuNi4zcTAgLjYuNCAxLjFsMy4yIDMuNyAyOCAzMHExLjQgMS40IDIuMyAyLjguNyAxLjggMSAzLjdjLTEuMy0uNC0yLjgtLjUtMy43LTEuM2wtMzIuNC0yOS44cS0yLTEuNy00LjMtMy4ybDIuNyA1YzIgMy41IDQuNCA3IDUuOSAxMC44YTQzIDQzIDAgMCAwIDExLjEgMTcuNWMzLjQgMyA1LjUgNi45IDUgMTEuNSAwIDEtMS4yIDEuOS0xLjggMi44LS42LS44LTEuNC0xLjYtMS41LTIuNC0uNi0zLjYtMi44LTYtNS41LThhNDMgNDMgMCAwIDEtMTMuNC0xOC4yYy0yLjMtNS4xLTYuNi05LjMtMTAtMTRxLS43LS42LTEuNS0xYzAgLjctLjMgMS41IDAgMi4xcTQuOCAxMy44IDEwIDI3LjQgMyA4LjcgNi40IDE3LjQuNyAxLjggMSAzLjZjLjEuNS0uMyAxLjUtLjYgMS41LS43LjItMS44LjEtMi4xLS4zcS0xLjYtMi4zLTIuNy00LjhsLTE4LjEtMzkuNXEtMS4xLTIuMi0yLjQtNC4zbS0xMy42LTYuM2MxOCAxLjQgMzguMy0xNSAzOC40LTM4LjVhMzkuNSAzOS41IDAgMCAwLTM5LjEtMzguNyA0MCA0MCAwIDAgMC0zOC41IDM4LjJjLS4yIDIzLjUgMjAuMiA0MC41IDM5LjIgMzltMCAwIi8+PC9nPjxnIGNsaXAtcGF0aD0idXJsKCN1KSI+PHBhdGggZD0iTTE4Ny41IDI4OS41cS0xLjIgMC0xLjktLjdjLS44LTEtLjctMi40LS43LTMuOHYtMS4ybC0xLjMtMzcuMmE1NyA1NyAwIDAgMC0uOC03LjIgNjggNjggMCAwIDEtNi4yIDE5Yy0yLjIgNC40LTMgOS4zLTIuNiAxNi4xcS4zIDcuNC00LjggMTEuNi0xIC42LTIuNi42aC0xLjNxLS4xIDAtLjItLjJsLS4yLS4ydi0uM2wuMi0uOXEwLTEgLjYtMiAzLTQgMS43LTEwLjJhMzAgMzAgMCAwIDEgMi45LTE5LjcgNDQgNDQgMCAwIDAgMy4zLTE3Ljd2LS44cTAtLjItLjItLjUtLjQuMS0uNS40bC04LjcgMTguNS01LjUgMTIuMS01LjMgMTEuNi0uMi40cS0uOCAxLjgtMS45IDMuNS0uNi43LTEuNiAxbC0uNi4zaC0uNWwtLjQtLjMtLjQtLjhjLS40LS43LS45LTEuNC0uNy0yLjFsNS0xNCAuNS0xLjIgMTAtMjYuNyAxLjItNC4zcS0uMyAwLS41LjNsLS41LjctLjUuOHEtMS42IDEuOS0yLjggMy44LTMuMyA0LjYtNy4zIDguN2MtMy41IDMuNi03LjQgOC05LjUgMTRxLTIuNSA3LjItNy44IDkuOC0yIDEtNC4zIDFjLS4zIDAtLjcgMC0xLjMtMnEtLjQtLjcuMi0xLjJjNC41LTIuMyA1LjctNi40IDctMTAuOGwxLjItMy40cTIuOC03LjUgOC40LTEyLjRjNS4yLTQuNCA4LTEwLjQgMTAtMTUuMnYtLjhxLS45IDAtMSAuM2wtMTIuOCAxMS43LTYuNCA2LTE1LjYgMTQuMnEtMS4yIDEuMi0zLjIgMi4xYy0uMi4xLS42LjMtMS44LTFxLS44LS44LS42LTEuNWEyMSAyMSAwIDAgMSAzLTQuMWwxOS44LTIxLjQgOC44LTkuNiAzLTMuNXEtLjguNC0xLjMuOWgtLjFxLTcuMSA2LjItMTYuMyA5LjItOC4yIDIuNy0xMy42IDlhMTYgMTYgMCAwIDEtMTAuNCA1LjlxLTIuMi4yLTQuMy0uM2MtLjgtLjItMS41LTEuMi0xLjYtMiAwLS43LjktMS43IDEuNi0xLjggNC43LS41IDcuNC0zLjcgMTAuMS03bDEuNS0xLjhhMjkgMjkgMCAwIDEgMTMuNC05LjNjNi4xLTEuOCAxMC43LTYgMTUtMTBxLjYtLjUuOC0xLS42LS4zLTEuMS0uMWwtNy45IDIuOGgtLjNsLTIyLjMgOC40LTEyIDQuNC0xLjIuNC0xLjUuNWMtMS41LjYtMy44IDEuNS00LjctMXEtLjQtMSAwLTEuOGMuNS0xLjIgMi0xLjcgMy4yLTIuMWwxLjEtLjUgMjYuOC0xMi4zIDEzLjItNi4xcTEuMi0uNiAyLjMtMS40bC0uOS4yLTMuNS44Yy0yLjcuNi01LjQgMS4zLTguMiAxLjItOC0uMi0xNy41LjItMjYuOCA0LjZhMTEgMTEgMCAwIDEtMTEuOC0xLjNxLS43LS42LS45LTEuN2wtLjItLjZ2LS41cS4xLS4zLjQtLjNsLjYtLjNxMS0uNiAxLjktLjRjMy44IDEuNSA3LS4zIDEwLTIgNS44LTMuMyAxMi00LjkgMjAuNS01LjIgNC4xLS4yIDguMy0xLjMgMTIuNC0yLjRxMi40LS44IDQuOC0xLjMuNS0uMi44LS43bC0xLS40LTQ0LTEuNnEtMy0uNC01LjctMS4zbC0yLjUtLjdxMCAwLS4zLS4ybC0uMS0uMnYtLjZjMS43LTIuNSA0LjItMi41IDYuNC0yLjRoMS45cTMuOC0uNCA3LjctLjRoNGwzMy0xLjVoLS4yYTU5IDU5IDAgMCAxLTcuNy0xLjggNjUgNjUgMCAwIDEtMTAuMi0zYy00LjYtMi0xMC43LTQuMi0xNy43LTMuOHEtOC4zLjYtMTMuNC01LS44LTEtLjgtMi40bC0uMS0xdi0uNGwuMS0uMi41LS4yaC45cTEuMS0uMSAyLjEuNWMyLjcgMiA1LjggMiA4LjUgMS43cTEzLjMtMS41IDIzLjggMy44YzUgMi41IDEwLjcgMi42IDE2LjEgMi4zbC40LS4zLS4xLS4yLTUtMi41LTEwLjgtNS0yNy0xMi4zYy0xLjYtLjctNC40LTMtNC42LTMuOHYtLjZjMS43LTIuNyA0LTEuNyA1LjYtMWwxIC42IDI1LjIgOS4yIDE2LjkgNmMtNS43LTMuMy0xMC40LTcuOS0xNS0xMi4zbC0yLjgtMi44cS0yLjctMi4zLTYtMy44TDExNSAxNDNsLTIuNC0xLjNxLTIuOC0xLjMtNS4xLTNjLTEuOC0xLjYtMi44LTMuNy0zLjktNS44bC0uMi0uNXEtLjQtMSAuNC0yLjNsLjQtLjhxMC0uMy40LS40aC41bC42LjNxMSAuNCAxLjYgMS4xYzEuOCAzLjUgNS4zIDQuNyA4LjcgNS43YTQzIDQzIDAgMCAxIDE4LjUgMTEuMiA0NyA0NyAwIDAgMCAxMCA2LjZsNC40IDIuNWguN2wtLjEtLjYtMy0zLjQtLjItLjItNy42LTguMi0yMS41LTIzLjNjLTEtMS0yLjQtMy44LTIuMy00LjhxMC0uMy4yLS42YzIuNC0xLjkgNCAwIDUgMS4xbC44LjkgMjMgMjEuMSA4LjUgNy45IDMuMSAyLjhoLjJjLTQuNC00LjUtNi44LTEwLjEtOS0xNS41YTc3IDc3IDAgMCAwLTQuNi05LjVxLTEuNC0yLTMuMi0zLjgtMS4zLTEuMi0yLjQtMi43bC0uMy0uNGEzOSAzOSAwIDAgMS00LjgtNy40cS0uOC0yLjMtLjUtNC45di0xLjRjMC0uNi44LTEuMyAxLTEuNHEuNi0uNCAxLS4zYy43LjEgMi4xLjkgMi4yIDEuOC4yIDQuNCAzLjMgNi44IDYuNSA5LjRsLjUuNHE4LjIgNi42IDExLjIgMTUuNyAyLjQgNy44IDExLjEgMTQuN2wtLjItLjgtMi01LjgtOS0yNC4yLTUtMTMuNi0uMy0uN3EtLjYtMS40LS44LTNjLS4yLS44LjMtMi4yIDEuMS0yLjZzMi4zIDAgMi45LjhxMS4xIDEuNiAxLjkgMy41bC4yLjQgOC45IDE5LjNxNC42IDEwIDkuMyAyMGwxLjEgMi4zLjEtLjRjLTIuMS01LjktMi4yLTEyLTIuMy0xNy45bC0uMS00LjRjLS4xLTIuNy0uOS01LjUtMS42LTguMWwtMS4xLTQuMy0uNS0yLjJxLTEuMS00LjMtMS41LTguN2MtLjEtMS41LjctMi45IDEuNS00LjJsLjYtMS4xYy40LS43IDEuNy0xIDIuNC0uOHMxLjQgMS40IDEuMiAyLjJjLTEuNCA0LjUuNSA4LjEgMi41IDEybDEuMSAyLjFhMzMgMzMgMCAwIDEgMy42IDE3LjFBMzggMzggMCAwIDAgMTgyIDEzOGwuNS41LjMtLjZ2LS4ycS41LTQuMS43LTguNGwuNS0xNC42LjktMjMuOWMwLS43LjgtNS4yIDIuMi01LjJxMS41IDAgMi4zLjhjLjggMSAuNyAyLjIuNiAzLjN2MS4ybC43IDIwLjQuNiAxOHEuMSAzIC43IDYuMmMxLTUuNyAzLTExIDUtMTYuMmwyLTUuM2EzOSAzOSAwIDAgMCAxLjctMTEuM2wuMS0yYy4yLTMuNS43LTcuMiAzLjMtMTAuMXExLjctMS43IDMuNi0yLjZjLjUtLjMgMSAuMiAxLjMuNmwuOSAxYy4xIDAgLjQuNSAwIDEtMyAzLjYtMi43IDcuNi0yLjMgMTEuOGwuMyA0LjNxMCA3LTMgMTRhNTQgNTQgMCAwIDAtMy42IDE4cTAgLjguNCAxLjhsMS0xLjMgNS45LTEyLjcgMS45LTQuMiAzLTYuNSA4LjEtMTcuNy4zLS43cS4yLTEgLjktMS43IDEtMSAyLjItMS45bC45LS43cS4zLS4yLjYgMCAuMyAwIC40LjRsLjIgMS4ycS41IDEuNC4zIDIuOGwtMiA1LjgtLjcgMS44LTQgMTAuNy04LjQgMjIuNGExMSAxMSAwIDAgMC0uNyAzLjVsMS0xLjQgMi45LTMuNnEzLjEtNC40IDctOC4zYzMuNi0zLjggNy42LTguNCA5LjgtMTQuNSAxLjQtMy43IDMuOC04LjcgOS43LTEwLjVxMS40LS4yIDIuNi4zbDEgLjMuMy4xLjIuM3YuNmwtLjQuN3EtLjUgMS0xLjQgMS43Yy0yLjUgMS42LTQgMy44LTUgNy42cS0zLjUgMTIuNi0xMi40IDIwYTM3IDM3IDAgMCAwLTguOCAxNS4ybC40LS40IDIuOC0yLjEgMTEuNS0xMC43IDIxLjctMjAuMmMxLjEtMS4zIDIuNy0zLjEgNS4zLTEuM2wuMi40Yy4xLjgtMS42IDQuMS0yLjcgNS40bC0yMS4yIDIzLTcuNCA4LS41LjVjLTEgMS0yIDItMi44IDMuMnYuMmwuNC0uM3ExLjEtLjcgMi0xLjYgNi01LjQgMTQuOC04LjIgNy42LTIuNiAxNC44LTkuNCAzLjYtMy4zIDguNS01LjJsMS0uNWMxLjEtLjYgMi41LS4zIDMuOCAwbC44LjJjLjcuMSAxLjUgMSAxLjYgMS43cTAgLjctLjMgMS4ydC0xLjEuOGMtNC44LjYtNy41IDMuOS0xMC40IDcuNGwtMS4yIDEuNXEtNiA3LTE0LjUgOS43YTM4IDM4IDAgMCAwLTE0IDkuNWwtLjUuNS0uNC43IDEgLjIgMjcuNC0xMCA2LjItMi40IDguOS0zLjNxMy0xIDUuNC0xLjQgMS4yIDAgMS45LjUuNC4zLjQuN2MwIC43IDAgMi4yLS45IDIuN3EtMi4xIDEuNC00LjYgMi40bC0uNC4yLTQwLjYgMTguOSAyLjQtLjYgMy42LS41cTUtLjkgMTAtMWM1LjkuMSAxMy41LS4yIDIwLjgtMy44cTMuNy0xLjggNi4yLTEuNmEyNiAyNiAwIDAgMSA3LjggMmMuOS4yIDEuNCAxLjkgMS4yIDIuN3EwIC41LS45IDFjLS4yLjEtMS4xLjUtMS44LjMtMy44LTEuNS03IC4zLTEwLjMgMi4xbC0uMy4yQTM0IDM0IDAgMCAxIDI1NSAxNzhjLTUuOS0uNS0xMS40IDEuNS0xNi43IDMuNWwtMS42LjZxLS4yIDAtLjUuNC41LjQgMSAuNWwyMS4zLjggMjIgLjdxMy4yLjEgNy41IDEgLjkuMiAxLjQgMS4xbC40LjYuMi40LS4yLjVxLS4zIDAtLjQuMy0uNi43LTEuMy44bC0uNC4xcS0zLjEuNi02LjQuOGwtMjUuNiAxLTE1LjMuNXEtMS44IDAtMy44LjQgMS4zLjUgMi41LjVjNyAwIDEzIDIuNiAxOC42IDUuMyA0LjQgMi4zIDkgMi41IDE0IDIuN2guOGMzLjcuMiA3LjQgMS40IDEwLjggMi42cTEuOSAxIDMgMi44bC43LjljLjQuNS40IDEuNS4zIDJxMCAuNS0uNC42Yy0uMiAwLTIgMS0yLjguMi0zLjQtMi45LTcuMy0yLjUtMTEuNC0yaC0uNWEzNSAzNSAwIDAgMS0xOS43LTMuNCAzMyAzMyAwIDAgMC0xNy43LTIuNXEuMy41LjguN2M4LjQgNCAxNi45IDcuOCAyNC43IDExLjRsMTAuMyA0LjcgMTAuMSA0LjlxLjcuOSAxLjEgMS44bC40Ljh2LjVsLS4yLjNoLS4ybC0uOS4zcS0xLjEuNi0yLjIuNC0yLjQtLjYtNC43LTEuNWwtLjctLjItMTkuNy03LjMtMTgtNi43LTQuMy0xLjNxLjYuNSAxLjQuOWE0NiA0NiAwIDAgMSAxNS42IDEyLjNjMy41IDQgOC4xIDYuNSAxMi41IDguNSAzLjUgMS41IDYuNiA0IDkuMiA2LjNxMS4zIDEuNiAxLjYgMy44bC4zIDFjLjIuOC0uNCAyLTEgMi4zcS0uOC40LTEuNiAwLS41IDAtMS0uNmMtMi4yLTQuMS02LTUuNC0xMC4yLTYuN2wtMi4zLS43cS05LTMtMTQuMS05LjJjLTQuMi01LTEwLTcuNi0xNS44LTEwLjFsLS42LjEuMS4zIDMuMiAzLjcgMTUgMTYuMiAxMyAxMy44LjUuNnExIDEgMiAyLjNsLjcgMi43LjIgMS4yLS4xLjZxLS4zLjItLjcuMWwtMS4yLS4zcS0xLjYtLjItMi42LTEuMWwtMzIuNS0yOS44LTItMS42IDEuNCAyLjUgMiAzLjNxMi4zIDMuNyAzLjkgNy42YTQzIDQzIDAgMCAwIDExIDE3LjRxNS43IDUuMSA1LjMgMTItLjMgMS4yLTEuNCAyLjJsLS43LjgtLjIuMmgtLjNsLS41LS4yLS41LS43cS0uOS0uOS0xLTItLjgtNC4zLTUuMy03LjVhNDMgNDMgMCAwIDEtMTMuNi0xOC40Yy0xLjYtMy42LTQuMi02LjgtNi43LTkuOGwtMy4zLTQuMS0uNC0uNHYxbDkuNiAyNi4yLjQgMSAyLjggNy44IDMuNiA5LjdxLjcgMS44IDEuMSAzLjdjLjEuNi0uMyAyLTEuMSAyLjItLjcuMi0yLjMuMi0yLjgtLjZxLTEuNC0yLTIuNy00LjlsLTE4LjEtMzkuNGMxLjQgNyAxLjUgMTQgMS41IDIxdjIuNXEuMyAzLjQgMS43IDYuOC44IDIuMSAxLjMgNC4zYTU1IDU1IDAgMCAxIDEuNyAxMC40cS0uMiAyLjEtMS43IDQuMWwtLjYgMS4xcS0uNi42LTEuNC4xLS41IDAtMS0uNC0uOS0uMi0uOS0xYzEuMy00LjQtLjUtOC0yLjQtMTEuN3EtMS41LTIuNi0yLjQtNS4zYTQ5IDQ5IDAgMCAxLTIuMy0xNC4xIDQ2IDQ2IDAgMCAwLTMuNy0xNy4ycS0uMi0uNC0uOC0uOGwtLjIuOHYuN3EtLjUgMy43LS43IDcuM2wtLjUgMTYtLjkgMjIuNHYxLjJxLjQgMi4zLS42IDMuOC0uNy43LTEuOS43bS00LjgtNTQuNC40LjEuMi40cTEuNCA1LjcgMS42IDExbC42IDE4LjQuNyAyMC4xYzAgMS0uMiAyLjMuMyAyLjhxLjMuMyAxIC40LjcgMCAxLS40LjYtMSAuNC0yLjh2LTEuM2wuNy0yMi40LjYtMTZxMC0zLjguNi03LjR2LS43bC41LTEuNC4zLS41cTAtLjMuNC0uM2wuNi4xLjUuNHEuOC42IDEuMiAxLjNhNDggNDggMCAwIDEgMy43IDE3LjdxMCA2LjggMi4zIDEzLjcuOSAyLjcgMi4zIDUuMmMxLjggMy42IDMuOCA3LjQgMi43IDEyLjFsMSAuNC41LS43Yy43LTEuMiAxLjUtMi40IDEuNC0zLjRhNTQgNTQgMCAwIDAtMi45LTE0LjNxLTEuNC0zLjYtMS43LTcuM3YtMi41YTg5IDg5IDAgMCAwLTIuNy0yNS45IDEgMSAwIDAgMSAuOC0uM2wuMy4zLjggMS4zIDEuNiAzIDguOSAxOS40IDkuMiAyMHExLjMgMyAyLjYgNC44LjUuMyAxLjQuMi4zLS40LjMtMWwtMS0zLjQtMy42LTkuNi0yLjktNy44LS40LTEuMS05LjYtMjYuMnEtLjEtLjkgMC0xLjh2LS42cTAtLjUuNC0uNmguNmwuNS40IDEuMi45IDMuMSA0YzIuNiAzLjEgNS4zIDYuNCA3IDEwYTQyIDQyIDAgMCAwIDEzLjIgMThxNC45IDMuNSA1LjcgOC40LjEuNi44IDEuM3YuMmwuMy0uM3EuOS0uOCAxLTEuNWExMyAxMyAwIDAgMC00LjgtMTFjLTYtNS4yLTktMTItMTEuMy0xNy44cS0xLjYtMy44LTQtNy40bC0xLjktMy40LTEuOC0zLjQtLjktMS41di0uNHEwLS4zLjItLjRsLjMtLjJxLjMgMCAuNC4ybDEuNCAxcTEuNSAxIDMgMi4zbDEyLjIgMTEuMiAyMC4yIDE4LjZxLjguNiAyLjIuOGguMnYtLjFsLS43LTIuNHEtLjYtMS0xLjYtMmwtLjctLjctMTIuOC0xMy43LTE1LTE2LjItMy4zLTMuOHEtLjQtLjUtLjUtMXYtLjhxLjItLjMuNC0uM2wuNS0uMnEuNy0uMyAxLjUgMGM1LjkgMi41IDExLjkgNS4xIDE2LjMgMTAuNHE0LjkgNiAxMy41IDguOWwyLjMuN2M0LjIgMS4zIDguNSAyLjYgMTEgNy4ybC44LjJxLjMtLjQuNC0uOWwtLjMtMXEtLjItMi4xLTEuMi0zLjJhMzggMzggMCAwIDAtOC45LTYuMiAzNiAzNiAwIDAgMS0xMi45LTguNyA0NSA0NSAwIDAgMC0xNS4yLTEycS0xLS40LTEuNy0xLjItLjQtLjQtLjUtLjh2LS4zbC0uMS0uM3YtLjJsLjItLjIuMy0uMS4zLS4xIDEuMS0uMSA0LjIgMS4zIDM3LjcgMTQgLjcuM3EyLjIuOCA0LjUgMS40bDEuNi0uMy4zLS4xdi0uMXEtLjQtMS0xLTEuNXQtMS40LS45bC0uNS0uMi03LjgtMy42LTEwLjMtNC42LTI0LjctMTEuNXEtLjgtLjQtMS40LTEuMmwtLjQtLjUtLjItLjMuMS0uNi4zLS4xLjctLjJxLjctLjMgMS43LS40IDEwLjEtLjYgMTcuMiAzIDguOCA0LjMgMTkgMy4yaC41YzQuMi0uNSA4LjUtMSAxMi4zIDIuM3EuMyAwIDEuMy0uM2wtLjEtLjgtLjctLjlxLTEuMi0xLjctMi41LTIuNGMtMy4zLTEuMS02LjktMi4zLTEwLjQtMi41aC0uOGMtNC45LS4zLTkuOS0uNS0xNC42LTIuOGE0MCA0MCAwIDAgMC0xOC01LjNxLTEuNyAwLTMuNC0uNmwtMS40LS40cS0uNSAwLS41LS42dC40LS42YzIuMi0uOSA0LjItMSA2LjEtMS4xbDQxLTEuNXEzLjEtLjEgNi4yLS44aC40bC42LS41di0uMmMtLjMtLjItLjYtLjctLjgtLjdxLTQuMS0uNy03LjItLjlsLTIyLS44LTIxLjQtLjhxLS45IDAtMS42LS42bC0uNS0uNC0uNC0uNC4yLS41LjMtLjRxLjQtLjcgMS4yLTFsMS42LS42YzUuNC0yIDExLTQgMTcuMi0zLjZxOS4yLjcgMTguNi00LjVsLjMtLjFjMy40LTIgNy00IDExLjQtMi4zbDEtLjRxMC0uOC0uNC0xLjNsLS45LS4zcS0zLjItMS4yLTYuNS0xLjVhMTIgMTIgMCAwIDAtNS42IDEuNSA0NiA0NiAwIDAgMS0yMS40IDMuOXEtNSAwLTkuOCAxbC0zLjYuNXEtMS41LjItMyAuNy0uOCAwLTEuNC4zLS40IDAtLjctLjJhMSAxIDAgMCAxIDAtLjcgNyA3IDAgMCAxIDMuMi0yLjdsMzkuNC0xOC4yLjQtLjEgNC41LTIuNHEuMi0uMi4zLTEuM2wtLjgtLjNxLTIuNC40LTUuMyAxLjQtNC42IDEuNi04LjggMy4zbC02LjMgMi4zLTI3LjMgMTBjLS42LjMtMS4zIDAtMS45LS4xbC0uNi0uMi0uMy0uMS0uMi0uM3YtLjVsLjMtLjVxLjMtLjcuOC0xLjJsLjUtLjVjNC4yLTMuOSA4LjYtOCAxNC40LTkuOGEzMCAzMCAwIDAgMCAxNC05LjNsMS4xLTEuNWMzLTMuNSA2LTcuMSAxMS4yLTcuOWwuNC0uNXEtLjMtLjYtLjctLjdsLS44LS4yYy0xLS4yLTIuMi0uNS0zLS4xbC0xIC41Yy0zIDEuNC02IDIuOC04LjIgNXEtNy4zIDcuMS0xNS4yIDkuNy04LjUgMi44LTE0LjMgOGwtMi4yIDEuNi0uMy4zLS45LjRoLS4zcTAgLjItLjMuMWgtLjNsLS4yLS4zdi0uOHEwLS43LjMtMS40IDEuMy0xLjcgMi44LTMuMmwuNS0uNSAyOC41LTMxYzEtMSAyLjEtMy40IDIuNC00LjItMS4zLS44LTIuMSAwLTMuMyAxLjRsLTEgMS0yMC43IDE5LjItMTEuNiAxMC43LTIuOCAyLjItMi43IDEuOXEtLjEgMC0uMy0uMmExIDEgMCAwIDEtLjItLjdsLjctMS44YzIuNS02LjQgNC44LTEyIDkuMy0xNS45cTguNi03LjQgMTItMTkuNGMuNy0yLjcgMi02LjIgNS42LTguM3EuNS0uNC44LTEuM2guMWwtLjQtLjJxLTEtLjQtMS44LS4zLTYuMSAxLjctOC45IDkuN2MtMi4zIDYuNC02LjQgMTEuMS0xMC4yIDE1cS0zLjcgMy45LTYuOSA4LjJsLTIuOCAzLjYtMS40IDEuOS0uNi45cS0uMy4zLS43LjJsLS40LS41cS0uNC0zIC43LTUuOGw4LjMtMjIuNSA2LjctMTguMWE1IDUgMCAwIDAtLjMtMi4zdi0uMmwtLjIuMS0yIDEuN3EtLjQuNS0uNiAxLjNsLS4zLjgtOC4yIDE3LjctMyA2LjUtMiA0LjJxLTIuNyA2LjMtNS44IDEyLjctLjUgMS0xLjMgMS43bC0uNi43cS0uMy4zLS42LjJsLS41LS40LS4zLTFxLS40LTEuMS0uNS0yLjRjLjQtNS41IDEuMS0xMiAzLjgtMTguMyAxLjgtNC4zIDIuOS05LjEgMi44LTEzLjVxMC0yLjEtLjItNC4yYy0uNC00LjItLjgtOC41IDIuMy0xMi40bC0uNy0uOHEtMS43LjgtMyAyYy0yLjMgMi44LTIuNyA2LTMgOS41djJjLS4yIDMuOS0uNCA4LTEuNyAxMS42bC0yLjEgNS40Yy0yLjQgNi4xLTQuOSAxMi41LTUuNCAxOS40cTAgLjEtLjIuM2EuNi42IDAgMCAxLTEtLjIgNDUgNDUgMCAwIDEtMS41LTEwbC0xLjQtMzkuN3EuMy0xLjUtLjItMi4zLS40LS40LTEuMi0uNGMtLjQuNS0xIDIuNi0xLjIgNGwtLjggMjMuOC0uNSAxNC42LS44IDguNnYuMXEwIC44LS42IDEuM2wtLjIuNS0uNS4zaC0uM2wtLjItLjItLjQtLjNxLS43LS40LTEtMS4yYTM5IDM5IDAgMCAxLTMuOC0xNy42cS42LTguMi0zLjQtMTYuNWwtMS0yLjFjLTIuMS00LTQuMi04LTIuNy0xM3EtLjEtLjMtLjUtLjctLjMgMC0uOC4zbC0uNiAxcS0xLjIgMi0xLjQgMy42LjQgNC4zIDEuNSA4LjVsMS42IDYuNGMuNyAyLjggMS41IDUuNiAxLjYgOC41bC4xIDQuNGMuMSA1LjguMiAxMS44IDIuMyAxNy40cS4yLjctLjEgMS42bC0uMyAxLjJxMCAuNS0uNS41dC0uNi0uM2wtLjktMS41LTEuMi0yLjMtOS4yLTIwLTktMTkuNC0uMi0uNHEtLjctMS43LTEuNy0zLjNjLS4yLS4yLTEuMS0uNS0xLjMtLjQtLjIuMi0uNiAxLS41IDEuNHEuMiAxLjMuOCAyLjZsLjMuOCA1IDEzLjYgMTEgMzAgLjkgMi43cTAgLjUtLjIuNy0uNC4zLS44IDBhMzUgMzUgMCAwIDEtMTMuMi0xNi41cS0zLTguOS0xMC44LTE1LjFsLS41LS40Yy0zLjMtMi42LTYuNy01LjMtNy0xMC4zIDAtLjItLjYtLjUtMS0uN2wtLjYuNnYxLjRxLS4zIDIuNC4zIDQuM2EzOCAzOCAwIDAgMCA0LjcgNy4xbC4zLjRxMSAxLjQgMi4zIDIuNyAxLjkgMS44IDMuMyA0IDIuNyA0LjcgNC43IDkuNmE0NiA0NiAwIDAgMCA4LjggMTUuMXEuNC42LjMgMS4xdi4zcTAgLjMtLjIuNWwtLjQuMmgtLjNxLS42IDAtMS4yLS4ybC0zLjMtMi45LTguNS03LjktMjMuOC0yMmMtMS4yLTEuNC0xLjgtMi0zLTEuMi4xLjggMS4xIDIuOCAyIDMuOCA3IDcuOCAxNC40IDE1LjYgMjEuNCAyMy4ybDcuNiA4LjIuMi4ycTEuNiAxLjcgMyAzLjYuNS42LjUgMS40di40cTAgLjMtLjIuNSAwIC4zLS40LjNoLS41cS0uNyAwLTEuNS0uMmwtNC40LTIuNWMtMy42LTItNy4zLTQtMTAuMi02LjgtNi01LjctMTEuNy05LjItMTgtMTEtMy43LTEtNy40LTIuMy05LjUtNi4ycS0uMy0uMy0xLS41bC0uMy4yYy0uMS40LS41IDEtLjQgMS4ybC4yLjVjMSAyIDIgNCAzLjYgNS40cTIuMSAxLjcgNC44IDIuOWwyLjYgMS4zIDIuNyAxLjVxMy42IDEuNSA2LjMgNGwzIDIuOGM1LjIgNS4xIDEwLjYgMTAuNCAxNy41IDEzLjhsLjMuM2ExIDEgMCAwIDEtLjIuN3EtLjIuMi0uNC4xLTMgMC02LjEtMS4ybC0zOS42LTE0LjYtMS4xLS41Yy0xLjgtLjgtMi44LTEuMi0zLjguMi42LjYgMi42IDIuMyAzLjkgMi45bDI2LjkgMTIuNCAxNS44IDcuNHEuNi4yLjguN2wuMi4zLjEuNHEwIC4zLS4yLjUtLjMgMC0uNC4zLS40LjUtMS4yLjZjLTUuNi4zLTExLjUuMy0xNi43LTIuM2E0MCA0MCAwIDAgMC0yMy4yLTMuN2MtMi45LjMtNi4zLjMtOS4zLTJxLS42LS4yLTEuNC0uMmgtLjJ2LjNxLjEgMS4yLjUgMS44YTE1IDE1IDAgMCAwIDEyLjUgNC42YzcuMi0uNSAxMy41IDEuOCAxOC4yIDMuOGE2NCA2NCAwIDAgMCAxMCAzbDQuMSAxIDMuNS44IDEuNy4zcS4zIDAgLjUuNSAwIC4zLS4yLjZhNSA1IDAgMCAxLTMuMyAxLjNsLTMxLjYgMS4yaC00YTEwNyAxMDcgMCAwIDAtOS43LjRjLTIgMC0zLjUgMC00LjggMS4ybDEuNi41cTIuNy44IDUuNCAxLjIgNC41LjQgOS4xLjRoNS4ybDI5LjcgMS4zcS45LjEgMS43LjVsLjYuMy40LjV2LjNsLS4yLjItLjUuNXEtLjYuOC0xLjUgMS4ybC00LjggMS4yYTU2IDU2IDAgMCAxLTEyLjcgMi42IDQyIDQyIDAgMCAwLTE5LjkgNWMtMy4xIDEuNy02LjcgMy44LTExIDIuMWwtMSAuMy0uMS4xdi4ycS4xLjguNCAxIDUuMSAzLjggMTAuNSAxLjJjOS42LTQuNiAxOS43LTUgMjcuNS00LjhxMy44IDAgNy44LTEuMWw2LjQtMS40cS41IDAgLjYuMy4zLjMgMCAuN2ExMCAxMCAwIDAgMS00IDMuMWwtMTMuMyA2LjFMOTggMjIzbC0xLjMuNWMtMSAuNC0yLjIuOC0yLjUgMS41djFjLjQgMSAxLjIgMSAzLjIuMWwxLjYtLjVxLjYgMCAxLS4zaC4xbDEyLTQuNSAyMi4zLTguMy4zLS4xcTMuOC0xLjUgNy45LTIuOC45LS4yIDEuOCAwbC43LjEuMy4xLjIuMnEwIC4xIDAgLjR2LjNsLS40LjZxLS4zLjctMSAxLjVjLTQuNSA0LjEtOS4yIDguNC0xNS42IDEwLjNxLTcgMi4yLTEyLjggOC45bC0xLjQgMS43Yy0yLjggMy40LTUuNyA3LTExIDcuNWwtLjQuNnEuMS41LjUuOCAyIC40IDQgLjMgNS4yLS42IDkuNi01LjYgNS43LTYuNSAxNC05LjIgOS0zIDE2LTlsMS42LTEuMSAxLjItLjNoLjhxLjEgMCAuMi4ybC4yLjN2LjNsLS4yLjNxMCAuNS0uNCAxbC0zLjMgMy43LTguOCA5LjUtMTkuOCAyMS40YTIwIDIwIDAgMCAwLTIuNiAzLjZxLjMuNi45IDEgMS42LS43IDIuNi0xLjhhMjQ3MyAyNDczIDAgMCAwIDM0LjctMzJxLjgtLjUgMS43LS41aDEuMWExIDEgMCAwIDEgLjMuNnYuNWwtLjEgMS40Yy0yIDQuOS01IDExLTEwLjMgMTUuN2EyOCAyOCAwIDAgMC04IDExLjlxLS43IDEuNi0xLjIgMy4zYy0xLjMgNC4zLTIuNiA4LjctNy4yIDExLjNxMCAuNi4zIDEgMiAwIDMuNS0uOCA0LjktMi40IDcuMi05LjFhMzkgMzkgMCAwIDEgOS44LTE0LjRxMy45LTQuMSA3LjItOC43bDIuOS0zLjcuMy0uNi43LTFxLjUtLjUgMS0uN2wuNS0uMmguM2wuNS4ydi4zbC4yLjNxLjEuNSAwIDEuMWwtMS4yIDQuMi01LjMgMTQuMy00LjYgMTIuNC0uNSAxLjItNSAxNCAuNiAxIC4yLjRoLjJsMS0uNnExLTEuNiAxLjctMy4zbC4yLS40IDUuMy0xMS42IDUuNi0xMi4xIDguNi0xOC41cS40LS43IDEuMi0xbC40LS4zLjMtLjFoLjNsLjIuMS4yLjJxMCAuMy4yLjUuMy42LjQgMS4zdi44Yy0uNCA2LS43IDEyLjMtMy41IDE4LjJxLTQuNyA5LjUtMi43IDE4LjkgMS40IDYuNi0yIDExLjEtLjQuNy0uNCAxLjV2LjFoLjNxMS4yIDAgMS44LS4zYTEyIDEyIDAgMCAwIDQuMy0xMC41Yy0uMi00LjQtLjEtMTAuOCAyLjgtMTYuN2E2NiA2NiAwIDAgMCA2LjgtMjIuNnptMi43LTguNWEzOS42IDM5LjYgMCAwIDEtMzcuNC0zOS43Yy4xLTEwLjQgNC42LTIwLjMgMTIuNi0yNy44IDcuNS03IDE3LjItMTEgMjYuNS0xMSAxMC4yLS4xIDIwLjggNC40IDI4LjUgMTIgNy40IDcuNSAxMS40IDE3LjEgMTEuMyAyNy4zIDAgMTEuMy00LjcgMjEuNy0xMyAyOS4zYTM2IDM2IDAgMCAxLTI2IDkuOHptMi03Ny4zaC0uM2MtMTcuNy4yLTM3LjYgMTUuNi0zNy44IDM3LjYtLjEgMTEgNC4zIDIxIDEyLjQgMjguNiA3LjUgNyAxNyAxMC41IDI2LjEgOS43aC4xYzguNy43IDE3LjgtMi43IDI1LjItOS40IDgtNy40IDEyLjUtMTcuNSAxMi42LTI4LjQgMC05LjgtMy45LTE5LjItMTEtMjYuM2E0MCA0MCAwIDAgMC0yNy4zLTExLjhtMCAwIi8+PC9nPjxwYXRoIGQ9Ik0xODAgMTUxLjhxLTUuMi0xNC43LTUtMzAuNGE4NiA4NiAwIDAgMCA3IDI5LjZjLjYgMS40LTEuNSAyLjMtMiAuOE0xODYgMTUwLjZxLjUtMTYgMi41LTMyLS44IDE2LS4yIDMyYzAgMS41LTIuMyAxLjUtMi4zIDBNMTk0LjQgMTUwLjJhNTEgNTEgMCAwIDEgNi41LTI3LjRjLTQgOC41LTUuNCAxOC00LjMgMjcuMi4yIDEuNi0yLjEgMS44LTIuMi4yTTIwMS41IDE1MS43cTQuNi0xMi43IDExLjItMjQuMy01LjUgMTItOSAyNWMtLjQgMS40LTIuNi44LTIuMi0uN00yMDguNiAxNTUuN2E2NiA2NiAwIDAgMSAxNC4zLTIxLjggNjUgNjUgMCAwIDAtMTIuMSAyMi41Yy0uNiAxLjUtMi43LjctMi4yLS43TTIxNC42IDE1OS43cTgtOSAxNy4xLTE2LjdhMTQ3IDE0NyAwIDAgMC0xNS4zIDE4LjFjLTEgMS4zLTIuOC0uMS0xLjgtMS40TTIyMC40IDE2NmM1LjYtMyA5LjYtOC40IDE1LTExLjhxMi43LTEuOCA1LjktMi42Yy02LjMgMi0xMC4yIDcuNi0xNC43IDEyLjJhMzIgMzIgMCAwIDEtNS41IDQuNCAxLjEgMS4xIDAgMCAxLTEuMS0xLjh6TTIyMy45IDE3Mi4ycTkuNy0zLjYgMTktOC4yLTguNyA1LjUtMTggMTAuM2MtMS41LjctMi41LTEuNC0xLTJNMTcyIDE1Mi42bC04LjgtMjMuOCAxMC45IDIzYy42IDEuNC0xLjUgMi4zLTIuMS44TTE2NS40IDE1NS41Yy0yLjEtNi4zLTguMy0xMC0xMS42LTE1LjdxLTEuOS0yLjgtMi4xLTYuM2MuNiA0LjUgMy44IDcuOSA3IDEwLjggMy40IDMgNyA2IDguOCAxMC40LjYgMS41LTEuNiAyLjMtMi4xLjhNMTU5IDE2MS4ycS03LTEwLjItMTYtMTguNiAxMCA3LjYgMTcuOSAxNy4yYzEgMS4zLS45IDIuNy0xLjggMS40TTE1My4zIDE2Ny42Yy0zLTUuMi05LTcuNi0xMy42LTExLjFhMjAgMjAgMCAwIDEtNC4zLTQuM2M0LjEgNC42IDEwLjMgNi4zIDE1LjMgOS43cTIuNiAxLjggNC42IDQuNWwuMS40di41YTEgMSAwIDAgMS0uOS44IDEgMSAwIDAgMS0uOS0uMnpNMTUwLjUgMTc0LjZhODAgODAgMCAwIDAtMjEtMTEuM3ExMS45IDMgMjIuMiA5LjRjMS40LjkgMCAyLjgtMS4yIDEuOU0xNDguNyAxODAuNGE1NiA1NiAwIDAgMC0xMC41LTIuN2wtMTEtMS45YzUuNC40IDExLjMuNiAxNi43IDEuM2E0NCA0NCAwIDAgMSA2IDEuNGwuMy44di40YTEgMSAwIDAgMS0xLjUuN00xNDcuOCAxODlsLTIwLjctMS44IDIwLjgtLjVjMS42IDAgMS41IDIuMyAwIDIuMk0xNDguNCAxOTQuOGMtNC43LS4zLTkgMi41LTEzLjQgMy45cS0yLjQuNy00LjguOGM0LjktLjcgOC43LTQgMTMuMi01LjhhMTUgMTUgMCAwIDEgNS0xLjFjMS42IDAgMS42IDIuMyAwIDIuMk0xNTEgMjAzbC0xOS40IDcuOCAxOC41LTkuOWMxLjQtLjYgMi40IDEuNSAxIDIuMU0xNTQuNSAyMDguM2E2MiA2MiAwIDAgMS0xNi45IDEzLjFxOC45LTYgMTUuMS0xNC42YzEtMS4yIDIuOC4zIDEuOCAxLjVNMTYwLjQgMjE1LjFsLTE0LjMgMTMuOCAxMi42LTE1LjNjMS4xLTEuMiAyLjguMyAxLjcgMS41TTE2Ni44IDIyMC41bC0xNCAxOS4zIDEyLTIwLjVjMS0xLjMgMi44IDAgMiAxLjJNMTc0LjIgMjIycS00LjggMTEuMy0xMC42IDIyLjQgNC44LTExLjQgOC40LTIzLjJjLjYtMS41IDIuNy0uNyAyLjIuOE0xODEuNiAyMjZjLTIuMyAzLTMgNy0zLjQgMTAuNy0uNCAzLjgtLjcgOC0yLjQgMTEuNSAyLTUuNy43LTExLjcgMS44LTE3LjZxLjUtMyAyLjEtNS44bC43LS41aC41bC43LjUuMi40di40ek0xODkgMjI2LjNsLTEuMSAyMS42LTEuMi0yMS42YzAtMS42IDIuMy0xLjYgMi4zIDBNMTk2LjIgMjI0LjZhNjUgNjUgMCAwIDEgMy41IDIxLjUgNjQgNjQgMCAwIDAtNS43LTIwLjdjLS42LTEuNCAxLjYtMi4zIDIuMi0uOE0yMDMgMjIyLjVxMy4zIDEwLjMgOCAyMC4yLTUuNy05LjMtMTAuMi0xOS40Yy0uNi0xLjQgMS42LTIuMyAyLjEtLjhNMjEwLjMgMjE4bDExIDE3LjctMTIuOC0xNi4zYy0xLTEuMyAxLTIuNiAxLjgtMS4zTTIxNi43IDIxM3E2LjIgOS4zIDEzLjkgMTcuMi04LjYtNy4yLTE1LjctMTUuN2MtMS0xLjMuOC0yLjcgMS44LTEuNE0yMjAuMSAyMDguOXExMSA0LjMgMTkuNiAxMi4zYTYwIDYwIDAgMCAwLTIwLjMtMTAuMmMtMS41LS41LS44LTIuNi43LTIuMU0yMjQgMjAxbDIxLjYgMTAuOC0yMi41LTguNmMtMS40LS43LS41LTIuOCAxLTIuMU0yMjUuOCAxOTUuOGE0NCA0NCAwIDAgMSAyNi44IDQuMyA0MyA0MyAwIDAgMC0yNi40LTJjLTEuNS4yLTItMi0uNC0yLjNNMjI2IDE4Ny41cTEyLjgtMS40IDI1LjctLjItMTIuOCAwLTI1LjMgMi40Yy0xLjUuMy0xLjktMi0uMy0yLjJNMjI2IDE4MHExMi41LTQuNSAyNi02LTEzLjIgMi41LTI1LjIgOC4xYy0xLjUuNi0yLjMtMS41LS45LTJNMTgyLjUgMTQ5LjZsLjMtMTAuNSAyIDEwLjN2LjRhMSAxIDAgMCAxLS42LjggMSAxIDAgMCAxLTEgMGwtLjMtLjJ6TTE4OS41IDE0OS41YTUwIDUwIDAgMCAwIDIuMi0xMS41IDUxIDUxIDAgMCAxIDAgMTIuNGwtLjQuNGExIDEgMCAwIDEtMSAuMmwtLjMtLjItLjQtLjR6TTE5Ny4zIDE1MC41bDMuOS05LjEtMS43IDkuOGMtLjQgMS42LTIuOCAxLTIuMi0uN00yMDQuNCAxNTMuN2w2LjgtMTEuMi00LjggMTIuMmMtLjcgMS41LTIuOC40LTItMU0yMTEuNCAxNTcuOGE0NSA0NSAwIDAgMSA2LjItNy4yIDQ0IDQ0IDAgMCAwLTQuNCA4LjcgMSAxIDAgMCAxLTEgLjNsLS40LS4xLS4zLS4zYTEgMSAwIDAgMS0uMy0xek0yMTcuMiAxNjMuMXEzLjctMy4zIDcuOS02LjJhNzggNzggMCAwIDAtNi42IDggMSAxIDAgMCAxLTEgLjIgMSAxIDAgMCAxLS43LTEuMSAxIDEgMCAwIDEgLjQtLjlNMjIyIDE2OS4zbDgtNC44LTYuNiA2LjZjLTEuMyAxLTIuOC0uOS0xLjQtMS44TTIyNC43IDE3NnE0LjYtMS44IDkuMy0zYTg2IDg2IDAgMCAwLTguMyA1Yy0xLjUuOC0yLjYtMS40LTEtMk0xNzUuNCAxNTEuNHEtLjUtNS43LTIuNS0xMS4yIDMgNS4xIDQuOCAxMC44Yy4zIDEuNi0yIDItMi4zLjRNMTY5LjIgMTUzLjhhMzMgMzMgMCAwIDEtNC0xMHEyLjEgNC43IDUuOCA4LjZjMS4xIDEuMy0uOSAyLjgtMS44IDEuNE0xNjEuNyAxNThsLTUuMi04LjggNyA3LjQuMi40LjEuNWExIDEgMCAwIDEtLjkgMSAxIDEgMCAwIDEtMS4yLS42TTE1Ni42IDE2My42YTM0IDM0IDAgMCAxLTYuNS03LjJxMy41IDMuMyA3LjcgNS4zYzEuNS45LjEgMy0xLjIgMk0xNTEuNyAxNzAuNWwtNy41LTYuMSA4LjggNC4yYzEuNC44LjEgMy0xLjMgMk0xNDkuNiAxNzcuMmwtOS00IDkuNyAxLjhhMSAxIDAgMCAxIC45IDF2LjVhMSAxIDAgMCAxLS43LjdoLS45TTE0OC45IDE4NXEtNS0uOS05LjgtMi41YTc3IDc3IDAgMCAwIDEwLjQuM3EuMyAwIC40LjNsLjMuNGExLjIgMS4yIDAgMCAxLS44IDEuNXpNMTQ3LjggMTkxLjlsLTguNC0uNSA4LjItMS44YTEgMSAwIDAgMSAxIC4ybC40Ljh2LjVhMSAxIDAgMCAxLS43Ljd6TTE1MCAxOTguOXEtNSAuMy05LjUgMi41IDQtMy4zIDktNC44YzEuNy0uNCAyLjIgMiAuNSAyLjNNMTUzLjEgMjA1LjNhMzEgMzEgMCAwIDAtOC41IDUuMyAzMiAzMiAwIDAgMSA3LjktNy41IDEgMSAwIDAgMSAxLjIuNmwuMS40YTEgMSAwIDAgMS0uNyAxLjJNMTU4IDIxMS40bC04LjYgNy4yIDctOC44YzEtMS4yIDIuOC41IDEuNiAxLjZNMTYzLjYgMjE4LjJhODQgODQgMCAwIDEtNy4zIDcuNHEzLTQuMiA1LjQtOC43YzEtMS40IDMgMCAxLjkgMS4zTTE3MC44IDIyMmwtNyAxMC41IDUtMTEuNWMuOC0xLjUgMi45LS4zIDIgMU0xNzcuMSAyMjQuM2wtMy41IDkuMyAxLjMtOS45Yy40LTEuNiAyLjgtMSAyLjIuNk0xODUgMjI2bC0yLjIgMTF2LTExLjhsLjMtLjQuNC0uMmguNWwuOC40LjIuNHpNMTkyLjYgMjI2LjF2OS41bC0yLjMtOS4yYTEgMSAwIDAgMSAuMi0xbC40LS4yLjktLjFxLjIgMCAuNC4ybC4zLjR6TTIwMC40IDIyNC42bDEuOCA4LjItNC03LjRhMSAxIDAgMCAxIC4zLTEuNCAxIDEgMCAwIDEgLjktLjMgMSAxIDAgMCAxIDEgLjlNMjA3LjggMjIxLjZxLjkgNCAyLjYgNy44YTM4IDM4IDAgMCAxLTQuOC03Yy0uNy0xLjYgMS43LTIuNSAyLjItLjhNMjEzLjggMjE2bDYgOS4yLTcuOC03LjdjLTEuMS0xLjIuOC0yLjggMS44LTEuNG0wIDAiLz48cGF0aCBkPSJtMjE4LjYgMjEwLjUgNS44IDYuNy03LjMtNWMtMS40LTEgLjMtMyAxLjUtMS43TTIyMy4xIDIwNC44bDcuMyA1LTguMy0zcS0uMyAwLS40LS4yYTEgMSAwIDAgMS0uMy0xLjMgMSAxIDAgMCAxIDEuMi0uN3pNMjI1LjUgMTk4LjFxNC4zIDEuMiA4LjIgMy4yYTQzIDQzIDAgMCAwLTktMXEtLjMgMC0uNC0uM2wtLjMtLjR2LS41YTEgMSAwIDAgMSAuNS0uOCAxIDEgMCAwIDEgMS0uMU0yMjYuNiAxOTAuN2w3LjggMS4xLTcuOCAxLjJhMSAxIDAgMCAxLTEtLjMgMSAxIDAgMCAxLS4zLS45IDEgMSAwIDAgMSAuOC0xek0yMjYuNSAxODMuMmw5LS41LTguNiAyLjhjLTEuNi40LTItMi0uNC0yLjNtMCAwIi8+PHBhdGggZD0iTTIyOC45IDE4Ny41YTM5IDM5IDAgMCAxLTE1LjEgMzEgNDEgNDEgMCAwIDEtMjYuMyA5LjIgNDMgNDMgMCAwIDEtMzItMTQuNyA0MCA0MCAwIDAgMS05LTI5LjQgMzkgMzkgMCAwIDEgMTEuOC0yNC41IDQwIDQwIDAgMCAxIDIxLjItMTEgNDIgNDIgMCAwIDEgNDcuNiAyNy43IDM4IDM4IDAgMCAxIDEuOCAxMS43bTAgMCIvPjxwYXRoIGZpbGw9IiNmZmMxMDciIGQ9Ik0yMjYuOCAxODcuNWEzNyAzNyAwIDAgMS0xNy40IDMxLjcgMzkgMzkgMCAwIDEtMjUuNyA2LjMgMzkgMzkgMCAwIDEtMzUuMy00MS43IDM2IDM2IDAgMCAxIDYuNS0xNy41QTM4IDM4IDAgMCAxIDE3NiAxNTFhNDAgNDAgMCAwIDEgMjYuNSAxLjIgMzkgMzkgMCAwIDEgMjQgMzEuNnEuMiAxLjguMiAzLjdtMCAwIi8+PHBhdGggZD0iTTE2Mi45IDE3Ni4zYzQuMi0zLjMgOS41LTUuOCAxNC45LTQuNnEzLjcuNyA2LjIgMy42YzEuNiAyIDIuMyA0LjggMi4yIDcuNGExOCAxOCAwIDAgMS0zIDljLS4zLjQuNC43LjYuM3EyLjUtMy44IDMuMS04LjRjLjMtMi43LS4zLTUuNy0xLjgtOGExMSAxMSAwIDAgMC02LjEtNC40cS00LTEuMS04IDAtNC43IDEuNC04LjYgNC41LS4zLjIgMCAuNnpNMTc5LjUgMTkzLjZjLS4zIDEuMS0uNyAyLjMuMSAzLjNxMSAxLjIgMi4zLjIuOC0uNyAxLjYtMS41Yy45LS41IDEuNi42IDIuMSAxLjJxLjcuOSAxLjkuOWwxLS42cS43LS41IDEuMi0xLjEuMy0uNS44LS42dDEgLjRxLjMgMSAxIDEuN2MuOS42IDItLjQgMi40LTEuMmEzIDMgMCAwIDAtLjQtMy4zYy0uMy0uMy0uOS4yLS42LjZxMSAxLjIuMyAyLjVhMiAyIDAgMCAxLTEgLjhoLS4zbC0uMi0uMXEtLjMtMS0xLTEuN2MtLjYtLjUtMS42LS42LTIuMiAwbC0uNy43LTEgMXEtLjguMy0xLjQtLjNjLS43LS42LTEuMi0xLjYtMi4yLTEuN3EtMS4xLS4xLTEuOS45Yy0uNC40LTEgMS4zLTEuNiAxcS0uOC0uMS0uOC0xLS4xLTEgLjQtMS45Yy4xLS40LS42LS42LS44LS4yTTE4OCAyMDIuNWMuNC0xLjIgMS44LTEuNiAzLTEuNXEyIC40IDMuNSAybDEuNyAxLjd2LS41bC0yLjkgM2E5IDkgMCAwIDEtNy4zIDJsLTItLjZxLTEtLjQtMS44LTEtMS44LTEuNS0zLjMtMy40di41cTEuNC0xLjYgMy4yLTIuOSAxLjYtMS4xIDMuNy0uNS41IDAgLjguNS40LjMuNS44aC43cS0uMS4xIDAgLjJ2LS4xcS4yLS4xLjItLjMgMC0uMy0uNC0uNC0uMyAwLS4zLjQuMS0uMiAwLS4zdi4xcS0uMi4xLS4yLjRjMCAuNC43LjQuNyAwcS0uMS0xLjItMS4yLTEuN3QtMi0uNnEtMi41LjItNC4zIDJsLTIgMi4yLjEuMnExLjUgMS44IDMgMy4ybDEuOSAxLjIgMiAuN3EyLjEuNCA0LjIgMCAyLS4zIDMuNy0xLjZhMjMgMjMgMCAwIDAgMy42LTMuN2wtLjEtLjNjLTEuOS0yLjEtNC43LTUtNy44LTMuNnEtMS4yLjUtMS42IDEuN2MtLjIuNC41LjYuNy4ybTAgMCIvPjxwYXRoIGQ9Ik0xODIuMiAyMDQuOHE1LjQgMSAxMC45IDBjLjQtLjIuMi0uOS0uMi0uOHEtNS4yIDEuMS0xMC41LjFjLS41IDAtLjcuNy0uMi43bTAgMCIvPjxwYXRoIGQ9Ik0xODUuMyAyMDYuMnEyLjQuNyA0LjgtLjJjLjQtLjEuMi0uOS0uMi0uN3EtMi4xLjgtNC40LjJjLS40LS4xLS42LjYtLjIuN00xODEuOCAyMTVsLjEtLjF2LS4ybC4xLS4xYTYgNiAwIDAgMSAyLjMtMi44bC41LS4yaC4yYTUuNSA1LjUgMCAwIDEgNy40IDMuNGMuMS40LjguMy43LS4yYTYgNiAwIDAgMC00LjUtNC4zIDYuMyA2LjMgMCAwIDAtNy41IDQuNGMtLjEuNC42LjYuNy4yWk0xNjMuNSAxODEuM3EyLjctMy41IDctNC41YTEyIDEyIDAgMCAxIDEyIDQuMWMuMy40LjgtLjEuNS0uNWExMyAxMyAwIDAgMC0xMi4yLTQuNCAxMyAxMyAwIDAgMC04IDVxMCAuMS4yLjQuMy4xLjUtLjFtMCAwIi8+PHBhdGggZD0iTTE2NSAxODAuN2E5LjkgOS45IDAgMCAwIDE3LjMuNWMuMi0uNC0uNS0uNy0uNy0uM2E5LjIgOS4yIDAgMCAxLTEzLjIgMi42IDkgOSAwIDAgMS0yLjgtMy4yYy0uMi0uNC0uOSAwLS42LjRNMjEyLjcgMTc1LjdjLTQuNC0zLjQtMTAtNi0xNS43LTQuOC0yLjQuNi00LjggMS45LTYuNCAzLjlxLTIuNyAzLjQtMi41IDcuOGMwIDMuMyAxLjQgNi42IDMuMiA5LjQuMi40LjkgMCAuNi0uNGExOSAxOSAwIDAgMS0zLThxLS4zLTQgMS43LTcuNiAyLjItMy4xIDUuOC00LjEgMy44LTEuMSA3LjYgMGEyNCAyNCAwIDAgMSA4LjIgNC4zcS4zLjMuNSAwdDAtLjVtMCAwIi8+PHBhdGggZD0iTTE3Ni42IDE4MS40YTMgMyAwIDAgMS0xLjkgMi44IDMgMyAwIDAgMS0yLjIgMCAzIDMgMCAwIDEtMS45LTIuOCAzIDMgMCAwIDEgMS45LTIuOCAzIDMgMCAwIDEgMi4yIDAgMyAzIDAgMCAxIDEuOSAyLjhNMjEyIDE4MWExMyAxMyAwIDAgMC0xNy41LTMgMTMgMTMgMCAwIDAtMi42IDIuNGMtLjMuMy4yLjkuNS41YTEyIDEyIDAgMCAxIDE1LjUtMi43IDEyIDEyIDAgMCAxIDMuNSAzcTAgLjIuMi4yaC4zcS4zLS4xLjItLjVtMCAwIi8+PHBhdGggZD0iTTIwOS4zIDE4MC4zYTEwIDEwIDAgMCAxLTUuNyA0LjZxLTMuOCAxLTcuMi0xYTkgOSAwIDAgMS0zLTNjLS4zLS40LTEgMC0uNy4zYTEwIDEwIDAgMCAwIDYuNSA0LjYgMTAgMTAgMCAwIDAgNy44LTEuN3ExLjgtMS40IDMtMy40Yy4yLS40LS41LS44LS43LS40bTAgMCIvPjxwYXRoIGQ9Ik0yMDQuMyAxODEuNGEzIDMgMCAwIDEtLjkgMi4xIDMgMyAwIDEgMSAuOS0yLjFNMTY1LjQgMTgwLjdhMTMgMTMgMCAwIDEgMTMuOS0xbDIuMyAxLjZjLjQuMyAxLS4yLjYtLjVhMTQgMTQgMCAwIDAtMTcuMS0uN2MtLjQuMiAwIC45LjMuNm0wIDAiLz48cGF0aCBkPSJNMjA5LjggMTgwYTE0IDE0IDAgMCAwLTYuMy0yLjQgMTMgMTMgMCAwIDAtNi44LjggMTQgMTQgMCAwIDAtNCAyLjRjLS4zLjMuMi44LjYuNWExMyAxMyAwIDAgMSA1LjMtMi43IDEzIDEzIDAgMCAxIDEwLjkgMi4xYy4zLjMuNy0uNC4zLS42bTAgMCIvPjxnIGZpbGw9IiM2NGI1ZjYiIGNsaXAtcGF0aD0idXJsKCN2KSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzQgMTc0KSI+PHBhdGggZD0iTTkgMTAuNEg0Ljd2MmgzLjd2Mi4zSDQuN3YxLjlIOXYyLjNIMlY4LjFoN1pNMTQuMSAxOWE1IDUgMCAwIDEtNC4yLTIuNGwyLjItMS4zYTIgMiAwIDAgMCAyIDEuM3EuNiAwIDEtLjJsLjItLjZxMC0uNS0uNS0uOGwtMS4yLS41LTEuNS0uNmEzIDMgMCAwIDEtMS4yLTFxLS41LS42LS41LTEuNyAwLTEuNiAxLTIuNCAxLjItLjkgMi41LS45IDEgMCAyIC41bDEuNSAxLjEtMS43IDEuN3EtLjktMS0xLjgtMWwtLjYuMi0uMy42cTAgLjQuNC43LjMuMy45LjRsMi40IDEgLjkgMXEuMy43LjQgMS43IDAgMS41LTEuMSAyLjRUMTQgMTlNMjYuNSA4djIuNGgtMi43VjE5aC0yLjZ2LTguNWgtMi43VjguMVptMCAwIi8+PC9nPjxnIGZpbGw9IiM2NGI1ZjYiIGNsaXAtcGF0aD0idXJsKCN3KSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzA2IDE3NCkiPjxwYXRoIGQ9Ik01LjYgMTYuN2gzLjZ2Mi4yaC03di0yTDYuNCAxMmwuMi0uOHEwLS41LS4zLS44bC0uNy0uMi0uOC4zYTEgMSAwIDAgMC0uMi45SDIuMXEtLjEtMS41IDEtMi41IDEtMSAyLjYtMSAxLjUgMCAyLjQuOWEzIDMgMCAwIDEgMSAyLjJxMCAxLjMtLjcgMi4yek0xNC40IDE5cS0yIDAtMy0xLjQtMS0xLjUtMS4xLTQuMSAwLTIuNiAxLTQuMSAxLjItMS41IDMuMS0xLjV0MyAxLjVhNyA3IDAgMCAxIDEgNC4xcTAgMi42LTEgNC0xIDEuNi0zIDEuNm0wLTIuNHEuNyAwIDEtLjguNS0xIC41LTIuMyAwLTEuNC0uNC0yLjN0LTEtLjhxLS45IDAtMS4yLjgtLjQgMS0uNCAyLjMgMCAxLjQuNCAyLjN0MS4xLjhNMjMuOCAxOXEtMiAwLTMtMS40LTEuMi0xLjUtMS4yLTQuMXQxLjEtNC4xcTEuMS0xLjUgMy0xLjUgMiAwIDMgMS41YTcgNyAwIDAgMSAxLjEgNC4xcTAgMi42LTEgNC0xLjEgMS42LTMgMS42bTAtMi40cS42IDAgMS0uOC40LTEgLjQtMi4zIDAtMS40LS40LTIuM3QtMS0uOHEtLjggMC0xLjEuOC0uNCAxLS40IDIuMy0uMSAxLjQuNCAyLjN0MSAuOE0zMy4xIDE5cS0yIDAtMy0xLjQtMS0xLjUtMS4xLTQuMSAwLTIuNiAxLTQuMSAxLjItMS41IDMuMS0xLjV0MyAxLjVhNyA3IDAgMCAxIDEgNC4xcTAgMi42LTEgNC0xIDEuNi0zIDEuNm0wLTIuNHEuNyAwIDEtLjguNS0xIC41LTIuMyAwLTEuNC0uNC0yLjN0LTEuMS0uOC0xIC44cS0uNiAxLS41IDIuMyAwIDEuNC40IDIuM3QxLjEuOG0wIDAiLz48L2c+PC9zdmc+";
+const LOGO_URI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgMzc1IDM3NSI+PGRlZnM+PGNsaXBQYXRoIGlkPSJhIj48cGF0aCBkPSJNMTg3LjUgMGExODcuNiAxODcuNiAwIDEgMC0uMiAzNzUuMkExODcuNiAxODcuNiAwIDAgMCAxODcuNSAwbTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJjIj48cGF0aCBkPSJNMCAwaDM3NXYzNzVIMFptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImQiPjxwYXRoIGQ9Ik0xODcuNSAwYTE4Ny42IDE4Ny42IDAgMSAwLS4yIDM3NS4yQTE4Ny42IDE4Ny42IDAgMCAwIDE4Ny41IDBtMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImIiPjxwYXRoIGQ9Ik0wIDBoMzc1djM3NUgweiIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJlIj48cGF0aCBkPSJNOS4zIDkuNWgzNTYuNHYzNTYuNEg5LjNabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJmIj48cGF0aCBkPSJNMTg3LjUgOS41YTE3OC4xIDE3OC4xIDAgMSAwLS4yIDM1Ni4yIDE3OC4xIDE3OC4xIDAgMCAwIC4yLTM1Ni4ybTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJoIj48cGF0aCBkPSJNLjMuNWgzNTYuNHYzNTYuM0guM1ptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImkiPjxwYXRoIGQ9Ik0xNzguNS41YTE3OC4xIDE3OC4xIDAgMSAwLS4yIDM1Ni4yQTE3OC4xIDE3OC4xIDAgMCAwIDE3OC41LjVtMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9ImciPjxwYXRoIGQ9Ik0wIDBoMzU3djM1N0gweiIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJqIj48cGF0aCBkPSJNMTYgMjIzLjNoMzQzdjEzNS44SDE2Wm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0iayI+PHBhdGggZD0iTTE2IDE2LjJoMzQzdjEzNC4ySDE2Wm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0ibCI+PHBhdGggZD0iTTEzLjggMTU3LjZoMzQ3LjR2NTkuOEgxMy44Wm0wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0ibiI+PHBhdGggZD0iTS44LjZoMzQ3LjR2NTkuOEguOFptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9Im0iPjxwYXRoIGQ9Ik0wIDBoMzQ5djYxSDB6Ii8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9Im8iPjxwYXRoIGQ9Ik03Ny4zIDc3LjRIMjk4djIyMC4ySDc3LjNabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJwIj48cGF0aCBkPSJNMTg3LjUgNzcuNGExMTAuMiAxMTAuMiAwIDEgMC0uMSAyMjAuMyAxMTAuMiAxMTAuMiAwIDAgMCAuMS0yMjAuM20wIDAiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0iciI+PHBhdGggZD0iTS4zLjRoMjIwLjV2MjIwLjJILjNabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJzIj48cGF0aCBkPSJNMTEwLjUuNGExMTAuMiAxMTAuMiAwIDEgMC0uMSAyMjAuM0ExMTAuMiAxMTAuMiAwIDAgMCAxMTAuNS40bTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJxIj48cGF0aCBkPSJNMCAwaDIyMXYyMjFIMHoiLz48L2NsaXBQYXRoPjxjbGlwUGF0aCBpZD0idCI+PHBhdGggZD0iTTg1LjEgODZoMjA0Ljd2MjAzSDg1LjFabTAgMCIvPjwvY2xpcFBhdGg+PGNsaXBQYXRoIGlkPSJ1Ij48cGF0aCBkPSJNMTg3LjUgODZhMTAxLjYgMTAxLjYgMCAxIDAtLjEgMjAzLjIgMTAxLjYgMTAxLjYgMCAwIDAgLjEtMjAzLjJtMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9InciPjxwYXRoIGQ9Ik0uMi4xaDIwNC43VjIwM0guMlptMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9IngiPjxwYXRoIGQ9Ik0xMDIuNS4xYTEwMS42IDEwMS42IDAgMSAwLS4xIDIwMy4yQTEwMS42IDEwMS42IDAgMCAwIDEwMi41LjFtMCAwIi8+PC9jbGlwUGF0aD48Y2xpcFBhdGggaWQ9InYiPjxwYXRoIGQ9Ik0wIDBoMjA1djIwNEgweiIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNhKSI+PGcgY2xpcC1wYXRoPSJ1cmwoI2IpIj48ZyBjbGlwLXBhdGg9InVybCgjYykiPjxnIGNsaXAtcGF0aD0idXJsKCNkKSI+PHBhdGggZmlsbD0iIzAwMjA1YiIgZD0iTTAgMGgzNzV2Mzc1SDB6Ii8+PC9nPjwvZz48L2c+PC9nPjxnIGNsaXAtcGF0aD0idXJsKCNlKSI+PGcgY2xpcC1wYXRoPSJ1cmwoI2cpIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg5IDkpIj48ZyBjbGlwLXBhdGg9InVybCgjaCkiPjxnIGNsaXAtcGF0aD0idXJsKCNpKSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMGgzNTd2MzU3SDB6Ii8+PC9nPjwvZz48L2c+PC9nPjxnIGZpbGw9IiMwMDIwNWIiIGNsaXAtcGF0aD0idXJsKCNqKSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTYgMjIzKSI+PHBhdGggZD0iTTYwLjIgMTEuNHEtMi4zIDAtNCAxLjItMS43IDEuMS0xLjcgMy4zcTAgMi40IDEuNSAzLjUgMS41IDEuMiA0LjYgMS4yaDEuOHYyLjNINjBxLTQuNiAwLTcuMi0yLTIuNi0xLjktMi42LTUuOCAwLTMuNyAyLjctNiAyLjctMi4yIDYuOC0yLjIgNC4yIDAgNi44IDIgMi43IDIgMi43IDUuOSAwIDMuMi0yIDUuMi0yIDItNS40IDIuNWwuMi4xaC0yLjhsLS4yLS4ycS0xLjUtMS42LTEuNS00LjIgMC0yIDEuMi0zLjIgMS4yLTEuMyAyLjUtMS4zIDEuMiAwIDIuMS45dDEgMi4ycTAgMS4xLS44IDEuOC0uNy43LTIgLjctLjcgMC0xLjItLjQtLjUtLjMtLjUtMSAwLTEgMS4yLTEgLjkgMCAxLjUuNi42LjcgMi4yLjcgMi4zIDAgMy42LTEuNSAxLjMtMS41IDEuMy0zLjkgMC0yLjgtMS44LTQuNS0xLjgtMS42LTUtMS42bTM5LjQtNC40djIuM0g4OS4zdjEuMmgxMC42djYuN0g4OS4zdjUuMmg0LjN2Mi4zSDg2LjdWN2gxM1ptMTEuMyAwdjE1LjVoNC42djIuM0gxMDdWN2gzLjhabTEzLjQgMHYxNS41aDQuNnYyLjNIMTIxVjdoMy44Wm0yMC4xIDAgLjQgMTcuOGgtMy4xbC0uMi01LjZINTEuMmwtLjIgNS42aC0zTDQ4LjQgN2gzLjNsLS4yIDUuMyAzLjggOC43IDMuOS04LjdMNTkgN1ptMjUuNiAwdjE3LjhoLTMuMkwxNjIgMTMuM3YtLjZsLjIgMi4ydjkuOWgtMy4yVjdoMy4ybDguOCAxMS41di42bC0uMi0yLjJWN1ptMjIgMHYxNy44aC0zLjRsLTggMTEuN3YuM2wuMS0yLjNWN2gtMy4xdjE3LjhoMy4ybDguOC0xMS41di42bC0uMi0yLjJWN1ptMTguMSAwdjE3LjhIMjA3VjdoMy44Wm0xMS4zIDB2MTcuOGgtMy44VjdoMy44Wm0yMy4zIDcuM3EwIDIuMy0uNCA0LS40IDEuOC0xLjQgMy0xIDEuMi0yLjcgMi0xLjcuNy00IC43LTIgMC00LjEtLjktMS44LS42LTMuMi0xLjgtMS40LTEuMi0yLjEtMi44LS43LTEuNy0uNy00VjdoMy44djguMnEwIDIuNi45IDMuOS45IDEuMyAyLjggMS4zIDEuOSAwIDIuOC0xLjMuOS0xLjMuOS0zLjlWN1ptMjYuNSAwdjIuM2gtNS40djE1LjVoLTMuOFY5LjNoLTUuNFY3Wm0xMi42IDB2MTcuOGgtMy44VjdoMy44Wm0xNy42IDB2Mi4zaC00Ljd2Mmg0LjF2Mi4zaC00LjF2Mi40aDQuN3YyLjNIMjg1VjdoOC4yWm0xMS41IDIuM3YxNS41aC0zLjhWOS4zSDMxMFY3aDEzdjIuM1ptMCAwIi8+PC9nPjxnIGZpbGw9IiMwMDIwNWIiIGNsaXAtcGF0aD0idXJsKCNrKSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTYgMTYpIj48cGF0aCBkPSJNMTAuOCA4LjZRMTAuOCA1IDEzIDMgMTUuMS45IDE4IC45cTMgMCA1IDIuMSAyLjIgMi4yIDIuMiA1LjcgMCAzLjYtMi4xIDUuNy0yIDIuMS01IDIuMS0yLjkgMC01LTItMi4yLTIuMi0yLjItNS45bTMuNy4xcTAgMi40IDEuMiA0IDEuMiAxLjQgMy4zIDEuNCAxLjkgMCAzLjItMS4zIDEuMi0xLjMgMS4yLTR0LTEuMi00cS0xLjItMS40LTMuMi0xLjQtMiAwLTMuMyAxLjQtMS4yIDEuNC0xLjIgNE00MCA4LjZRNDAgNSA0Mi4xIDNxMi4xLTIgNS0ycTMgMCA1LjEgMi4xIDIuMSAyLjIgMi4xIDUuNyAwIDMuNi0yIDUuNy0yIDIuMS01LjEgMi4xLTIuOCAwLTUtMi0yLjEtMi4yLTIuMS01LjltMy44LjFxMCAyLjQgMS4xIDQgMS4yIDEuNCAzLjMgMS40dDMuMi0xLjNxMS4yLTEuMyAxLjItNHQtMS4yLTRxLTEuMS0xLjQtMy4yLTEuNC0yIDAtMy4yIDEuNC0xLjIgMS40LTEuMiA0bTM5LjIgMFE4MyA1IDg1LjEgM3EyLjEtMiA1LTJRMTIxIDE2IDk3IDEwLjlhMTMgMTMgMCAwIDAtNS4xIDEuOWMtLjQtLjctLjctMS44IDAtMi45bDIuMi0xLjlBMTAgMTAgMCAwIDEgOTcgN3ExLjQgMCAyLjQuNXQuOCAyLjVxLjYtLjIgMi0uOHQxLjQtLjRxLS42LTIuNS0yLjQtNEw5NyAycTMgMCA1LjEgMi4xIDIuMiAyLjIgMi4yIDUuNyAwIDMuNi0yLjEgNS43LTIgMi4xLTUgMi4xLTMgMC01LjEtMi0yLjEtMi4yLTIuMS01LjltMy43LjFxMCAyLjQgMS4yIDQgMS4yIDEuNCAzLjMgMS40dDMuMi0xLjNxMS4yLTEuMyAxLjItNHQtMS4yLTRxLTEuMi0xLjQtMy4yLTEuNC0yIDAtMy4zIDEuNC0xLjIgMS40LTEuMiA0bTI1LjgtNy40aDMuOHYxMC44aDUuNHYyLjNoLTkuMlptMjIuNiAwdjIuM2gtNS4xdjJoNC4zdjIuM2gtNC4zdjIuNGg1djIuM2gtOC43VjEuNFptMTEuNSAwdjIuM2gtNS4ydjJoNC40djIuM2gtNC40djIuNGg1djIuM2gtOC43VjEuNFptMTkuNCAwaC0zLjVsLTQgOC40LTQtOC40aC0zLjdsNS44IDExLjh2NmgzLjh2LTZabTM0LjUtLjFRMTk4IDUgMjAwLjEgM3EyLjEtMiA1LTIgMyAwIDUuMSAyLjEgMi4xIDIuMiAyLjEgNS43IDAgMy42LTIgNS43LTIgMi4xLTUuMSAyLjEtMi44IDAtNS0yLTIuMS0yLjItMi4xLTUuOW0zLjguMXEwIDIuNCAxLjEgNCAxLjIgMS40IDMuMyAxLjR0My4yLTEuM3ExLjItMS4zIDEuMi00dC0xLjItNHEtMS4xLTEuNC0zLjItMS40LTIgMC0zLjIgMS40LTEuMiAxLjQtMS4yIDRtMjkuMi03LjR2Mi4zaC01LjR2MTUuNWgtMy44VjMuN0gyMzFWMS40Wm0yOS43IDBoMy44djEwLjhoNS40djIuM2gtOS4yWm0yMi43IDB2Mi4zaC01djJoNC4ydjIuM2gtNC4ydjIuNGg1djIuM2gtOC44VjEuNFptMTEuNCAwdjIuM2gtNXYyaDQuNHYyLjNoLTQuNHYyLjRoNXYyLjNoLTguOFYxLjRabTIwLjktLjRoMy40bC0uNCAxNy44aC0zLjFsLS4yLTUuNkwzMDIgOC45bC0uMiA1LjNoLTNMOTkuMiAxNC4yaC0zLjRsLjItNS42aC0uNGwtMy44IDguN0w4OCA4LjZsLS4yIDUuNmgtMy4xTDg1LjEgMS40SDg4bC0uMiA1LjMgMy44IDguNyAzLjktOC43TC45NiAxLjRobTI1LjUgMHYxNy44aC0zLjJMMjIgMTMuM3YtLjZsLjIgMi4ydjkuOWgtMy4yVjEuNGgzLjJsOC44IDExLjV2LjZsLS4yLTIuMlYxLjRabTIyIDAtLjEgMTcuOGgtMy40bC04LTExLjd2LS4zbC4yIDIuM3Y5LjdoLTMuMlYxLjRoMy40bDcuOSAxMS41di42bC0uMi0yLjJWMS40Wm0xOC4yIDBoMy44djEwLjhoNS40djIuM2gtOS4yWm0xNy41IDIuMnYtMi4yaDEzdjIuM2gtNC43djE1LjVoLTMuN1YzLjZabTAgMCIvPjwvZz48ZyBjbGlwLXBhdGg9InVybCgjbCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDE0IDE1OCkiPjxnIGNsaXAtcGF0aD0idXJsKCNtKSI+PGcgY2xpcC1wYXRoPSJ1cmwoI24pIj48cGF0aCBmaWxsPSIjMDAyMDViIiBkPSJNMTYyLjEgMy41YTQzIDQzIDAgMCAxIDYuOSA4LjYgNDMgNDMgMCAwIDEtNi45IDguNiA0MCA0MCAwIDAgMS03LjMtOC42IDQwIDQwIDAgMCAxIDcuMy04LjZtLTE1LjMgMGE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42bS0xNS4zIDBhNDMgNDMgMCAwIDEgNi45IDguNiA0MyA0MyAwIDAgMS02LjkgOC42IDQwIDQwIDAgMCAxLTcuNC04LjYgNDAgNDAgMCAwIDEgNy40LTguNm0tMTUuMiAwYTQzIDQzIDAgMCAxIDYuOSA4LjYgNDMgNDMgMCAwIDEtNi45IDguNiA0MCA0MCAwIDAgMS03LjQtOC42IDQwIDQwIDAgMCAxIDcuNC04LjZtLTE1LjMgMGE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42bS0xNS4zIDBhNDMgNDMgMCAwIDEgNi45IDguNiA0MyA0MyAwIDAgMS02LjkgOC42IDQwIDQwIDAgMCAxLTcuMy04LjYgNDAgNDAgMCAwIDEgNy4zLTguNm0tMTUuMiAwYTQzIDQzIDAgMCAxIDYuOCA4LjYgNDMgNDMgMCAwIDEtNi44IDguNiA0MCA0MCAwIDAgMS03LjQtOC42IDQwIDQwIDAgMCAxIDcuNC04LjZtLTE1LjMgMGE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42TTMwIDMuNWE0MyA0MyAwIDAgMSA2LjkgOC42QTQzIDQzIDAgMCAxIDMwIDIwLjcgNDAgNDAgMCAwIDEgMjIuNyAxMi4xIDQwIDQwIDAgMCAxIDMwIDMuNW0tMTUuMyAwYTQzIDQzIDAgMCAxIDYuOSA4LjYgNDMgNDMgMCAwIDEtNi45IDguNkE0MCA0MCAwIDAgMSA3LjQgMTIuMSA0MCA0MCAwIDAgMSAxNC43IDMuNW0xNjIuNiAwYTQzIDQzIDAgMCAxIDYuOCA4LjYgNDMgNDMgMCAwIDEtNi44IDguNiA0MCA0MCAwIDAgMS03LjQtOC42IDQwIDQwIDAgMCAxIDcuNC04LjZtMTUuMiAwYTQzIDQzIDAgMCAxIDYuOSA4LjYgNDMgNDMgMCAwIDEtNi45IDguNiA0MCA0MCAwIDAgMS03LjMtOC42IDQwIDQwIDAgMCAxIDcuMy04LjZtMTUuMyAwYTQzIDQzIDAgMCAxIDYuOCA4LjYgNDMgNDMgMCAwIDEtNi44IDguNkE0MCA0MCAwIDAgMSAyMDAgMTIuMSA0MCA0MCAwIDAgMSAyMDcuOCAzLjVtMTUuMiAwYTQzIDQzIDAgMCAxIDYuOSA4LjYgNDMgNDMgMCAwIDEtNi45IDguNiA0MCA0MCAwIDAgMS03LjMtOC42IDQwIDQwIDAgMCAxIDcuMy04LjZNMjM4LjMgM2E0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42bTE1LjIuNWE0MyA0MyAwIDAgMSA3IDguNiA0MyA0MyAwIDAgMS03IDguNiA0MCA0MCAwIDAgMS03LjMtOC42IDQwIDQwIDAgMCAxIDcuMy04LjZtMTUuMy0uNWE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42bTE1LjIuNWE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42bTE1LjMgMGE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy40LTguNiA0MCA0MCAwIDAgMSA3LjQtOC42bTE1LjIgMGE0MyA0MyAwIDAgMSA2LjkgOC42IDQzIDQzIDAgMCAxLTYuOSA4LjYgNDAgNDAgMCAwIDEtNy4zLTguNiA0MCA0MCAwIDAgMSA3LjMtOC42TTMzMCAzYTQzIDQzIDAgMCAxIDcgOC42IDQzIDQzIDAgMCAxLTcgOC42IDQwIDQwIDAgMCAxLTcuMy04LjYgNDAgNDAgMCAwIDEgNy4zLTguNm0wIDAiLz48L2c+PC9nPjwvZz48ZyBjbGlwLXBhdGg9InVybCgjbykiPjxnIGNsaXAtcGF0aD0idXJsKCNxKSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNzcgNzcpIj48ZyBjbGlwLXBhdGg9InVybCgjcikiPjxnIGNsaXAtcGF0aD0idXJsKCNzKSI+PHBhdGggZmlsbD0iIzAwMjA1YiIgZD0iTTAgMGgyMjF2MjIxSDB6Ii8+PC9nPjwvZz48L2c+PC9nPjxnIGNsaXAtcGF0aD0idXJsKCN0KSI+PGcgY2xpcC1wYXRoPSJ1cmwoI3YpIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4NSA4NikiPjxnIGNsaXAtcGF0aD0idXJsKCN3KSI+PGcgY2xpcC1wYXRoPSJ1cmwoI3gpIj48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMCAwaDIwNXYyMDRIMHoiLz48L2c+PC9nPjwvZz48L2c+PGcgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTE3MS42IDEyMy41YTggOCAwIDAgMC0yLjktMy43IDggOCAwIDAgMC00LjYtMi4yIDkgOSAwIDAgMC00IDEuNGMtLjMuMy0uOC41LTEuMy41bC0xLS41LS44LTEuNWMtLjItLjctLjMtMS40LS40LTIuMS0uMi0xLjItLjItMi40LS4yLTMuNWwuMS01LjIuNC04IC42LTEwIC44LTExIC45LTExLjEgMi41LTI3LjFjLjItMi41LjUtNSAuOS03LjIuMi0xIC41LTIuMi44LTMuMmwuNi0xLjUuOS0xLjUgMS0xLjQgMS4yLTEuMmMuOS0uNyAxLjktMS40IDMtMS44IDEtLjUgMi4xLS44IDMuMy0xLjEgMi4yLS41IDQuNi0uNiA2LjktLjQgMi4zLjMgNC42LjkgNi43IDEuOGE0MSA0MSAwIDAgMSA1LjMgMy4zYy43LjcgMS41IDEuMyAyLjIgMiAuNi44IDEuMyAxLjUgMS44IDIuNGwuOCAxLjQuNSAxLjVjLjIuOC4zIDEuNC4zIDIuMS4xIDEuMy4xIDIuMi0uMSAzLjFhMTYgMTYgMCAwIDEtLjggMi45bC0uNiAxLjRjLS40LjQtLjguOS0xLjIgMS4yYTEyIDEyIDAgMCAwLTMuMyAyLjFjLTIuNC44LTUuMi40LTcuNCAwLS44LS4yLTEuNC0uMi0yLjItLjUtMS4yLS4zLTIuNS0uOC00LjItMS41YTMzIDMzIDAgMCAwLTMuNC0xLjhjLS4yLS4yLS42IDAtLjUuMi4xLjkuNCAxLjcuNyAyLjUuNiAxLjcgMS41IDMuMyAyLjUgNC43IDEuMSAxLjUgMi40IDIuOCA0IDMuOGE5IDkgMCAwIDAgNS4zIDIuNyAxMyAxMyAwIDAgMCA1LjMtMi43IDEzIDEzIDAgMCAwIDEwLjkgMi4xYy4zLjMuMi44LjQtLjZtMCAwIi8+PHBhdGggZD0iTTE5OC44IDE0Ny4yYy0uMi0uNC0uMy0uOS0uNC0xLjMtLjItLjktLjEtMS44LS4zLTIuNy0uMS0uOS0uNC0xLjgtLjgtMi43bC0uNi0xLjRjLS4zLS40LS42LS45LTEtMS4yYTggOCAwIDAgMC0yLjUtMS43IDggOCAwIDAgMC0yLjgtLjQgNCA0IDAgMCAwLTEuNi40Yy0uNi4yLTEuMi43LTEuNiAxLjItLjQuNS0uNyAxLjEtMSAxLjctLjMuNS0uNCAxLjItLjYgMS44LS4yIDEuMi0uMiAyLjQtLjIgMy42bC0uMSA1LS4zIDcuOS0uNSA5LjgtLjcgMTEtLjggMTEuMS0yLjQgMjdjLS4zIDIuNS0uNiA0LjktMSA3LjItLjIgMS0uNSAyLjEtLjkgMy4xbC0uNiAxLjVjLS4yLjUtLjUgMS0uOCAxLjVsLTEgMS40Yy0uMyA0LS43LjgtMS4xIDEuMi0uOC44LTEuOCAxLjQtMi45IDItMSAuNS0yLjEuOS0zLjMgMS4xLTIuMi42LTQuNi44LTcgLjYtMi40LS4yLTQuOC0uNy03LTEuNS0yLjItLjgtNC4xLTIuMS02LTMuNWwtMS43LTEuNC0xLjktMS43Yy0uNy0uNi0xLjItMS4yLTEuOC0xLjlsLTEuNC0yLjNjLS40LS44LS43LTEuOC0uNi0yLjhsLjItMS45Yy4xLS43LjMtMS41LjYtMi4yLjItLjYuNC0xLjIuOC0xLjdsMS4xLTEuNGMuNC0uNC44LS44IDEuMi0xLjFhMTIgMTIgMCAwIDEgMy0xLjcgMTMgMTMgMCAwIDEgNy4yLjMgMTMgMTMgMCAwIDAgNS40LTIuMyA5IDkgMCAwIDAtNC44LTNsLTIuMi0xLjVjLTEuMS0uOS0yLjEtMS45LTMtMy0uOS0xLjEtMS43LTIuMi0yLjQtMy42LS43LTEuMy0xLjMtMi45LTEtNC41IDAtLjMuNS0uMy41IDBhMzIgMzIgMCAwIDAgMy42IDIgMzMgMzMgMCAwIDAgNC4xIDEuNmMxLjcuNSAzLjIgMSA0LjIgMS41LjguNCAxLjYuNiAyLjMuNSAyLjMtLjIgNC43LS4yIDcuMi41YTE1IDE1IDAgMCAxIDMuMiAyYy41LjMuOC44IDEuMiAxLjIuMy41LjUgMSAuNyAxLjVhMTYgMTYgMCAwIDEgLjkgMy4yYy4xIDEgLjIgMi4xLjEgMy4xIDAgLjctLjEgMS40LS4zIDItLjIuNS0uMy45LS41IDEuNW0wIDAiLz48L2c+PGcgZmlsbD0iIzY0YjVmNiIgY2xpcC1wYXRoPSJ1cmwoI3YpIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzNCAxNzQpIj48cGF0aCBkPSJNOSAxMC40SDQuN3YyaDMuN3YyLjNINC43djEuOUg5djIuM0gyVjguMWg3Wm01LjEgOC42YTUgNSAwIDAgMS00LjItMi40bDIuMi0xLjNhMiAyIDAgMCAwIDIgMS4zcS42IDAgMS0uMmwuMi0uNnEwLS41LS41LS44bC0xLjItLjUtMS41LS42YTMgMyAwIDAgMS0xLjItMXEtLjUtLjYtLjUtMS43IDAtMS42IDEtMi40IDEuMi0uOSAyLjUtLjkgMSAwIDIgLjVsMS41IDEuMS0xLjcgMS43cS0uOS0xLTEuOC0xbC0uNi4yLS4zLjZxMCAuNC40LjcuMy4zLjkuNGwyLjQgMSAuOSAxcS4zLjcuNCAxLjcgMCAxLjUtMS4xIDIuNFQxNCAxOU0yNi41IDh2Mi40aC0yLjdWMTloLTIuNnYtOC41aC0yLjdWOC4xWm0wIDAiLz48L2c+PGcgZmlsbD0iIzY0YjVmNiIgY2xpcC1wYXRoPSJ1cmwoI3cpIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMDYgMTc0KSI+PHBhdGggZD0iTTUuNiAxNi43aDMuNnYyLjJoLTd2LTJMNi40IDEybC4yLS44cTAtLjUtLjMtLjhsLS43LS4yLS44LjNhMSAxIDAgMCAwLS4yLjlIMi4xcS0uMS0xLjUgMS0yLjUgMS0xIDIuNi0xIDEuNSAwIDIuNC45YTMgMyAwIDAgMSAxIDIuMnEwIDEuMy0uNyAyLjJ6bTguOCAyLjNxLTIgMC0zLTEuNC0xLTEuNS0xLjEtNC4xIDAtMi42IDEtNC4xIDEuMi0xLjUgMy4xLTEuNXQzIDEuNWE3IDcgMCAwIDEgMSA0LjFxMCAyLjYtMSA0LTEgMS42LTMgMS42bTAtMi40cS43IDAgMS0uOC41LTEgLjUtMi4zIDAtMS40LS40LTIuM3QtMS0uOHEtLjkgMC0xLjIuOC0uNCAxLS40IDIuMyAwIDEuNC40IDIuM3QxLjEuOG05LjQgMi4zcS0yIDAtMy0xLjQtMS4yLTEuNS0xLjItNC4xdDEuMS00LjEgMy0xLjVxMiAwIDMgMS41YTcgNyAwIDAgMSAxLjEgNC4xcTAgMi42LTEgNC0xLjEgMS42LTMgMS42bTAtMi40cS42IDAgMS0uOC40LTEgLjQtMi4zIDAtMS40LS40LTIuM3QtMS0uOHEtLjggMC0xLjEuOC0uNCAxLS40IDIuMy0uMSAxLjQuNCAyLjN0MSAuOG05LjQgMi4zcS0yIDAtMy0xLjQtMS0xLjUtMS4xLTQuMSAwLTIuNiAxLTQuMSAxLjItMS41IDMuMS0xLjV0MyAxLjVhNyA3IDAgMCAxIDEgNC4xcTAgMi42LTEgNC0xIDEuNi0zIDEuNm0wLTIuNHEuNyAwIDEtLjguNS0xIC41LTIuMyAwLTEuNC0uNC0yLjN0LTEuMS0uOC0xIC44cS0uNiAxLS41IDIuMyAwIDEuNC40IDIuM3QxLjEuOG0wIDAiLz48L2c+PC9zdmc+";
 const DAYS_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const WEEK_DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEK_DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const EVENT_STYLES = {
@@ -193,8 +141,8 @@ const EVENT_STYLES = {
   academic:    { bg: C.ice, border: C.ocean, icon: "◆", label: "Academic" },
   excursion:   { bg: "#E8F5E9", border: "#388E3C", icon: "▲", label: "Excursion" },
   holiday:     { bg: "#FCE4EC", border: "#C62828", icon: "●", label: "Holiday" },
-  orientation: { bg: "#EDE7F6", border: "#5E35B1", icon: "◎", label: "Orientation" },
-  program:     { bg: "#FFF8E1", border: "#F9A825", icon: "✦", label: "Program" },
+  program:     { bg: C.parchment, border: C.mountain, icon: "◇", label: "Program" },
+  orientation: { bg: C.ice, border: C.sky, icon: "⬟", label: "Orientation" },
 };
 
 function formatDate(dateStr) {
@@ -206,34 +154,50 @@ function getDayOfWeek(dateStr) {
   return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
 }
 
+// Get the Sunday that starts the week containing a given date
+function getWeekStart(date) {
+  const d = new Date(date);
+  d.setHours(12, 0, 0, 0);
+  const day = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() - day);
+  return d;
+}
+
+// Format a date as YYYY-MM-DD
+function toDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+// Get today's date string in YYYY-MM-DD
+function getTodayStr() {
+  const now = new Date();
+  return toDateStr(now);
+}
+
 // Extract the time range for a specific day from complex schedule strings
-// e.g. "Mon 16:30–19:30; Tue 13:40–17:15; Thu 17:10–19:30" on "Tue" → "13:40–17:15"
-// e.g. "Mon+Tue 14:00–17:15; Thu 14:40–17:10" on "Mon" → "14:00–17:15"
-// e.g. "9:00–10:50" on any day → "9:00–10:50"
 function getTimeForDay(timeStr, day) {
   if (!timeStr) return "";
   const t = timeStr.trim();
-  // If no day names appear, it's the same time for all days
   if (!/\b(Mon|Tue|Wed|Thu|Fri)\b/.test(t)) return t;
-  // Split on semicolons and find the segment matching this day
   const segments = t.split(";").map((s) => s.trim());
   for (const seg of segments) {
-    // Match patterns like "Mon+Tue 14:00–17:15" or "Thu 14:40–17:10"
     const match = seg.match(/^([A-Za-z+\s]+?)\s+(\d{1,2}[:.]\d{2}.*)$/);
     if (match) {
       const days = match[1].split(/[+,\s]+/);
       if (days.some((d) => d.trim() === day)) return match[2].trim();
     }
   }
-  return t; // fallback: show the full string
+  return t;
 }
 
-// Extract a sortable time (HH:MM) for a class on a given day
 function getSortTime(timeStr, day) {
   const t = getTimeForDay(timeStr, day);
   const m = t.match(/(\d{1,2})[:.:](\d{2})/);
   if (m) return m[1].padStart(2, "0") + ":" + m[2];
-  return "99:99"; // TBD goes last
+  return "99:99";
 }
 
 // ============================================================
@@ -262,129 +226,278 @@ function Card({ children, borderLeft }) {
   );
 }
 
-// ─── Action button shared style ───
-function ActionBtn({ href, icon, label, variant }) {
-  const styles = {
-    default: { bg: C.ice, border: C.fog, color: C.ocean },
-    emergency: { bg: "#FFF3E0", border: "#FFCC80", color: "#E65100" },
-    email: { bg: "#F3E5F5", border: "#CE93D8", color: "#6A1B9A" },
-    maps: { bg: "#E8F5E9", border: "#A5D6A7", color: "#2E7D32" },
-    phone: { bg: C.ice, border: C.fog, color: C.ocean },
-    whatsapp: { bg: "#E8F5E9", border: "#A5D6A7", color: "#2E7D32" },
-  };
-  const s = styles[variant] || styles.default;
+// ─── Weekly Overview ───
+function WeeklyOverviewView({ data }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const todayStr = toDateStr(today);
+  const baseWeekStart = getWeekStart(today);
+  const weekStart = new Date(baseWeekStart);
+  weekStart.setDate(weekStart.getDate() + weekOffset * 7);
+
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    weekDates.push(d);
+  }
+
+  const weekStartStr = toDateStr(weekDates[0]);
+  const weekEndStr = toDateStr(weekDates[6]);
+
+  // Filter events for this week
+  const weekEvents = data.calendarEvents.filter((e) => {
+    return e.date >= weekStartStr && e.date <= weekEndStr;
+  });
+
+  // Group events by date
+  const eventsByDate = {};
+  weekDates.forEach((d) => { eventsByDate[toDateStr(d)] = []; });
+  weekEvents.forEach((e) => {
+    if (eventsByDate[e.date]) eventsByDate[e.date].push(e);
+  });
+
+  // Also include class schedule for each day
+  const classesForDay = (dayAbbrev) =>
+    data.classes.filter((c) => c.days.includes(dayAbbrev))
+      .sort((a, b) => getSortTime(a.time, dayAbbrev).localeCompare(getSortTime(b.time, dayAbbrev)));
+
+  const weekLabel = `${formatDate(weekStartStr)} – ${formatDate(weekEndStr)}`;
+
   return (
-    <a href={href} target={href.startsWith("mailto:") || href.startsWith("tel:") ? "_self" : "_blank"} rel="noopener noreferrer" style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      fontFamily: "'DM Mono', monospace", fontSize: 12, color: s.color,
-      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-      background: s.bg, border: `1px solid ${s.border}`, cursor: "pointer",
-      transition: "all 0.15s",
-    }}>
-      {icon} {label}
-    </a>
+    <div>
+      {/* Week navigation */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <button onClick={() => setWeekOffset((o) => o - 1)} style={{
+          background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
+          cursor: "pointer", fontSize: 16, color: C.pepBlue, fontWeight: 700,
+        }}>‹</button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone, letterSpacing: 0.5 }}>{weekLabel}</div>
+          {weekOffset === 0 && (
+            <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.ocean, fontWeight: 500, marginTop: 2 }}>This Week</div>
+          )}
+        </div>
+        <button onClick={() => setWeekOffset((o) => Math.min(o + 1, 1))} disabled={weekOffset >= 1} style={{
+          background: "none", border: `1px solid ${weekOffset >= 1 ? C.parchment : C.fog}`, borderRadius: 8, padding: "6px 12px",
+          cursor: weekOffset >= 1 ? "default" : "pointer", fontSize: 16,
+          color: weekOffset >= 1 ? C.fog : C.pepBlue, fontWeight: 700,
+        }}>›</button>
+      </div>
+      {weekOffset !== 0 && (
+        <button onClick={() => setWeekOffset(0)} style={{
+          display: "block", margin: "0 auto 14px", background: C.ice, border: `1px solid ${C.fog}`,
+          borderRadius: 16, padding: "4px 16px", cursor: "pointer",
+          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean, fontWeight: 500,
+        }}>← Back to This Week</button>
+      )}
+
+      {/* Days */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {weekDates.map((d) => {
+          const ds = toDateStr(d);
+          const isToday = ds === todayStr;
+          const dayAbbrev = WEEK_DAYS_SHORT[d.getDay()];
+          const dayEvents = eventsByDate[ds] || [];
+          const dayClasses = (dayAbbrev !== "Sun" && dayAbbrev !== "Sat") ? classesForDay(dayAbbrev) : [];
+          const hasContent = dayEvents.length > 0 || dayClasses.length > 0;
+
+          return (
+            <div key={ds} style={{
+              background: isToday ? "#F0F7FF" : C.white,
+              borderRadius: 12, padding: "12px 14px",
+              border: isToday ? `2px solid ${C.bapBlue}` : `1px solid ${C.fog}`,
+            }}>
+              {/* Day header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: hasContent ? 10 : 0 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: isToday ? C.pepBlue : C.parchment,
+                  color: isToday ? C.white : C.pepBlack,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16,
+                }}>{d.getDate()}</div>
+                <div>
+                  <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>
+                    {WEEK_DAYS_FULL[d.getDay()]}
+                    {isToday && <span style={{
+                      marginLeft: 8, fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.white,
+                      background: C.ocean, padding: "2px 8px", borderRadius: 10, fontWeight: 400,
+                    }}>TODAY</span>}
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{formatDate(ds)}</div>
+                </div>
+              </div>
+
+              {/* Events for the day */}
+              {dayEvents.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: dayClasses.length > 0 ? 8 : 0 }}>
+                  {dayEvents.map((e, i) => {
+                    const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
+                    const timeStr = e.start_time
+                      ? (e.end_time ? `${e.start_time}–${e.end_time}` : e.start_time)
+                      : "";
+                    return (
+                      <div key={i} style={{
+                        background: s.bg, borderLeft: `3px solid ${s.border}`,
+                        borderRadius: 8, padding: "8px 12px",
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <span style={{ fontFamily: "'Roboto', sans-serif", fontWeight: 500, fontSize: 13, color: C.pepBlack }}>
+                            {s.icon} {e.title}
+                          </span>
+                          {timeStr && (
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap", marginLeft: 8 }}>{timeStr}</span>
+                          )}
+                        </div>
+                        {e.description && (
+                          <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4 }}>{e.description}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Classes for the day (compact) */}
+              {dayClasses.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {dayClasses.map((c) => (
+                    <div key={c.code} style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "5px 10px", borderRadius: 6,
+                      background: C.parchment,
+                    }}>
+                      <div style={{ width: 3, height: 20, borderRadius: 2, background: c.color, flexShrink: 0 }} />
+                      <span style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.pepBlack, flex: 1 }}>{c.code}</span>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{getTimeForDay(c.time, dayAbbrev)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!hasContent && (
+                <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.fog, fontStyle: "italic", marginTop: -2 }}>No events</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-// ─── Schedule ───
-function ScheduleView({ data }) {
+// ─── Schedule (Class Schedule) ───
+function ClassScheduleView({ data }) {
   const [view, setView] = useState("week");
-  const [expanded, setExpanded] = useState(null);
   const todayRef = useRef(null);
+
+  const todayAbbrev = WEEK_DAYS_SHORT[new Date().getDay()];
+  const isWeekday = DAYS_ORDER.includes(todayAbbrev);
+
+  const scrollToToday = () => {
+    if (todayRef.current) {
+      todayRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   const classesForDay = (day) =>
     data.classes.filter((c) => c.days.includes(day)).sort((a, b) => getSortTime(a.time, day).localeCompare(getSortTime(b.time, day)));
 
-  // Today's day abbreviation
-  const todayDay = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
-
-  // Scroll to today's section on mount
-  useEffect(() => {
-    if (view === "week" && todayRef.current) {
-      setTimeout(() => todayRef.current.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
-    }
-  }, [view]);
+  // Sort courses alphabetically by title for "All Courses"
+  const sortedClasses = [...data.classes].sort((a, b) => a.title.localeCompare(b.title));
 
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        <Pill active={view === "week"} onClick={() => { setView("week"); setExpanded(null); }}>Week View</Pill>
-        <Pill active={view === "list"} onClick={() => { setView("list"); setExpanded(null); }}>All Courses</Pill>
+        <Pill active={view === "week"} onClick={() => setView("week")}>Weekly Schedule</Pill>
+        <Pill active={view === "list"} onClick={() => setView("list")}>All Courses</Pill>
       </div>
       {view === "week" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          {DAYS_ORDER.map((day) => {
-            const classes = classesForDay(day);
-            const isToday = day === todayDay;
-            return (
-              <div key={day} ref={isToday ? todayRef : undefined}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: isToday ? C.pepBlue : C.stone, fontWeight: isToday ? 700 : 400, marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${isToday ? C.bapBlue : C.fog}` }}>
-                  {day}{isToday ? " · today" : ""}
-                </div>
-                {classes.length === 0 ? (
-                  <div style={{ padding: "10px 0", color: C.fog, fontStyle: "italic", fontSize: 14, fontFamily: "'Roboto', sans-serif" }}>No classes</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {classes.map((c) => (
-                      <div key={c.code + day} style={{ display: "flex", alignItems: "stretch", background: C.white, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.fog}` }}>
-                        <div style={{ width: 4, background: c.color, flexShrink: 0 }} />
-                        <div style={{ padding: "10px 14px", flex: 1 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                            <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>{c.title}</span>
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone, whiteSpace: "nowrap", marginLeft: 12 }}>{getTimeForDay(c.time, day)}</span>
-                          </div>
-                          <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif" }}>{c.code} · {c.professor} · {c.location}</div>
-                        </div>
-                      </div>
-                    ))}
+        <div>
+          {/* TODAY button */}
+          {isWeekday && (
+            <button onClick={scrollToToday} style={{
+              display: "flex", alignItems: "center", gap: 6, margin: "0 auto 14px",
+              background: C.ocean, color: C.white, border: "none", borderRadius: 20,
+              padding: "6px 18px", cursor: "pointer", fontFamily: "'DM Mono', monospace",
+              fontSize: 12, fontWeight: 500, letterSpacing: 0.5,
+            }}>
+              ↓ TODAY
+            </button>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {DAYS_ORDER.map((day) => {
+              const classes = classesForDay(day);
+              const isToday = day === todayAbbrev;
+              return (
+                <div key={day} ref={isToday ? todayRef : undefined}>
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500,
+                    color: isToday ? C.ocean : C.stone, marginBottom: 6,
+                    textTransform: "uppercase", letterSpacing: 1,
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    {day === "Mon" ? "Monday" : day === "Tue" ? "Tuesday" : day === "Wed" ? "Wednesday" : day === "Thu" ? "Thursday" : "Friday"}
+                    {isToday && <span style={{
+                      fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.white,
+                      background: C.ocean, padding: "2px 8px", borderRadius: 10,
+                      textTransform: "uppercase", letterSpacing: 0.5,
+                    }}>TODAY</span>}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {classes.length === 0 ? (
+                    <div style={{ padding: "10px 0", color: C.fog, fontStyle: "italic", fontSize: 14, fontFamily: "'Roboto', sans-serif" }}>No classes</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {classes.map((c) => (
+                        <div key={c.code + day} style={{ display: "flex", alignItems: "stretch", background: C.white, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.fog}` }}>
+                          <div style={{ width: 4, background: c.color, flexShrink: 0 }} />
+                          <div style={{ padding: "10px 14px", flex: 1 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                              <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>{c.title}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone, whiteSpace: "nowrap", marginLeft: 12 }}>{getTimeForDay(c.time, day)}</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif" }}>{c.code} · {c.professor} · {c.location}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
+        /* All Courses view — alphabetical, with honorific+firstname, email, no expand */
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {data.classes.map((c, i) => {
-            const isOpen = expanded === i;
+          {sortedClasses.map((c) => {
+            const profDisplay = c.honorific && c.firstname
+              ? `${c.honorific} ${c.firstname} ${c.professor}`
+              : c.professor;
             return (
-              <div key={c.code} style={{
-                background: C.white, borderRadius: 10,
-                border: `1px solid ${C.fog}`, borderLeft: `4px solid ${c.color}`,
-                overflow: "hidden", transition: "all 0.2s",
-              }}>
-                <button onClick={() => setExpanded(isOpen ? null : i)} style={{
-                  width: "100%", padding: 16, background: "none", border: "none",
-                  cursor: "pointer", textAlign: "left", display: "block",
-                }}>
-                  <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 6 }}>{c.code}: {c.title}</div>
-                  <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
-                    {c.professor}<br />
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{c.days.join(", ")} · {c.time}</span><br />
-                    {c.location}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-                    <span style={{ fontSize: 11, color: C.stone, fontFamily: "'DM Mono', monospace" }}>{isOpen ? "▲ less" : "▼ more"}</span>
-                  </div>
-                </button>
-                {isOpen && (
-                  <div style={{ padding: "0 16px 14px", borderTop: `1px solid ${C.fog}` }}>
-                    {c.email ? (
-                      <div style={{ marginTop: 10 }}>
-                        <ActionBtn
-                          href={`mailto:${c.email}`}
-                          icon="✉"
-                          label={`Email ${c.professor}`}
-                          variant="email"
-                        />
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: 10, fontSize: 13, color: C.stone, fontStyle: "italic", fontFamily: "'Roboto', sans-serif" }}>
-                        No email listed for this course.
-                      </div>
-                    )}
-                  </div>
+              <Card key={c.code} borderLeft={c.color}>
+                <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 6 }}>{c.code}: {c.title}</div>
+                <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
+                  {profDisplay}<br />
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{c.days.join(", ")} · {c.time}</span><br />
+                  {c.location}
+                </div>
+                {c.email && (
+                  <a href={`mailto:${c.email}`} style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10,
+                    fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                    textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                    background: C.ice, border: `1px solid ${C.fog}`, cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.ocean} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    Email {c.professor}
+                  </a>
                 )}
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -393,25 +506,32 @@ function ScheduleView({ data }) {
   );
 }
 
+// ─── Schedule Tab (wraps Weekly Overview + Class Schedule) ───
+function ScheduleView({ data }) {
+  const [section, setSection] = useState("overview");
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
+        <Pill active={section === "overview"} onClick={() => setSection("overview")}>Weekly Overview</Pill>
+        <Pill active={section === "classes"} onClick={() => setSection("classes")}>Class Schedule</Pill>
+      </div>
+      {section === "overview" ? (
+        <WeeklyOverviewView data={data} />
+      ) : (
+        <ClassScheduleView data={data} />
+      )}
+    </div>
+  );
+}
+
 // ─── Calendar ───
 function CalendarView({ data }) {
   const [filter, setFilter] = useState("all");
-  const [expanded, setExpanded] = useState(null);
-  const [hasScrolled, setHasScrolled] = useState(false);
-  const anchorRef = useRef(null);
   const types = ["all", ...Object.keys(EVENT_STYLES)];
-  // Only show filter pills for types that have events
-  const usedTypes = new Set(data.calendarEvents.map((e) => e.type));
-  const visibleTypes = types.filter((t) => t === "all" || usedTypes.has(t));
-
   const events = data.calendarEvents
     .filter((e) => filter === "all" || e.type === filter)
     .sort((a, b) => a.date.localeCompare(b.date));
-
-  // Find the anchor event: first event on or after today, or last event if all past
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const anchorIdx = events.findIndex((e) => e.date >= todayStr);
-  const anchorDate = anchorIdx >= 0 ? events[anchorIdx].date : (events.length ? events[events.length - 1].date : null);
 
   const grouped = {};
   events.forEach((e) => {
@@ -420,35 +540,14 @@ function CalendarView({ data }) {
     grouped[mk].push(e);
   });
 
-  // Scroll to anchor on first render only
-  useEffect(() => {
-    if (!hasScrolled && anchorRef.current) {
-      setTimeout(() => {
-        anchorRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-        setHasScrolled(true);
-      }, 150);
-    }
-  }, [hasScrolled, anchorDate]);
-
-  // Format a date range like "May 15–18" or "May 28 – Jun 2"
-  function dateRange(startStr, endStr) {
-    if (!endStr) return null;
-    const s = new Date(startStr + "T12:00:00");
-    const e = new Date(endStr + "T12:00:00");
-    const sMonth = MONTHS[s.getMonth()];
-    const eMonth = MONTHS[e.getMonth()];
-    if (sMonth === eMonth) return `${sMonth} ${s.getDate()}–${e.getDate()}`;
-    return `${sMonth} ${s.getDate()} – ${eMonth} ${e.getDate()}`;
-  }
-
   return (
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        {visibleTypes.map((t) => {
+        {types.map((t) => {
           const active = filter === t;
           const s = t === "all" ? { bg: C.pepBlue, border: C.pepBlue } : EVENT_STYLES[t];
           return (
-            <button key={t} onClick={() => { setFilter(t); setExpanded(null); }} style={{
+            <button key={t} onClick={() => setFilter(t)} style={{
               padding: "5px 13px", borderRadius: 20,
               border: active ? `2px solid ${s.border}` : "2px solid transparent",
               background: active ? (t === "all" ? C.pepBlue : s.bg) : C.ice,
@@ -467,44 +566,15 @@ function CalendarView({ data }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {monthEvents.map((e, i) => {
                 const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
-                const key = `${monthKey}-${i}`;
-                const isOpen = expanded === key;
-                const hasDetails = e.description && e.description.length > 0;
-                const isMultiDay = !!e.endDate;
-                const range = dateRange(e.date, e.endDate);
-                const isAnchor = e.date === anchorDate && !hasScrolled;
-
                 return (
-                  <div key={key} ref={isAnchor ? anchorRef : undefined} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                     <div style={{ minWidth: 44, textAlign: "right", paddingTop: 2 }}>
                       <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700, color: C.pepBlack }}>{formatDate(e.date).split(" ")[1]}</div>
                       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{getDayOfWeek(e.date)}</div>
                     </div>
-                    <div style={{ flex: 1, overflow: "hidden" }}>
-                      {hasDetails ? (
-                        <button onClick={() => setExpanded(isOpen ? null : key)} style={{
-                          width: "100%", background: s.bg, borderRadius: 10, padding: "10px 14px",
-                          borderLeft: `3px solid ${s.border}`, border: `1px solid ${isOpen ? s.border : "transparent"}`,
-                          borderLeftWidth: 3, cursor: "pointer", textAlign: "left", display: "block",
-                          transition: "border-color 0.2s",
-                        }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                            <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
-                            <span style={{ fontSize: 10, color: C.stone, fontFamily: "'DM Mono', monospace", marginLeft: 8, flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</span>
-                          </div>
-                          {isMultiDay && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: s.border, marginTop: 3 }}>{range}</div>}
-                          {isOpen && (
-                            <div style={{ fontSize: 13, color: C.mountain, marginTop: 8, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, borderTop: `1px solid ${s.border}30`, paddingTop: 8, whiteSpace: "pre-line" }}>
-                              {e.description}
-                            </div>
-                          )}
-                        </button>
-                      ) : (
-                        <div style={{ background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
-                          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
-                          {isMultiDay && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: s.border, marginTop: 3 }}>{range}</div>}
-                        </div>
-                      )}
+                    <div style={{ flex: 1, background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
+                      <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
+                      {e.description && <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5 }}>{e.description}</div>}
                     </div>
                   </div>
                 );
@@ -517,7 +587,7 @@ function CalendarView({ data }) {
   );
 }
 
-// ─── Link Helper (for Local tab) ───
+// ─── Link Helper ───
 function LinkButton({ url }) {
   if (!url) return null;
   let label = "Visit website";
@@ -539,77 +609,41 @@ function LinkButton({ url }) {
 // ─── Local ───
 function LocalView({ data }) {
   const [sub, setSub] = useState("health");
-  const [exploreFilter, setExploreFilter] = useState("all");
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        <Pill active={sub === "health"} onClick={() => setSub("health")}>Health</Pill>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <Pill active={sub === "health"} onClick={() => setSub("health")}>Health Providers</Pill>
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
-        <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Exploring BA</Pill>
       </div>
       {sub === "health" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {data.healthProviders.map((h, i) => (
             <Card key={i}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{h.name}</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{h.type}</span>
-              </div>
-              <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
+              <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{h.name}</div>
+              <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, marginTop: 4 }}>
+                {h.type && <>{h.type}<br /></>}
                 {h.address && <>{h.address}<br /></>}
-                {h.phone && <><span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{h.phone}</span><br /></>}
-                {h.notes && <em style={{ color: C.stone }}>{h.notes}</em>}
+                {h.phone && <>{h.phone}<br /></>}
+                {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
               </div>
               <LinkButton url={h.link} />
             </Card>
           ))}
         </div>
-      ) : sub === "churches" ? (
+      ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {data.churches.map((ch, i) => (
             <Card key={i}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{ch.name}</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{ch.denomination}</span>
-              </div>
-              <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
-                {ch.address}<br />
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{ch.service}</span><br />
-                <em style={{ color: C.stone }}>{ch.notes}</em>
+              <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{ch.name}</div>
+              <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, marginTop: 4 }}>
+                {ch.denomination && <>{ch.denomination}<br /></>}
+                {ch.address && <>{ch.address}<br /></>}
+                {ch.service && <>{ch.service}<br /></>}
+                {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
               </div>
               <LinkButton url={ch.link} />
             </Card>
           ))}
-        </div>
-      ) : (
-        <div>
-          {/* Category filter for Exploring BA */}
-          {(() => {
-            const cats = [...new Set((data.explore || []).map((e) => e.type).filter(Boolean))];
-            if (cats.length <= 1) return null;
-            return (
-              <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-                <Pill active={exploreFilter === "all"} onClick={() => setExploreFilter("all")}>All</Pill>
-                {cats.map((c) => <Pill key={c} active={exploreFilter === c} onClick={() => setExploreFilter(c)}>{c}</Pill>)}
-              </div>
-            );
-          })()}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(data.explore || []).filter((e) => exploreFilter === "all" || e.type === exploreFilter).map((e, i) => (
-              <Card key={i}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                  <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{e.name}</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: "#EDE7F6", color: "#5E35B1", padding: "2px 10px", borderRadius: 12, flexShrink: 0, marginLeft: 8 }}>{e.type}</span>
-                </div>
-                {e.description && <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5, marginBottom: 6 }}>{e.description}</div>}
-                <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
-                  {e.address && <>{e.address}<br /></>}
-                  {e.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{e.hours}</span>}
-                </div>
-                <LinkButton url={e.link} />
-              </Card>
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -620,13 +654,13 @@ function LocalView({ data }) {
 function PoliciesView({ data }) {
   const [open, setOpen] = useState(null);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {data.policies.map((p, i) => (
         <div key={i} style={{ background: C.white, borderRadius: 10, border: `1px solid ${C.fog}`, overflow: "hidden" }}>
           <button onClick={() => setOpen(open === i ? null : i)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "12px 16px", background: "none", border: "none", cursor: "pointer",
-            fontFamily: "'EB Garamond', serif", fontSize: 15, fontWeight: 700, color: C.pepBlue, textAlign: "left",
+            width: "100%", padding: "14px 16px", border: "none", background: "transparent",
+            display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
+            fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, textAlign: "left",
           }}>
             {p.title}
             <span style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.stone }}>▼</span>
@@ -654,104 +688,12 @@ function PoliciesView({ data }) {
   );
 }
 
-// ─── Contacts ───
-function ContactsView({ data }) {
-  const office = data.contacts.filter((c) => c.type === "office");
-  const emergency = data.contacts.filter((c) => c.type === "emergency");
-  const staff = data.contacts.filter((c) => c.type === "staff");
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Program Office */}
-      {office.map((o, i) => (
-        <Card key={`office-${i}`}>
-          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 8 }}>{o.name}</div>
-          {o.address && (
-            <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7, marginBottom: 8 }}>
-              {o.address}
-            </div>
-          )}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {o.phone && <ActionBtn href={`tel:${o.phone.replace(/\s/g, "")}`} icon="📞" label={o.phone} variant="phone" />}
-            {o.maps && <ActionBtn href={o.maps} icon="📍" label="Open in Maps" variant="maps" />}
-            {o.email && <ActionBtn href={`mailto:${o.email}`} icon="✉" label={o.email} variant="email" />}
-          </div>
-        </Card>
-      ))}
-
-      {/* Emergency */}
-      {emergency.length > 0 && (
-        <>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Emergency</div>
-          {emergency.map((e, i) => (
-            <div key={`emerg-${i}`} style={{
-              background: "#FFF3E0", borderRadius: 10, padding: 16,
-              border: `1px solid #FFCC80`, borderLeft: `4px solid ${C.pepOrange}`,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: "#BF360C" }}>{e.name}</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: "#FFCC80", color: "#BF360C", padding: "2px 10px", borderRadius: 12 }}>{e.role}</span>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {e.phone && <ActionBtn href={`tel:${e.phone.replace(/\s/g, "")}`} icon="📞" label={e.phone} variant="emergency" />}
-                {e.whatsapp && <ActionBtn href={e.whatsapp} icon="💬" label="WhatsApp" variant="whatsapp" />}
-              </div>
-            </div>
-          ))}
-        </>
-      )}
-
-      {/* Staff */}
-      {staff.length > 0 && (
-        <>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Staff</div>
-          {staff.map((s, i) => (
-            <Card key={`staff-${i}`}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{s.name}</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{s.role}</span>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {s.phone && <ActionBtn href={`tel:${s.phone.replace(/\s/g, "")}`} icon="📞" label="Call" variant="phone" />}
-                {s.whatsapp && <ActionBtn href={s.whatsapp} icon="💬" label="WhatsApp" variant="whatsapp" />}
-                {s.email && <ActionBtn href={`mailto:${s.email}`} icon="✉" label="Email" variant="email" />}
-              </div>
-            </Card>
-          ))}
-        </>
-      )}
-
-      {/* Local Emergency Numbers */}
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Local Emergency Numbers</div>
-      <div style={{ background: C.white, borderRadius: 10, padding: 16, border: `1px solid ${C.fog}` }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 14, fontFamily: "'Roboto', sans-serif", color: C.mountain }}>
-          {[
-            { label: "SAME Ambulance", num: "107" },
-            { label: "Police", num: "911" },
-            { label: "Fire", num: "100" },
-          ].map((n) => (
-            <div key={n.num} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>{n.label}</span>
-              <a href={`tel:${n.num}`} style={{
-                fontFamily: "'DM Mono', monospace", fontSize: 15, fontWeight: 700, color: C.ocean,
-                textDecoration: "none", padding: "4px 12px", borderRadius: 8,
-                background: C.ice, border: `1px solid ${C.fog}`,
-              }}>{n.num}</a>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Nav Icons ───
 const icons = {
   schedule: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   calendar: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,
   local: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
   policies: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  contacts: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>,
 };
 
 const TABS = [
@@ -759,7 +701,6 @@ const TABS = [
   { key: "calendar", label: "Calendar", icon: icons.calendar },
   { key: "local",    label: "Local",    icon: icons.local },
   { key: "policies", label: "Policies", icon: icons.policies },
-  { key: "contacts", label: "Contacts", icon: icons.contacts },
 ];
 
 // ============================================================
@@ -770,9 +711,6 @@ export default function App() {
   const [tab, setTab] = useState("schedule");
   const [data, setData] = useState(DEFAULT_DATA);
   const [status, setStatus] = useState(SHEET_ID ? "loading" : "default");
-  const [lastFetch, setLastFetch] = useState(0);
-
-  const REFRESH_COOLDOWN = 60 * 60 * 1000; // 1 hour
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -781,43 +719,18 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
 
-  // Fetch data from Google Sheets
-  const doFetch = useCallback((silent) => {
+  useEffect(() => {
     if (!SHEET_ID) return;
-    if (!silent) setStatus("loading");
+    setStatus("loading");
     fetchAllData()
-      .then((d) => { setData(d); setStatus("live"); setLastFetch(Date.now()); })
-      .catch((err) => { console.error("Sheet fetch failed:", err); if (!silent) setStatus("fallback"); });
+      .then((d) => { setData(d); setStatus("live"); })
+      .catch((err) => { console.error("Sheet fetch failed:", err); setStatus("fallback"); });
   }, []);
 
-  // Initial fetch
-  useEffect(() => { doFetch(false); }, [doFetch]);
-
-  // Auto-refresh when app returns to foreground (PWA home screen fix)
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === "visible" && Date.now() - lastFetch > REFRESH_COOLDOWN) {
-        doFetch(true);
-      }
-    }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [doFetch, lastFetch]);
-
-  // Format the "Updated" label from the last_updated field in Settings
-  function formatUpdatedLabel() {
-    if (status === "loading") return "Loading...";
-    if (status === "fallback") return "Offline";
-    if (status === "default") return "Preview";
-    const raw = data.lastUpdated;
-    if (!raw) return "Updated";
-    // Parse YYYY-MM-DD or similar
-    const d = new Date(raw + "T12:00:00");
-    if (isNaN(d)) return `Updated ${raw}`;
-    return `Updated ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-  }
-
-  const statusLabel = formatUpdatedLabel();
+  const statusLabel = status === "live" ? "Live from Google Sheets"
+    : status === "loading" ? "Loading..."
+    : status === "fallback" ? "Using saved data (sheet unavailable)"
+    : "Preview mode";
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.parchment, display: "flex", flexDirection: "column" }}>
@@ -858,17 +771,15 @@ export default function App() {
         ) : (
           <>
             <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 22, fontWeight: 700, color: C.pepBlue, marginBottom: 16 }}>
-              {tab === "schedule" && "Class Schedule"}
+              {tab === "schedule" && "Program Schedule"}
               {tab === "calendar" && "Semester Calendar"}
               {tab === "local" && "Local Resources"}
               {tab === "policies" && "Policies & Travel"}
-              {tab === "contacts" && "Contacts"}
             </div>
             {tab === "schedule" && <ScheduleView data={data} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
             {tab === "policies" && <PoliciesView data={data} />}
-            {tab === "contacts" && <ContactsView data={data} />}
           </>
         )}
       </div>
@@ -886,10 +797,10 @@ export default function App() {
             <button key={t.key} onClick={() => setTab(t.key)} style={{
               background: "none", border: "none", cursor: "pointer",
               display: "flex", flexDirection: "column", alignItems: "center",
-              gap: 3, padding: "4px 8px", transition: "all 0.15s",
+              gap: 3, padding: "4px 12px", transition: "all 0.15s",
             }}>
               {t.icon(active ? C.pepBlue : C.stone)}
-              <span style={{ fontSize: 10, fontWeight: active ? 700 : 400, color: active ? C.pepBlue : C.stone, fontFamily: "'Roboto', sans-serif" }}>{t.label}</span>
+              <span style={{ fontSize: 11, fontWeight: active ? 700 : 400, color: active ? C.pepBlue : C.stone, fontFamily: "'Roboto', sans-serif" }}>{t.label}</span>
               {active && <div style={{ width: 4, height: 4, borderRadius: 2, background: C.bapBlue, marginTop: 1 }} />}
             </button>
           );
