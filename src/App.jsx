@@ -46,14 +46,14 @@ const DEFAULT_DATA = {
     { date: "2026-12-13", title: "Departure day", type: "milestone", description: "Program officially ends" },
   ],
   healthProviders: [
-    { name: "Hospital Alemán", type: "Hospital", address: "Av. Pueyrredón 1640, Recoleta", phone: "+54 11 4827-7000", notes: "English-speaking staff available" },
-    { name: "Swiss Medical Center", type: "Clinic", address: "Av. Pueyrredón 1441, Recoleta", phone: "+54 11 5239-6000", notes: "Recommended for general visits" },
-    { name: "Dr. María López", type: "Psychologist", address: "Av. Santa Fe 2450, 3B", phone: "+54 11 4823-1234", notes: "English-speaking; accepts program insurance" },
+    { name: "Hospital Alemán", type: "Hospital", address: "Av. Pueyrredón 1640, Recoleta", phone: "+54 11 4827-7000", notes: "English-speaking staff available", link: "" },
+    { name: "Swiss Medical Center", type: "Clinic", address: "Av. Pueyrredón 1441, Recoleta", phone: "+54 11 5239-6000", notes: "Recommended for general visits", link: "" },
+    { name: "Dr. María López", type: "Psychologist", address: "Av. Santa Fe 2450, 3B", phone: "+54 11 4823-1234", notes: "English-speaking; accepts program insurance", link: "" },
   ],
   churches: [
-    { name: "Iglesia Catedral Metropolitana", denomination: "Catholic", address: "San Martín 27, Microcentro", service: "Sun 10:00 (Spanish)", notes: "Historic cathedral on Plaza de Mayo" },
-    { name: "St. John's Cathedral", denomination: "Anglican", address: "25 de Mayo 282, Microcentro", service: "Sun 10:30 (English)", notes: "English-language services" },
-    { name: "Comunidad Cristiana BA", denomination: "Non-denom.", address: "Av. Medrano 951, Almagro", service: "Sun 11:00 (Spanish)", notes: "Young congregation; contemporary worship" },
+    { name: "Iglesia Catedral Metropolitana", denomination: "Catholic", address: "San Martín 27, Microcentro", service: "Sun 10:00 (Spanish)", notes: "Historic cathedral on Plaza de Mayo", link: "" },
+    { name: "St. John's Cathedral", denomination: "Anglican", address: "25 de Mayo 282, Microcentro", service: "Sun 10:30 (English)", notes: "English-language services", link: "" },
+    { name: "Comunidad Cristiana BA", denomination: "Non-denom.", address: "Av. Medrano 951, Almagro", service: "Sun 11:00 (Spanish)", notes: "Young congregation; contemporary worship", link: "" },
   ],
   policies: [
     { title: "Independent Travel", content: "Students may travel independently on weekends and during break. A travel form must be submitted 48 hours in advance via the program portal. Group travel of 2+ is strongly encouraged.", link: "https://example.com/handbook/travel-policy" },
@@ -116,6 +116,7 @@ async function fetchAllData() {
       address: r.address ? r.address.trim() : "",
       phone: r.phone ? r.phone.trim() : "",
       notes: r.notes ? r.notes.trim() : "",
+      link: r.link ? r.link.trim() : "",
     })),
     churches: churchesRaw.filter(r => r.name).map((r) => ({
       name: r.name.trim(),
@@ -123,6 +124,7 @@ async function fetchAllData() {
       address: r.address ? r.address.trim() : "",
       service: r.service ? r.service.trim() : "",
       notes: r.notes ? r.notes.trim() : "",
+      link: r.link ? r.link.trim() : "",
     })),
     policies: policiesRaw.filter(r => r.title).map((r) => ({
       title: r.title.trim(),
@@ -341,6 +343,25 @@ function CalendarView({ data }) {
   );
 }
 
+// ─── Link Helper ───
+function LinkButton({ url }) {
+  if (!url) return null;
+  let label = "Visit website";
+  let icon = "→";
+  if (url.includes("wa.me")) { label = "WhatsApp"; icon = "💬"; }
+  else if (url.includes("instagram.com")) { label = "Instagram"; icon = "📷"; }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{
+      display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8,
+      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+      background: C.ice, border: `1px solid ${C.fog}`, cursor: "pointer",
+    }}>
+      {icon} {label}
+    </a>
+  );
+}
+
 // ─── Local ───
 function LocalView({ data }) {
   const [sub, setSub] = useState("health");
@@ -359,10 +380,11 @@ function LocalView({ data }) {
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{h.type}</span>
               </div>
               <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
-                {h.address}<br />
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{h.phone}</span><br />
-                <em style={{ color: C.stone }}>{h.notes}</em>
+                {h.address && <>{h.address}<br /></>}
+                {h.phone && <><span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{h.phone}</span><br /></>}
+                {h.notes && <em style={{ color: C.stone }}>{h.notes}</em>}
               </div>
+              <LinkButton url={h.link} />
             </Card>
           ))}
         </div>
@@ -379,6 +401,7 @@ function LocalView({ data }) {
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{ch.service}</span><br />
                 <em style={{ color: C.stone }}>{ch.notes}</em>
               </div>
+              <LinkButton url={ch.link} />
             </Card>
           ))}
         </div>
