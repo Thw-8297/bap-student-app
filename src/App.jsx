@@ -12,7 +12,7 @@ import Papa from "papaparse";
 // Example URL: https://docs.google.com/spreadsheets/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/edit
 // You'd paste: 1aBcDeFgHiJkLmNoPqRsTuVwXyZ
 
-const SHEET_ID = "";  /1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA/ ← Paste your Google Sheet ID here
+const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";  // ← Paste your Google Sheet ID here
 
 // ============================================================
 // DEFAULT DATA — Used when no Google Sheet is connected
