@@ -164,6 +164,36 @@ function getDayOfWeek(dateStr) {
   return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
 }
 
+// Extract the time range for a specific day from complex schedule strings
+// e.g. "Mon 16:30–19:30; Tue 13:40–17:15; Thu 17:10–19:30" on "Tue" → "13:40–17:15"
+// e.g. "Mon+Tue 14:00–17:15; Thu 14:40–17:10" on "Mon" → "14:00–17:15"
+// e.g. "9:00–10:50" on any day → "9:00–10:50"
+function getTimeForDay(timeStr, day) {
+  if (!timeStr) return "";
+  const t = timeStr.trim();
+  // If no day names appear, it's the same time for all days
+  if (!/\b(Mon|Tue|Wed|Thu|Fri)\b/.test(t)) return t;
+  // Split on semicolons and find the segment matching this day
+  const segments = t.split(";").map((s) => s.trim());
+  for (const seg of segments) {
+    // Match patterns like "Mon+Tue 14:00–17:15" or "Thu 14:40–17:10"
+    const match = seg.match(/^([A-Za-z+\s]+?)\s+(\d{1,2}[:.]\d{2}.*)$/);
+    if (match) {
+      const days = match[1].split(/[+,\s]+/);
+      if (days.some((d) => d.trim() === day)) return match[2].trim();
+    }
+  }
+  return t; // fallback: show the full string
+}
+
+// Extract a sortable time (HH:MM) for a class on a given day
+function getSortTime(timeStr, day) {
+  const t = getTimeForDay(timeStr, day);
+  const m = t.match(/(\d{1,2})[:.:](\d{2})/);
+  if (m) return m[1].padStart(2, "0") + ":" + m[2];
+  return "99:99"; // TBD goes last
+}
+
 // ============================================================
 // UI COMPONENTS
 // ============================================================
@@ -194,7 +224,7 @@ function Card({ children, borderLeft }) {
 function ScheduleView({ data }) {
   const [view, setView] = useState("week");
   const classesForDay = (day) =>
-    data.classes.filter((c) => c.days.includes(day)).sort((a, b) => a.time.localeCompare(b.time));
+    data.classes.filter((c) => c.days.includes(day)).sort((a, b) => getSortTime(a.time, day).localeCompare(getSortTime(b.time, day)));
 
   return (
     <div>
@@ -219,7 +249,7 @@ function ScheduleView({ data }) {
                         <div style={{ padding: "10px 14px", flex: 1 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                             <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>{c.title}</span>
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone, whiteSpace: "nowrap", marginLeft: 12 }}>{c.time}</span>
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone, whiteSpace: "nowrap", marginLeft: 12 }}>{getTimeForDay(c.time, day)}</span>
                           </div>
                           <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif" }}>{c.code} · {c.professor} · {c.location}</div>
                         </div>
