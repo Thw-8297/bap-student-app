@@ -259,11 +259,6 @@ function WeeklyOverviewView({ data }) {
     if (eventsByDate[e.date]) eventsByDate[e.date].push(e);
   });
 
-  // Also include class schedule for each day
-  const classesForDay = (dayAbbrev) =>
-    data.classes.filter((c) => c.days.includes(dayAbbrev))
-      .sort((a, b) => getSortTime(a.time, dayAbbrev).localeCompare(getSortTime(b.time, dayAbbrev)));
-
   const weekLabel = `${formatDate(weekStartStr)} – ${formatDate(weekEndStr)}`;
 
   return (
@@ -299,10 +294,8 @@ function WeeklyOverviewView({ data }) {
         {weekDates.map((d) => {
           const ds = toDateStr(d);
           const isToday = ds === todayStr;
-          const dayAbbrev = WEEK_DAYS_SHORT[d.getDay()];
           const dayEvents = eventsByDate[ds] || [];
-          const dayClasses = (dayAbbrev !== "Sun" && dayAbbrev !== "Sat") ? classesForDay(dayAbbrev) : [];
-          const hasContent = dayEvents.length > 0 || dayClasses.length > 0;
+          const hasContent = dayEvents.length > 0;
 
           return (
             <div key={ds} style={{
@@ -333,7 +326,7 @@ function WeeklyOverviewView({ data }) {
 
               {/* Events for the day */}
               {dayEvents.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: dayClasses.length > 0 ? 8 : 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {dayEvents.map((e, i) => {
                     const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
                     const timeStr = e.start_time
@@ -358,23 +351,6 @@ function WeeklyOverviewView({ data }) {
                       </div>
                     );
                   })}
-                </div>
-              )}
-
-              {/* Classes for the day (compact) */}
-              {dayClasses.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {dayClasses.map((c) => (
-                    <div key={c.code} style={{
-                      display: "flex", alignItems: "center", gap: 8,
-                      padding: "5px 10px", borderRadius: 6,
-                      background: C.parchment,
-                    }}>
-                      <div style={{ width: 3, height: 20, borderRadius: 2, background: c.color, flexShrink: 0 }} />
-                      <span style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.pepBlack, flex: 1 }}>{c.code}</span>
-                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{getTimeForDay(c.time, dayAbbrev)}</span>
-                    </div>
-                  ))}
                 </div>
               )}
 
