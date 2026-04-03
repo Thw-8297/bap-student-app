@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Papa from "papaparse";
 
 // ============================================================
+// BUILD VERSION — Update each time a new build is generated
+// ============================================================
+const BUILD_VERSION = "2026-04-03 18:45 ART";
+
+// ============================================================
 // ★ CONFIGURATION — Only edit this section ★
 // ============================================================
 const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";
