@@ -446,7 +446,7 @@ function WeeklyOverviewView({ data }) {
                           )}
                         </div>
                         {e.description && (
-                          <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4 }}>{e.description}</div>
+                          <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4, whiteSpace: "pre-line" }}>{e.description}</div>
                         )}
                       </div>
                     );
@@ -750,7 +750,7 @@ function LocalView({ data }) {
                   </div>
                   {h.type && <span style={badge}>{h.type}</span>}
                 </div>
-                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {h.address && <>{h.address}<br /></>}
                   {h.phone && <>{h.phone}<br /></>}
                   {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
@@ -780,7 +780,7 @@ function LocalView({ data }) {
                   <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{ch.name}</span>
                   {ch.denomination && <span style={badge}>{ch.denomination}</span>}
                 </div>
-                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {ch.address && <>{ch.address}<br /></>}
                   {ch.service && <>{ch.service}<br /></>}
                   {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
@@ -809,7 +809,7 @@ function LocalView({ data }) {
                   <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{p.name}</span>
                   {p.type && <span style={badge}>{p.type}</span>}
                 </div>
-                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {p.description && <>{p.description}<br /></>}
                   {p.address && <span style={{ color: C.stone }}>{p.address}<br /></span>}
                   {p.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{p.hours}</span>}
@@ -840,7 +840,7 @@ function PoliciesView({ data }) {
             <span style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.stone }}>▼</span>
           </button>
           {open === i && (
-            <div style={{ padding: "0 16px 14px", fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
+            <div style={{ padding: "0 16px 14px", fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7, whiteSpace: "pre-line" }}>
               {p.content}
               {p.link && (
                 <a href={p.link} target="_blank" rel="noopener noreferrer" style={{
