@@ -75,6 +75,22 @@ async function fetchTab(tabName) {
   return parsed.data;
 }
 
+// Parse day codes from the spreadsheet. Accepts both single-letter
+// concatenated codes (e.g. "MTWR") and comma-separated three-letter
+// abbreviations (e.g. "Mon,Tue,Wed"). Returns an array like ["Mon","Tue"].
+const DAY_LETTER_MAP = { M: "Mon", T: "Tue", W: "Wed", R: "Thu", F: "Fri" };
+
+function parseDays(raw) {
+  if (!raw) return [];
+  const s = raw.trim();
+  // If it contains a comma or a three-letter day name, use the old split approach
+  if (s.includes(",") || /\b(Mon|Tue|Wed|Thu|Fri)\b/.test(s)) {
+    return s.split(",").map((d) => d.trim());
+  }
+  // Otherwise treat each character as a single-letter day code
+  return [...s].map((ch) => DAY_LETTER_MAP[ch.toUpperCase()]).filter(Boolean);
+}
+
 async function fetchAllData() {
   const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
     await Promise.all([
@@ -103,7 +119,7 @@ async function fetchAllData() {
       professor: r.professor ? r.professor.trim() : "",
       honorific: r.honorific ? r.honorific.trim() : "",
       firstname: r.firstname ? r.firstname.trim() : "",
-      days: r.days.split(",").map((d) => d.trim()),
+      days: parseDays(r.days),
       time: r.time.trim(),
       location: r.location.trim(),
       color: r.color ? r.color.trim() : "#64B5F6",
@@ -251,10 +267,34 @@ function getSortTime(timeStr, day) {
 
 // Compact day abbreviations: M T W R F
 const DAY_ABBREV = { Mon: "M", Tue: "T", Wed: "W", Thu: "R", Fri: "F" };
+
+// Build a compact schedule string for the "All Courses" cards.
+// Uniform schedules (e.g. "11:30–13:40") → "MTWR 11:30–13:40"
+// Variable schedules (e.g. "Tue 11:30–13:30; Wed 17:30–19:30; Thu 15:00–17:00")
+//   → "T 11:30–13:30 · W 17:30–19:30 · R 15:00–17:00"
 function compactSchedule(days, timeStr) {
+  if (!timeStr) return days.map((d) => DAY_ABBREV[d] || d).join("");
+  const t = timeStr.trim();
+
+  // Check whether the time string contains any day-name prefixes
+  if (/\b(Mon|Tue|Wed|Thu|Fri)\b/.test(t)) {
+    // Variable schedule — parse each semicolon-separated segment
+    const segments = t.split(";").map((s) => s.trim()).filter(Boolean);
+    const parts = segments.map((seg) => {
+      // Match day prefix(es) like "Mon+Tue", "Tue", "Wed" followed by a time range
+      const m = seg.match(/^([A-Za-z+\s]+?)\s+(\d{1,2}[:.]\d{2}.*)$/);
+      if (m) {
+        const dayLetters = m[1].split(/[+,\s]+/).map((d) => DAY_ABBREV[d] || d).join("");
+        return `${dayLetters} ${m[2].trim()}`;
+      }
+      return seg;
+    });
+    return parts.join(" · ");
+  }
+
+  // Uniform schedule — all days share the same time
   const abbr = days.map((d) => DAY_ABBREV[d] || d).join("");
-  const cleanTime = timeStr.replace(/\b(Mon|Tue|Wed|Thu|Fri)[+,\s;]*/g, "").replace(/^\s*[;,]\s*/, "").trim();
-  return `${abbr} ${cleanTime}`;
+  return `${abbr} ${t}`;
 }
 
 // ============================================================
