@@ -233,6 +233,14 @@ function getSortTime(timeStr, day) {
   return "99:99";
 }
 
+// Compact day abbreviations: M T W R F
+const DAY_ABBREV = { Mon: "M", Tue: "T", Wed: "W", Thu: "R", Fri: "F" };
+function compactSchedule(days, timeStr) {
+  const abbr = days.map((d) => DAY_ABBREV[d] || d).join("");
+  const cleanTime = timeStr.replace(/\b(Mon|Tue|Wed|Thu|Fri)[+,\s;]*/g, "").replace(/^\s*[;,]\s*/, "").trim();
+  return `${abbr} ${cleanTime}`;
+}
+
 // ============================================================
 // UI COMPONENTS
 // ============================================================
@@ -372,15 +380,12 @@ function WeeklyOverviewView({ data }) {
                       }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                           <span style={{ fontFamily: "'Roboto', sans-serif", fontWeight: 500, fontSize: 13, color: C.pepBlack }}>
-                            {s.icon} {e.title}
+                            {e.title}
                           </span>
                           {timeStr && (
                             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap", marginLeft: 8 }}>{timeStr}</span>
                           )}
                         </div>
-                        {e.description && (
-                          <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4 }}>{e.description}</div>
-                        )}
                       </div>
                     );
                   })}
@@ -415,8 +420,8 @@ function ClassScheduleView({ data }) {
   const classesForDay = (day) =>
     data.classes.filter((c) => c.days.includes(day)).sort((a, b) => getSortTime(a.time, day).localeCompare(getSortTime(b.time, day)));
 
-  // Sort courses alphabetically by title for "All Courses"
-  const sortedClasses = [...data.classes].sort((a, b) => a.title.localeCompare(b.title));
+  // Sort courses by code for "All Courses"
+  const sortedClasses = [...data.classes].sort((a, b) => a.code.localeCompare(b.code));
 
   return (
     <div>
@@ -491,7 +496,7 @@ function ClassScheduleView({ data }) {
                 <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 6 }}>{c.code}: {c.title}</div>
                 <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
                   {profDisplay}<br />
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{c.days.join(", ")} · {c.time}</span><br />
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{compactSchedule(c.days, c.time)}</span><br />
                   {c.location}
                 </div>
                 {c.email && (
@@ -503,7 +508,7 @@ function ClassScheduleView({ data }) {
                     transition: "all 0.15s",
                   }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.ocean} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    Email {c.professor}
+                    Email {c.honorific ? `${c.honorific} ${c.professor}` : c.professor}
                   </a>
                 )}
               </Card>
@@ -582,8 +587,7 @@ function CalendarView({ data }) {
                       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{getDayOfWeek(e.date)}</div>
                     </div>
                     <div style={{ flex: 1, background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
-                      <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{s.icon} {e.title}</div>
-                      {e.description && <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5 }}>{e.description}</div>}
+                      <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{e.title}</div>
                     </div>
                   </div>
                 );
@@ -660,7 +664,7 @@ function LocalView({ data }) {
       {sub === "health" && (
         <div>
           {healthTypes.length > 1 && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
               <FilterPill active={healthFilter === "all"} onClick={() => setHealthFilter("all")}>All</FilterPill>
               {healthTypes.map((t) => (
                 <FilterPill key={t} active={healthFilter === t} onClick={() => setHealthFilter(t)}>{t}</FilterPill>
@@ -694,7 +698,7 @@ function LocalView({ data }) {
       {sub === "churches" && (
         <div>
           {churchDenoms.length > 1 && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
               <FilterPill active={churchFilter === "all"} onClick={() => setChurchFilter("all")}>All</FilterPill>
               {churchDenoms.map((d) => (
                 <FilterPill key={d} active={churchFilter === d} onClick={() => setChurchFilter(d)}>{d}</FilterPill>
@@ -723,7 +727,7 @@ function LocalView({ data }) {
       {sub === "explore" && (
         <div>
           {exploreTypes.length > 1 && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
               <FilterPill active={exploreFilter === "all"} onClick={() => setExploreFilter("all")}>All</FilterPill>
               {exploreTypes.map((t) => (
                 <FilterPill key={t} active={exploreFilter === t} onClick={() => setExploreFilter(t)}>{t}</FilterPill>
@@ -896,6 +900,24 @@ function ContactsView({ data }) {
           ))}
         </div>
       </div>
+
+      {/* Additional Resources */}
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Additional Resources</div>
+      {[
+        { name: "U.S. Embassy Buenos Aires", detail: "Av. Colombia 4300, Palermo", phone: "+541157774533", phoneDisplay: "+54 11 5777-4533", url: "https://ar.usembassy.gov/" },
+        { name: "International SOS (ISOS)", detail: "Pepperdine travel assistance", phone: "+12158429000", phoneDisplay: "+1 215-842-9000", url: "https://www.internationalsos.com" },
+        { name: "GeoBlue / BCBS", detail: "Student health insurance", phone: "+16102548771", phoneDisplay: "+1 610-254-8771", url: "https://www.geo-blue.com" },
+        { name: "Pepperdine Campus Safety", detail: "Malibu campus (24/7)", phone: "+13105064442", phoneDisplay: "+1 310-506-4442", url: "" },
+      ].map((r, i) => (
+        <Card key={`misc-${i}`}>
+          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, marginBottom: 2 }}>{r.name}</div>
+          <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}>{r.detail}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {r.phone && <ActionBtn href={`tel:${r.phone}`} icon="📞" label={r.phoneDisplay} variant="phone" />}
+            {r.url && <ActionBtn href={r.url} icon="→" label="Website" variant="maps" />}
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -941,7 +963,7 @@ export default function App() {
       .catch((err) => { console.error("Sheet fetch failed:", err); setStatus("fallback"); });
   }, []);
 
-  const statusLabel = status === "live" ? "Live from Google Sheets"
+  const statusLabel = status === "live" ? "Synced"
     : status === "loading" ? "Loading..."
     : status === "fallback" ? "Using saved data (sheet unavailable)"
     : "Preview mode";
