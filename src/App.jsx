@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-03 19:00 ART";
+const BUILD_VERSION = "2026-04-03 10:07 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
