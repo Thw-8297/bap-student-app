@@ -697,7 +697,7 @@ function FilterPill({ active, onClick, children }) {
 }
 
 // ─── Health: Facility vs Person detection ───
-const FACILITY_TYPES = /hospital|clinic|clínica|sanatorio|laboratory|lab|pharmacy|farmacia|emergency|imaging|diagnóstico/i;
+const FACILITY_TYPES = /hospital|clinic|clínica|sanatorio|laboratory|lab|pharmacy|farmacia|emergency|isos|imaging|diagnóstico/i;
 function isFacility(provider) {
   if (provider.category) return provider.category === "facility";
   return FACILITY_TYPES.test(provider.type);
