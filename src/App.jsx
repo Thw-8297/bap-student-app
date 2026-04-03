@@ -953,7 +953,7 @@ export default function App() {
         <div style={{ position: "absolute", top: -40, right: -40, width: 120, height: 120, borderRadius: "50%", border: "2px solid rgba(100,181,246,0.2)" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <img src={LOGO_URI} alt="Buenos Aires Program" style={{
-            width: 56, height: 56, borderRadius: "50%", flexShrink: 0,
+            width: 80, height: 80, borderRadius: "50%", flexShrink: 0,
             boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
           }} />
           <div style={{ flex: 1, minWidth: 0 }}>
