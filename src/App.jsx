@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-03 10:07 ART";
+const BUILD_VERSION = "2026-04-03 10:28 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -999,7 +999,7 @@ function ContactsView({ data }) {
           {data.resources.map((r, i) => (
             <Card key={`res-${i}`}>
               <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, marginBottom: 2 }}>{r.name}</div>
-              {r.detail && <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}>{r.detail}</div>}
+              {r.detail && <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", marginBottom: 8, whiteSpace: "pre-line" }}>{r.detail}</div>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {r.phone && <ActionBtn href={`tel:${r.phone.replace(/[\s\-().]/g, "")}`} icon="📞" label={r.phone} variant="phone" />}
                 {r.url && <ActionBtn href={r.url} icon="→" label="Website" variant="maps" />}
