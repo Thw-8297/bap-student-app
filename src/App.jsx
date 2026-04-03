@@ -51,6 +51,12 @@ const DEFAULT_DATA = {
     { name: "San Telmo", type: "Neighborhood", description: "Bohemian cobblestone neighborhood known for tango and antiques", address: "Defensa & surrounding streets", hours: "", link: "" },
     { name: "Teatro Colón", type: "Landmark", description: "One of the world's top opera houses", address: "Cerrito 628, Microcentro", hours: "Tours daily 9am–5pm", link: "https://teatrocolon.org.ar" },
   ],
+  resources: [
+    { name: "U.S. Embassy Buenos Aires", detail: "Av. Colombia 4300, Palermo", phone: "+54 11 5777-4533", url: "https://ar.usembassy.gov/" },
+    { name: "International SOS (ISOS)", detail: "Pepperdine travel assistance", phone: "+1 215-842-9000", url: "https://www.internationalsos.com" },
+    { name: "GeoBlue / BCBS", detail: "Student health insurance", phone: "+1 610-254-8771", url: "https://www.geo-blue.com" },
+    { name: "Pepperdine Campus Safety", detail: "Malibu campus (24/7)", phone: "+1 310-506-4442", url: "" },
+  ],
 };
 
 // ============================================================
@@ -70,7 +76,7 @@ async function fetchTab(tabName) {
 }
 
 async function fetchAllData() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
+  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw, resourcesRaw] =
     await Promise.all([
       fetchTab("Settings"),
       fetchTab("Classes"),
@@ -80,6 +86,7 @@ async function fetchAllData() {
       fetchTab("Policies"),
       fetchTab("Contacts"),
       fetchTab("Explore"),
+      fetchTab("Resources"),
     ]);
 
   const settings = {};
@@ -146,6 +153,12 @@ async function fetchAllData() {
       address: r.address ? r.address.trim() : "",
       hours: r.hours ? r.hours.trim() : "",
       link: r.link ? r.link.trim() : "",
+    })),
+    resources: resourcesRaw.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      detail: r.detail ? r.detail.trim() : "",
+      phone: r.phone ? r.phone.trim() : "",
+      url: r.url ? r.url.trim() : "",
     })),
   };
 }
@@ -902,22 +915,21 @@ function ContactsView({ data }) {
       </div>
 
       {/* Additional Resources */}
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Additional Resources</div>
-      {[
-        { name: "U.S. Embassy Buenos Aires", detail: "Av. Colombia 4300, Palermo", phone: "+541157774533", phoneDisplay: "+54 11 5777-4533", url: "https://ar.usembassy.gov/" },
-        { name: "International SOS (ISOS)", detail: "Pepperdine travel assistance", phone: "+12158429000", phoneDisplay: "+1 215-842-9000", url: "https://www.internationalsos.com" },
-        { name: "GeoBlue / BCBS", detail: "Student health insurance", phone: "+16102548771", phoneDisplay: "+1 610-254-8771", url: "https://www.geo-blue.com" },
-        { name: "Pepperdine Campus Safety", detail: "Malibu campus (24/7)", phone: "+13105064442", phoneDisplay: "+1 310-506-4442", url: "" },
-      ].map((r, i) => (
-        <Card key={`misc-${i}`}>
-          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, marginBottom: 2 }}>{r.name}</div>
-          <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}>{r.detail}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {r.phone && <ActionBtn href={`tel:${r.phone}`} icon="📞" label={r.phoneDisplay} variant="phone" />}
-            {r.url && <ActionBtn href={r.url} icon="→" label="Website" variant="maps" />}
-          </div>
-        </Card>
-      ))}
+      {(data.resources || []).length > 0 && (
+        <>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Additional Resources</div>
+          {data.resources.map((r, i) => (
+            <Card key={`res-${i}`}>
+              <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, marginBottom: 2 }}>{r.name}</div>
+              {r.detail && <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}>{r.detail}</div>}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {r.phone && <ActionBtn href={`tel:${r.phone.replace(/[\s\-().]/g, "")}`} icon="📞" label={r.phone} variant="phone" />}
+                {r.url && <ActionBtn href={r.url} icon="→" label="Website" variant="maps" />}
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
     </div>
   );
 }
