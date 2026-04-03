@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-03 10:28 ART";
+const BUILD_VERSION = "2026-04-03 16:03 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -371,6 +371,14 @@ function WeeklyOverviewView({ data }) {
   weekDates.forEach((d) => { eventsByDate[toDateStr(d)] = []; });
   weekEvents.forEach((e) => {
     if (eventsByDate[e.date]) eventsByDate[e.date].push(e);
+  });
+  // Sort each day's events by start_time (events without a time go last)
+  Object.values(eventsByDate).forEach((evts) => {
+    evts.sort((a, b) => {
+      const ta = a.start_time || "";
+      const tb = b.start_time || "";
+      return ta.localeCompare(tb);
+    });
   });
 
   const weekLabel = `${formatDate(weekStartStr)} – ${formatDate(weekEndStr)}`;
