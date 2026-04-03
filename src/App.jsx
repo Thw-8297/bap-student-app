@@ -328,6 +328,7 @@ function Card({ children, borderLeft, bg }) {
 // ─── Weekly Overview ───
 function WeeklyOverviewView({ data }) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const todayRef = useRef(null);
 
   const today = new Date();
   today.setHours(12, 0, 0, 0);
@@ -345,6 +346,14 @@ function WeeklyOverviewView({ data }) {
 
   const weekStartStr = toDateStr(weekDates[0]);
   const weekEndStr = toDateStr(weekDates[6]);
+
+  const todayInView = weekOffset === 0;
+
+  const scrollToToday = () => {
+    if (todayRef.current) {
+      todayRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   // Filter events for this week
   const weekEvents = data.calendarEvents.filter((e) => {
@@ -388,6 +397,16 @@ function WeeklyOverviewView({ data }) {
           fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean, fontWeight: 500,
         }}>← Back to This Week</button>
       )}
+      {todayInView && (
+        <button onClick={scrollToToday} style={{
+          display: "flex", alignItems: "center", gap: 6, margin: "0 auto 14px",
+          background: C.ocean, color: C.white, border: "none", borderRadius: 20,
+          padding: "6px 18px", cursor: "pointer", fontFamily: "'DM Mono', monospace",
+          fontSize: 12, fontWeight: 500, letterSpacing: 0.5,
+        }}>
+          ↓ TODAY
+        </button>
+      )}
 
       {/* Days */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -398,7 +417,7 @@ function WeeklyOverviewView({ data }) {
           const hasContent = dayEvents.length > 0;
 
           return (
-            <div key={ds} style={{
+            <div key={ds} ref={isToday ? todayRef : undefined} style={{
               background: isToday ? "#F0F7FF" : C.white,
               borderRadius: 12, padding: "12px 14px",
               border: isToday ? `2px solid ${C.bapBlue}` : `1px solid ${C.fog}`,
