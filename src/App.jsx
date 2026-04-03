@@ -466,8 +466,7 @@ function WeeklyOverviewView({ data }) {
 }
 
 // ─── Schedule (Class Schedule) ───
-function ClassScheduleView({ data }) {
-  const [view, setView] = useState("week");
+function ClassScheduleView({ data, view }) {
   const todayRef = useRef(null);
 
   const todayAbbrev = WEEK_DAYS_SHORT[new Date().getDay()];
@@ -487,10 +486,6 @@ function ClassScheduleView({ data }) {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        <Pill active={view === "week"} onClick={() => setView("week")}>Weekly Schedule</Pill>
-        <Pill active={view === "list"} onClick={() => setView("list")}>All Courses</Pill>
-      </div>
       {view === "week" ? (
         <div>
           {/* TODAY button */}
@@ -582,7 +577,7 @@ function ClassScheduleView({ data }) {
   );
 }
 
-// ─── Schedule Tab (wraps Weekly Overview + Class Schedule) ───
+// ─── Schedule Tab (flat three-pill navigation) ───
 function ScheduleView({ data }) {
   const [section, setSection] = useState("overview");
 
@@ -590,13 +585,11 @@ function ScheduleView({ data }) {
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
         <Pill active={section === "overview"} onClick={() => setSection("overview")}>Weekly Overview</Pill>
-        <Pill active={section === "classes"} onClick={() => setSection("classes")}>Class Schedule</Pill>
+        <Pill active={section === "week"} onClick={() => setSection("week")}>Weekly Schedule</Pill>
+        <Pill active={section === "list"} onClick={() => setSection("list")}>All Courses</Pill>
       </div>
-      {section === "overview" ? (
-        <WeeklyOverviewView data={data} />
-      ) : (
-        <ClassScheduleView data={data} />
-      )}
+      {section === "overview" && <WeeklyOverviewView data={data} />}
+      {(section === "week" || section === "list") && <ClassScheduleView data={data} view={section} />}
     </div>
   );
 }
