@@ -20,12 +20,12 @@ const DEFAULT_DATA = {
     { code: "ART 280", title: "Tango & Argentine Arts", professor: "Reyes", honorific: "Prof.", firstname: "Lucía", days: ["Fri"], time: "10:00–12:30", location: "Studio", color: "#E35205", email: "" },
   ],
   calendarEvents: [
-    { date: "2026-08-10", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "" },
-    { date: "2026-08-11", title: "Orientation begins", type: "orientation", description: "Three-day orientation program", start_time: "", end_time: "" },
-    { date: "2026-08-14", title: "Classes begin", type: "academic", description: "First day of classes", start_time: "", end_time: "" },
-    { date: "2026-08-17", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday; no classes", start_time: "", end_time: "" },
-    { date: "2026-08-21", title: "City Tour", type: "excursion", description: "Guided walking tour of downtown BA", start_time: "10:00", end_time: "13:00" },
-    { date: "2026-09-04", title: "Asado", type: "program", description: "Weekly asado", start_time: "13:40", end_time: "14:40" },
+    { date: "2026-08-10", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-11", title: "Orientation begins", type: "orientation", description: "Three-day orientation program", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-14", title: "Classes begin", type: "academic", description: "First day of classes", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-17", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday; no classes", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-21", title: "City Tour", type: "excursion", description: "Guided walking tour of downtown BA", start_time: "10:00", end_time: "13:00", visibility: "both" },
+    { date: "2026-09-04", title: "Asado", type: "program", description: "Weekly asado", start_time: "13:40", end_time: "14:40", visibility: "week" },
   ],
   healthProviders: [
     { name: "Dr. Example", type: "Doctor", address: "Av. Santa Fe 1234", phone: "+54 11 1234-5678", notes: "GeoBlue", link: "", insurance: "bcbs" },
@@ -132,6 +132,7 @@ async function fetchAllData() {
       description: r.description ? r.description.trim() : "",
       start_time: r.start_time ? r.start_time.trim() : "",
       end_time: r.end_time ? r.end_time.trim() : "",
+      visibility: r.visibility ? r.visibility.trim().toLowerCase() : "both",
     })),
     healthProviders: healthRaw.filter(r => r.name).map((r) => ({
       name: r.name.trim(),
@@ -141,6 +142,7 @@ async function fetchAllData() {
       notes: r.notes ? r.notes.trim() : "",
       link: r.link ? r.link.trim() : "",
       insurance: r.insurance ? r.insurance.trim() : "",
+      category: r.category ? r.category.trim().toLowerCase() : "",
     })),
     churches: churchesRaw.filter(r => r.name).map((r) => ({
       name: r.name.trim(),
@@ -314,10 +316,10 @@ function Pill({ active, onClick, children }) {
   );
 }
 
-function Card({ children, borderLeft }) {
+function Card({ children, borderLeft, bg }) {
   return (
     <div style={{
-      background: C.white, borderRadius: 10, padding: 16,
+      background: bg || C.white, borderRadius: 10, padding: 16,
       border: `1px solid ${C.fog}`, borderLeft: borderLeft ? `4px solid ${borderLeft}` : undefined,
     }}>{children}</div>
   );
@@ -346,6 +348,7 @@ function WeeklyOverviewView({ data }) {
 
   // Filter events for this week
   const weekEvents = data.calendarEvents.filter((e) => {
+    if (e.visibility === "semester") return false;
     return e.date >= weekStartStr && e.date <= weekEndStr;
   });
 
@@ -604,6 +607,7 @@ function CalendarView({ data }) {
   const types = ["all", ...Object.keys(EVENT_STYLES)];
   const events = data.calendarEvents
     .filter((e) => filter === "all" || e.type === filter)
+    .filter((e) => e.visibility !== "week")
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const grouped = {};
@@ -692,6 +696,13 @@ function FilterPill({ active, onClick, children }) {
   );
 }
 
+// ─── Health: Facility vs Person detection ───
+const FACILITY_TYPES = /hospital|clinic|clínica|sanatorio|laboratory|lab|pharmacy|farmacia|emergency|imaging|diagnóstico/i;
+function isFacility(provider) {
+  if (provider.category) return provider.category === "facility";
+  return FACILITY_TYPES.test(provider.type);
+}
+
 // ─── Local ───
 function LocalView({ data }) {
   const [sub, setSub] = useState("health");
@@ -731,8 +742,10 @@ function LocalView({ data }) {
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {filteredHealth.map((h, i) => (
-              <Card key={i}>
+            {filteredHealth.map((h, i) => {
+              const facility = isFacility(h);
+              return (
+              <Card key={i} bg={facility ? C.ice : undefined}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{h.name}</span>
@@ -749,7 +762,8 @@ function LocalView({ data }) {
                 </div>
                 <LinkButton url={h.link} />
               </Card>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
