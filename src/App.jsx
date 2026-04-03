@@ -76,7 +76,7 @@ async function fetchTab(tabName) {
 }
 
 async function fetchAllData() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw, resourcesRaw] =
+  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
     await Promise.all([
       fetchTab("Settings"),
       fetchTab("Classes"),
@@ -86,8 +86,11 @@ async function fetchAllData() {
       fetchTab("Policies"),
       fetchTab("Contacts"),
       fetchTab("Explore"),
-      fetchTab("Resources"),
     ]);
+
+  // Resources tab is optional — don't break the whole fetch if it's missing
+  let resourcesRaw = [];
+  try { resourcesRaw = await fetchTab("Resources"); } catch (e) { /* tab not created yet */ }
 
   const settings = {};
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
@@ -399,6 +402,9 @@ function WeeklyOverviewView({ data }) {
                             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap", marginLeft: 8 }}>{timeStr}</span>
                           )}
                         </div>
+                        {e.description && (
+                          <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4 }}>{e.description}</div>
+                        )}
                       </div>
                     );
                   })}
