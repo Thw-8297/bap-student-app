@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-03 18:45 ART";
+const BUILD_VERSION = "2026-04-03 19:00 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -444,7 +444,6 @@ function WeeklyOverviewView({ data }) {
                       background: C.ocean, padding: "2px 8px", borderRadius: 10, fontWeight: 400,
                     }}>TODAY</span>}
                   </div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{formatDate(ds)}</div>
                 </div>
               </div>
 
