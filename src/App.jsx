@@ -585,7 +585,7 @@ function ScheduleView({ data }) {
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
         <Pill active={section === "overview"} onClick={() => setSection("overview")}>Weekly Overview</Pill>
-        <Pill active={section === "week"} onClick={() => setSection("week")}>Weekly Schedule</Pill>
+        <Pill active={section === "week"} onClick={() => setSection("week")}>Class Schedule</Pill>
         <Pill active={section === "list"} onClick={() => setSection("list")}>Courses</Pill>
       </div>
       {section === "overview" && <WeeklyOverviewView data={data} />}
