@@ -46,6 +46,11 @@ const DEFAULT_DATA = {
     { name: "Travis Hill-Weber", role: "Program Director", phone: "+5491151561793", whatsapp: "https://wa.me/5491151561793", email: "travis.hillweber@pepperdine.edu", address: "", maps: "", type: "staff" },
     { name: "Harmony Hill-Weber", role: "Coordinator of Student Life", phone: "+5491123188597", whatsapp: "https://wa.me/5491151561793", email: "harmony.hillweber@pepperdine.edu", address: "", maps: "", type: "staff" },
   ],
+  explore: [
+    { name: "MALBA", type: "Museum", description: "Premier Latin American art museum", address: "Av. Figueroa Alcorta 3415, Palermo", hours: "Thu–Mon 12–8pm", link: "https://www.malba.org.ar" },
+    { name: "San Telmo", type: "Neighborhood", description: "Bohemian cobblestone neighborhood known for tango and antiques", address: "Defensa & surrounding streets", hours: "", link: "" },
+    { name: "Teatro Colón", type: "Landmark", description: "One of the world's top opera houses", address: "Cerrito 628, Microcentro", hours: "Tours daily 9am–5pm", link: "https://teatrocolon.org.ar" },
+  ],
 };
 
 // ============================================================
@@ -65,7 +70,7 @@ async function fetchTab(tabName) {
 }
 
 async function fetchAllData() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw] =
+  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
     await Promise.all([
       fetchTab("Settings"),
       fetchTab("Classes"),
@@ -74,6 +79,7 @@ async function fetchAllData() {
       fetchTab("Churches"),
       fetchTab("Policies"),
       fetchTab("Contacts"),
+      fetchTab("Explore"),
     ]);
 
   const settings = {};
@@ -131,6 +137,14 @@ async function fetchAllData() {
       address: r.address ? r.address.trim() : "",
       maps: r.maps ? r.maps.trim() : "",
       type: r.type ? r.type.trim() : "staff",
+    })),
+    explore: exploreRaw.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      type: r.type ? r.type.trim() : "",
+      description: r.description ? r.description.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      hours: r.hours ? r.hours.trim() : "",
+      link: r.link ? r.link.trim() : "",
     })),
   };
 }
@@ -604,9 +618,10 @@ function LocalView({ data }) {
   const [sub, setSub] = useState("health");
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
         <Pill active={sub === "health"} onClick={() => setSub("health")}>Health Providers</Pill>
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
+        <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Exploring BA</Pill>
       </div>
       {sub === "health" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -623,7 +638,7 @@ function LocalView({ data }) {
             </Card>
           ))}
         </div>
-      ) : (
+      ) : sub === "churches" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {data.churches.map((ch, i) => (
             <Card key={i}>
@@ -635,6 +650,23 @@ function LocalView({ data }) {
                 {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
               </div>
               <LinkButton url={ch.link} />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {(data.explore || []).map((p, i) => (
+            <Card key={i}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{p.name}</span>
+                {p.type && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{p.type}</span>}
+              </div>
+              <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                {p.description && <>{p.description}<br /></>}
+                {p.address && <span style={{ color: C.stone }}>{p.address}<br /></span>}
+                {p.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{p.hours}</span>}
+              </div>
+              <LinkButton url={p.link} />
             </Card>
           ))}
         </div>
