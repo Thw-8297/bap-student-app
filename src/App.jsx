@@ -668,10 +668,12 @@ function LinkButton({ url }) {
   if (!url) return null;
   let label = "Visit website";
   let icon = "→";
+  let external = true;
   if (url.includes("wa.me")) { label = "WhatsApp"; icon = "💬"; }
   else if (url.includes("instagram.com")) { label = "Instagram"; icon = "📷"; }
+  else if (url.startsWith("tel:")) { label = "Call"; icon = "📞"; external = false; }
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" style={{
+    <a href={url} target={external ? "_blank" : undefined} rel="noopener noreferrer" style={{
       display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8,
       fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
       textDecoration: "none", padding: "6px 14px", borderRadius: 8,
