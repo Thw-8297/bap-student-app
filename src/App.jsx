@@ -11,7 +11,7 @@ const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";
 // ============================================================
 
 const DEFAULT_DATA = {
-  semester: "Fall 2026",
+  semester: "Summer 2026",
   classes: [
     { code: "IES 300", title: "Argentine History & Society", professor: "García", honorific: "Prof.", firstname: "Ana", days: ["Mon", "Wed"], time: "9:00–10:30", location: "Classroom A", color: "#0057B8", email: "" },
     { code: "SPA 201", title: "Intermediate Spanish II", professor: "Martínez", honorific: "Prof.", firstname: "Carlos", days: ["Mon", "Tue", "Thu"], time: "11:00–12:00", location: "Classroom B", color: "#64B5F6", email: "" },
@@ -86,7 +86,7 @@ async function fetchAllData() {
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
 
   return {
-    semester: settings.semester || "Fall 2026",
+    semester: settings.semester || "Summer 2026",
     classes: classesRaw.filter(r => r.code).map((r) => ({
       code: r.code.trim(),
       title: r.title.trim(),
@@ -613,9 +613,40 @@ function LinkButton({ url }) {
   );
 }
 
+// ─── Filter Pills (smaller, for sub-filtering) ───
+function FilterPill({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "3px 11px", borderRadius: 14,
+      border: active ? `1.5px solid ${C.ocean}` : "1.5px solid transparent",
+      background: active ? C.ice : C.parchment,
+      color: active ? C.ocean : C.stone,
+      fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: active ? 500 : 400,
+      cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
+    }}>{children}</button>
+  );
+}
+
 // ─── Local ───
 function LocalView({ data }) {
   const [sub, setSub] = useState("health");
+  const [healthFilter, setHealthFilter] = useState("all");
+  const [churchFilter, setChurchFilter] = useState("all");
+  const [exploreFilter, setExploreFilter] = useState("all");
+
+  // Extract unique types/denominations
+  const healthTypes = [...new Set(data.healthProviders.map((h) => h.type).filter(Boolean))].sort();
+  const churchDenoms = [...new Set(data.churches.map((c) => c.denomination).filter(Boolean))].sort();
+  const exploreTypes = [...new Set((data.explore || []).map((p) => p.type).filter(Boolean))].sort();
+
+  // Filtered lists
+  const filteredHealth = healthFilter === "all" ? data.healthProviders : data.healthProviders.filter((h) => h.type === healthFilter);
+  const filteredChurches = churchFilter === "all" ? data.churches : data.churches.filter((c) => c.denomination === churchFilter);
+  const filteredExplore = exploreFilter === "all" ? (data.explore || []) : (data.explore || []).filter((p) => p.type === exploreFilter);
+
+  // Badge style
+  const badge = { fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12, whiteSpace: "nowrap", flexShrink: 0 };
+
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
@@ -623,52 +654,91 @@ function LocalView({ data }) {
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
         <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Exploring BA</Pill>
       </div>
-      {sub === "health" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {data.healthProviders.map((h, i) => (
-            <Card key={i}>
-              <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{h.name}</div>
-              <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, marginTop: 4 }}>
-                {h.type && <>{h.type}<br /></>}
-                {h.address && <>{h.address}<br /></>}
-                {h.phone && <>{h.phone}<br /></>}
-                {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
-              </div>
-              <LinkButton url={h.link} />
-            </Card>
-          ))}
+
+      {sub === "health" && (
+        <div>
+          {healthTypes.length > 1 && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+              <FilterPill active={healthFilter === "all"} onClick={() => setHealthFilter("all")}>All</FilterPill>
+              {healthTypes.map((t) => (
+                <FilterPill key={t} active={healthFilter === t} onClick={() => setHealthFilter(t)}>{t}</FilterPill>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filteredHealth.map((h, i) => (
+              <Card key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{h.name}</span>
+                  {h.type && <span style={badge}>{h.type}</span>}
+                </div>
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                  {h.address && <>{h.address}<br /></>}
+                  {h.phone && <>{h.phone}<br /></>}
+                  {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
+                </div>
+                <LinkButton url={h.link} />
+              </Card>
+            ))}
+          </div>
         </div>
-      ) : sub === "churches" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {data.churches.map((ch, i) => (
-            <Card key={i}>
-              <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{ch.name}</div>
-              <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, marginTop: 4 }}>
-                {ch.denomination && <>{ch.denomination}<br /></>}
-                {ch.address && <>{ch.address}<br /></>}
-                {ch.service && <>{ch.service}<br /></>}
-                {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
-              </div>
-              <LinkButton url={ch.link} />
-            </Card>
-          ))}
+      )}
+
+      {sub === "churches" && (
+        <div>
+          {churchDenoms.length > 1 && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+              <FilterPill active={churchFilter === "all"} onClick={() => setChurchFilter("all")}>All</FilterPill>
+              {churchDenoms.map((d) => (
+                <FilterPill key={d} active={churchFilter === d} onClick={() => setChurchFilter(d)}>{d}</FilterPill>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filteredChurches.map((ch, i) => (
+              <Card key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{ch.name}</span>
+                  {ch.denomination && <span style={badge}>{ch.denomination}</span>}
+                </div>
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                  {ch.address && <>{ch.address}<br /></>}
+                  {ch.service && <>{ch.service}<br /></>}
+                  {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
+                </div>
+                <LinkButton url={ch.link} />
+              </Card>
+            ))}
+          </div>
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {(data.explore || []).map((p, i) => (
-            <Card key={i}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{p.name}</span>
-                {p.type && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{p.type}</span>}
-              </div>
-              <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
-                {p.description && <>{p.description}<br /></>}
-                {p.address && <span style={{ color: C.stone }}>{p.address}<br /></span>}
-                {p.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{p.hours}</span>}
-              </div>
-              <LinkButton url={p.link} />
-            </Card>
-          ))}
+      )}
+
+      {sub === "explore" && (
+        <div>
+          {exploreTypes.length > 1 && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+              <FilterPill active={exploreFilter === "all"} onClick={() => setExploreFilter("all")}>All</FilterPill>
+              {exploreTypes.map((t) => (
+                <FilterPill key={t} active={exploreFilter === t} onClick={() => setExploreFilter(t)}>{t}</FilterPill>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filteredExplore.map((p, i) => (
+              <Card key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{p.name}</span>
+                  {p.type && <span style={badge}>{p.type}</span>}
+                </div>
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                  {p.description && <>{p.description}<br /></>}
+                  {p.address && <span style={{ color: C.stone }}>{p.address}<br /></span>}
+                  {p.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{p.hours}</span>}
+                </div>
+                <LinkButton url={p.link} />
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>
