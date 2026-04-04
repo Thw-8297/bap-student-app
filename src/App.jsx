@@ -875,7 +875,7 @@ function PoliciesView({ data }) {
               {p.content}
               {p.link && (
                 <a href={p.link} target="_blank" rel="noopener noreferrer" style={{
-                  display: "inline-flex", alignItems: "center", gap: 5, marginTop: 10,
+                  display: "flex", alignItems: "center", gap: 5, marginTop: 10, width: "fit-content",
                   fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
                   textDecoration: "none", padding: "6px 14px", borderRadius: 8,
                   background: C.ice, border: `1px solid ${C.fog}`, cursor: "pointer",
