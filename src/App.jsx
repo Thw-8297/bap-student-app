@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-03 22:55 ART";
+const BUILD_VERSION = "2026-04-04 14:30 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -62,6 +62,9 @@ const DEFAULT_DATA = {
     { name: "GeoBlue / BCBS", detail: "Student health insurance", phone: "+1 610-254-8771", url: "https://www.geo-blue.com" },
     { name: "Pepperdine Campus Safety", detail: "Malibu campus (24/7)", phone: "+1 310-506-4442", url: "" },
   ],
+  announcements: [
+    { message: "Add/Drop period ends Friday, August 28. Contact your advisor with any changes.", type: "info", start_date: "2026-08-24", end_date: "2026-08-28", icon: "📋", link: "" },
+  ],
 };
 
 // ============================================================
@@ -112,6 +115,10 @@ async function fetchAllData() {
   // Resources tab is optional — don't break the whole fetch if it's missing
   let resourcesRaw = [];
   try { resourcesRaw = await fetchTab("Resources"); } catch (e) { /* tab not created yet */ }
+
+  // Announcements tab is optional — only populates when a reminder is active
+  let announcementsRaw = [];
+  try { announcementsRaw = await fetchTab("Announcements"); } catch (e) { /* tab not created yet */ }
 
   const settings = {};
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
@@ -185,6 +192,14 @@ async function fetchAllData() {
       detail: r.detail ? r.detail.trim() : "",
       phone: r.phone ? r.phone.trim() : "",
       url: r.url ? r.url.trim() : "",
+    })),
+    announcements: announcementsRaw.filter(r => r.message).map((r) => ({
+      message: r.message.trim(),
+      type: r.type ? r.type.trim().toLowerCase() : "info",
+      start_date: r.start_date ? r.start_date.trim() : "",
+      end_date: r.end_date ? r.end_date.trim() : "",
+      icon: r.icon ? r.icon.trim() : "📋",
+      link: r.link ? r.link.trim() : "",
     })),
   };
 }
@@ -330,6 +345,82 @@ function Card({ children, borderLeft, bg }) {
   );
 }
 
+// ─── Announcement Banner ───
+function AnnouncementBanner({ announcements }) {
+  const [dismissed, setDismissed] = useState({});
+  const todayStr = getTodayStr();
+
+  // Filter to only active announcements (today is within date range)
+  const active = (announcements || []).filter((a) => {
+    if (!a.start_date || !a.end_date) return false;
+    return todayStr >= a.start_date && todayStr <= a.end_date;
+  }).filter((_, i) => !dismissed[i]);
+
+  if (active.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+      {active.map((a, i) => {
+        const isUrgent = a.type === "urgent";
+        return (
+          <div key={i} style={{
+            background: isUrgent ? C.parchment : C.ice,
+            borderLeft: `4px solid ${isUrgent ? C.pepOrange : C.ocean}`,
+            borderRadius: 10,
+            padding: "10px 14px",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <span style={{ fontSize: 18, lineHeight: "20px", flexShrink: 0 }}>
+                {a.icon || "📋"}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  color: isUrgent ? C.pepOrange : C.ocean,
+                  marginBottom: 3,
+                }}>
+                  {isUrgent ? "Action Required" : "Program Reminder"}
+                </div>
+                <div style={{
+                  fontFamily: "'Roboto', sans-serif",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                  color: C.pepBlack,
+                }}>
+                  {a.message}
+                </div>
+                {a.link && (
+                  <a href={a.link} target="_blank" rel="noopener noreferrer" style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500,
+                    color: isUrgent ? C.pepOrange : C.ocean,
+                    marginTop: 6, textDecoration: "none",
+                  }}>
+                    View details →
+                  </a>
+                )}
+              </div>
+              <button
+                onClick={() => setDismissed((d) => ({ ...d, [i]: true }))}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: C.stone, fontSize: 18, lineHeight: 1, padding: "0 2px",
+                  flexShrink: 0, marginTop: -2,
+                }}
+                aria-label="Dismiss"
+              >×</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Weekly Overview ───
 function WeeklyOverviewView({ data }) {
   const [weekOffset, setWeekOffset] = useState(0);
@@ -420,6 +511,9 @@ function WeeklyOverviewView({ data }) {
           ↓ TODAY
         </button>
       )}
+
+      {/* Announcement banner — only renders when active announcements exist */}
+      <AnnouncementBanner announcements={data.announcements} />
 
       {/* Days */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
