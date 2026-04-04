@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-03 22:41 ART";
+const BUILD_VERSION = "2026-04-03 22:55 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -881,7 +881,7 @@ function PoliciesView({ data }) {
                   background: C.ice, border: `1px solid ${C.fog}`, cursor: "pointer",
                   transition: "all 0.15s",
                 }}>
-                  Read full policy in Student Handbook
+                  View full details
                   <span style={{ fontSize: 14 }}>→</span>
                 </a>
               )}
