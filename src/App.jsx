@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-04 14:30 ART";
+const BUILD_VERSION = "2026-04-12 18:30 ART";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -25,12 +25,13 @@ const DEFAULT_DATA = {
     { code: "ART 280", title: "Tango & Argentine Arts", professor: "Reyes", honorific: "Prof.", firstname: "Lucía", days: ["Fri"], time: "10:00–12:30", location: "Studio", color: "#E35205", email: "" },
   ],
   calendarEvents: [
-    { date: "2026-08-10", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "", visibility: "both" },
-    { date: "2026-08-11", title: "Orientation begins", type: "orientation", description: "Three-day orientation program", start_time: "", end_time: "", visibility: "both" },
-    { date: "2026-08-14", title: "Classes begin", type: "academic", description: "First day of classes", start_time: "", end_time: "", visibility: "both" },
-    { date: "2026-08-17", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday; no classes", start_time: "", end_time: "", visibility: "both" },
-    { date: "2026-08-21", title: "City Tour", type: "excursion", description: "Guided walking tour of downtown BA", start_time: "10:00", end_time: "13:00", visibility: "both" },
-    { date: "2026-09-04", title: "Asado", type: "program", description: "Weekly asado", start_time: "13:40", end_time: "14:40", visibility: "week" },
+    { date: "2026-08-10", end_date: "", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-11", end_date: "2026-08-13", title: "Orientation", type: "orientation", description: "Three-day orientation program", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-14", end_date: "", title: "Classes begin", type: "academic", description: "First day of classes", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-17", end_date: "", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday; no classes", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-21", end_date: "2026-08-24", title: "Study Tour: Córdoba", type: "excursion", description: "Four-day study tour", start_time: "", end_time: "", visibility: "both" },
+    { date: "2026-08-28", end_date: "", title: "City Tour", type: "excursion", description: "Guided walking tour of downtown BA", start_time: "10:00", end_time: "13:00", visibility: "both" },
+    { date: "2026-09-04", end_date: "", title: "Asado", type: "program", description: "Weekly asado", start_time: "13:40", end_time: "14:40", visibility: "week" },
   ],
   healthProviders: [
     { name: "Dr. Example", type: "Doctor", address: "Av. Santa Fe 1234", phone: "+54 11 1234-5678", notes: "GeoBlue", link: "", insurance: "bcbs" },
@@ -139,6 +140,7 @@ async function fetchAllData() {
     })),
     calendarEvents: calendarRaw.filter(r => r.date).map((r) => ({
       date: r.date.trim(),
+      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
       title: r.title.trim(),
       type: r.type ? r.type.trim() : "academic",
       description: r.description ? r.description.trim() : "",
@@ -285,6 +287,30 @@ function getSortTime(timeStr, day) {
   const m = t.match(/(\d{1,2})[:.:](\d{2})/);
   if (m) return m[1].padStart(2, "0") + ":" + m[2];
   return "99:99";
+}
+
+// Check whether a (possibly multi-day) event overlaps a date range
+function eventOverlaps(event, rangeStart, rangeEnd) {
+  const eStart = event.date;
+  const eEnd = event.end_date || event.date;
+  return eStart <= rangeEnd && eEnd >= rangeStart;
+}
+
+// Build a compact date-range label for multi-day events, e.g. "May 22–25"
+function dateRangeLabel(startDate, endDate) {
+  const s = new Date(startDate + "T12:00:00");
+  const e = new Date(endDate + "T12:00:00");
+  const sMonth = MONTHS[s.getMonth()];
+  const eMonth = MONTHS[e.getMonth()];
+  if (sMonth === eMonth) return `${sMonth} ${s.getDate()}–${e.getDate()}`;
+  return `${sMonth} ${s.getDate()} – ${eMonth} ${e.getDate()}`;
+}
+
+// Count the days in a multi-day event
+function countDays(startDate, endDate) {
+  const s = new Date(startDate + "T12:00:00");
+  const e = new Date(endDate + "T12:00:00");
+  return Math.round((e - s) / 86400000) + 1;
 }
 
 // Compact day abbreviations: M T W R F
@@ -451,17 +477,19 @@ function WeeklyOverviewView({ data }) {
     }
   };
 
-  // Filter events for this week
+  // Filter events that overlap this week (handles multi-day events)
   const weekEvents = data.calendarEvents.filter((e) => {
     if (e.visibility === "semester") return false;
-    return e.date >= weekStartStr && e.date <= weekEndStr;
+    return eventOverlaps(e, weekStartStr, weekEndStr);
   });
 
-  // Group events by date
+  // Group events by date. Multi-day events go on their start date
+  // (or the first day of the week if they started earlier).
   const eventsByDate = {};
   weekDates.forEach((d) => { eventsByDate[toDateStr(d)] = []; });
   weekEvents.forEach((e) => {
-    if (eventsByDate[e.date]) eventsByDate[e.date].push(e);
+    const placeOn = e.date >= weekStartStr ? e.date : weekStartStr;
+    if (eventsByDate[placeOn]) eventsByDate[placeOn].push(e);
   });
   // Sort each day's events by start_time (events without a time go last)
   Object.values(eventsByDate).forEach((evts) => {
@@ -554,6 +582,7 @@ function WeeklyOverviewView({ data }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {dayEvents.map((e, i) => {
                     const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
+                    const isMulti = e.end_date && e.end_date > e.date;
                     const timeStr = e.start_time
                       ? (e.end_time ? `${e.start_time}–${e.end_time}` : e.start_time)
                       : "";
@@ -570,6 +599,11 @@ function WeeklyOverviewView({ data }) {
                             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap", marginLeft: 8 }}>{timeStr}</span>
                           )}
                         </div>
+                        {isMulti && (
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, marginTop: 3 }}>
+                            {dateRangeLabel(e.date, e.end_date)} · {countDays(e.date, e.end_date)} days
+                          </div>
+                        )}
                         {e.description && (
                           <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4, whiteSpace: "pre-line" }}>{e.description}</div>
                         )}
@@ -761,14 +795,30 @@ function CalendarView({ data }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {monthEvents.map((e, i) => {
                 const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
+                const isMulti = e.end_date && e.end_date > e.date;
+                const startDay = formatDate(e.date).split(" ")[1];
+                const endDay = isMulti ? formatDate(e.end_date).split(" ")[1] : null;
+                // If end_date is in a different month, show the month abbreviation too
+                const endInSameMonth = isMulti && e.end_date.slice(0, 7) === e.date.slice(0, 7);
+                const dateDisplay = isMulti
+                  ? (endInSameMonth ? `${startDay}–${endDay}` : `${startDay}–${formatDate(e.end_date)}`)
+                  : startDay;
+                const dayDisplay = isMulti
+                  ? `${getDayOfWeek(e.date)}–${getDayOfWeek(e.end_date)}`
+                  : getDayOfWeek(e.date);
                 return (
                   <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                     <div style={{ minWidth: 44, textAlign: "right", paddingTop: 2 }}>
-                      <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700, color: C.pepBlack }}>{formatDate(e.date).split(" ")[1]}</div>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{getDayOfWeek(e.date)}</div>
+                      <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700, color: C.pepBlack }}>{dateDisplay}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{dayDisplay}</div>
                     </div>
                     <div style={{ flex: 1, background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
                       <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{e.title}</div>
+                      {isMulti && (
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, marginTop: 3 }}>
+                          {countDays(e.date, e.end_date)} days
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
