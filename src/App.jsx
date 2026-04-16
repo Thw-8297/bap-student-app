@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-12 18:30 ART";
+const BUILD_VERSION = "2026-04-16 — clickable addresses";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -516,10 +516,10 @@ function WeeklyOverviewView({ data }) {
             <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.ocean, fontWeight: 500, marginTop: 2 }}>This Week</div>
           )}
         </div>
-        <button onClick={() => setWeekOffset((o) => o + 1)} style={{
-          background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
-          cursor: "pointer", fontSize: 16,
-          color: C.pepBlue, fontWeight: 700,
+        <button onClick={() => setWeekOffset((o) => Math.min(o + 1, 1))} disabled={weekOffset >= 1} style={{
+          background: "none", border: `1px solid ${weekOffset >= 1 ? C.parchment : C.fog}`, borderRadius: 8, padding: "6px 12px",
+          cursor: weekOffset >= 1 ? "default" : "pointer", fontSize: 16,
+          color: weekOffset >= 1 ? C.fog : C.pepBlue, fontWeight: 700,
         }}>›</button>
       </div>
       {weekOffset !== 0 && (
@@ -831,6 +831,25 @@ function CalendarView({ data }) {
   );
 }
 
+// ─── Address → Google Maps Link ───
+// Renders an address as a tappable link that opens Google Maps (native app on
+// mobile; maps.google.com on desktop). If `mapsUrl` is provided (e.g. from the
+// spreadsheet's maps column), it takes precedence; otherwise the address is
+// auto-encoded into a Google Maps search URL.
+function AddressLink({ address, mapsUrl }) {
+  if (!address) return null;
+  const href = mapsUrl && mapsUrl.trim()
+    ? mapsUrl.trim()
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{
+      color: "inherit", textDecoration: "none", cursor: "pointer",
+    }}>
+      <span style={{ marginRight: 4 }}>📍</span>{address}
+    </a>
+  );
+}
+
 // ─── Link Helper ───
 function LinkButton({ url }) {
   if (!url) return null;
@@ -926,7 +945,7 @@ function LocalView({ data }) {
                   {h.type && <span style={badge}>{h.type}</span>}
                 </div>
                 <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
-                  {h.address && <>{h.address}<br /></>}
+                  {h.address && <><AddressLink address={h.address} /><br /></>}
                   {h.phone && <>{h.phone}<br /></>}
                   {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
                 </div>
@@ -956,7 +975,7 @@ function LocalView({ data }) {
                   {ch.denomination && <span style={badge}>{ch.denomination}</span>}
                 </div>
                 <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
-                  {ch.address && <>{ch.address}<br /></>}
+                  {ch.address && <><AddressLink address={ch.address} /><br /></>}
                   {ch.service && <>{ch.service}<br /></>}
                   {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
                 </div>
@@ -986,7 +1005,7 @@ function LocalView({ data }) {
                 </div>
                 <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {p.description && <>{p.description}<br /></>}
-                  {p.address && <span style={{ color: C.stone }}>{p.address}<br /></span>}
+                  {p.address && <span style={{ color: C.stone }}><AddressLink address={p.address} /><br /></span>}
                   {p.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{p.hours}</span>}
                 </div>
                 <LinkButton url={p.link} />
@@ -1072,7 +1091,7 @@ function ContactsView({ data }) {
       {office.map((o, i) => (
         <Card key={`office-${i}`}>
           <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 4 }}>{o.name}</div>
-          {o.address && <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}>{o.address}</div>}
+          {o.address && <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}><AddressLink address={o.address} mapsUrl={o.maps} /></div>}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {o.phone && <ActionBtn href={`tel:${o.phone.replace(/[\s.]/g, "")}`} icon="📞" label="Call" variant="phone" />}
             {o.maps && <ActionBtn href={o.maps} icon="📍" label="Open in Maps" variant="maps" />}
