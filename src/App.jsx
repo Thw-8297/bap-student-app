@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-16 — location_note support";
+const BUILD_VERSION = "2026-04-16 — infinite week scroll";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -519,10 +519,9 @@ function WeeklyOverviewView({ data }) {
             <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.ocean, fontWeight: 500, marginTop: 2 }}>This Week</div>
           )}
         </div>
-        <button onClick={() => setWeekOffset((o) => Math.min(o + 1, 1))} disabled={weekOffset >= 1} style={{
-          background: "none", border: `1px solid ${weekOffset >= 1 ? C.parchment : C.fog}`, borderRadius: 8, padding: "6px 12px",
-          cursor: weekOffset >= 1 ? "default" : "pointer", fontSize: 16,
-          color: weekOffset >= 1 ? C.fog : C.pepBlue, fontWeight: 700,
+        <button onClick={() => setWeekOffset((o) => o + 1)} style={{
+          background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
+          cursor: "pointer", fontSize: 16, color: C.pepBlue, fontWeight: 700,
         }}>›</button>
       </div>
       {weekOffset !== 0 && (
