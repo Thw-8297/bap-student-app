@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-16 — infinite week scroll";
+const BUILD_VERSION = "2026-04-16 — event sort fix";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -292,6 +292,24 @@ function getSortTime(timeStr, day) {
   return "99:99";
 }
 
+// Parse a time string like "8:00", "08:00", "8:00:00", "8:00 AM", or "20:30"
+// into minutes-since-midnight. Returns null if the string is empty or
+// unparseable (which callers can treat as "untimed"). Handles 12-hour
+// formats with AM/PM as a courtesy; 24-hour is the primary format in the app.
+function toMinutes(timeStr) {
+  if (!timeStr) return null;
+  const s = String(timeStr).trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm)?/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ampm = m[3] ? m[3].toUpperCase() : null;
+  if (ampm === "PM" && h < 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return h * 60 + min;
+}
+
 // Check whether a (possibly multi-day) event overlaps a date range
 function eventOverlaps(event, rangeStart, rangeEnd) {
   const eStart = event.date;
@@ -494,12 +512,17 @@ function WeeklyOverviewView({ data }) {
     const placeOn = e.date >= weekStartStr ? e.date : weekStartStr;
     if (eventsByDate[placeOn]) eventsByDate[placeOn].push(e);
   });
-  // Sort each day's events by start_time (events without a time go last)
+  // Sort each day's events. Untimed events come first; timed events follow
+  // in chronological order. Parses times numerically so 9:00 sorts before
+  // 10:00 (lexicographic sort would reverse them).
   Object.values(eventsByDate).forEach((evts) => {
     evts.sort((a, b) => {
-      const ta = a.start_time || "";
-      const tb = b.start_time || "";
-      return ta.localeCompare(tb);
+      const ma = toMinutes(a.start_time);
+      const mb = toMinutes(b.start_time);
+      if (ma === null && mb === null) return 0;
+      if (ma === null) return -1;
+      if (mb === null) return 1;
+      return ma - mb;
     });
   });
 
