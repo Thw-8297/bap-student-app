@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-16 — clickable addresses";
+const BUILD_VERSION = "2026-04-16 — location_note support";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -152,6 +152,7 @@ async function fetchAllData() {
       name: r.name.trim(),
       type: r.type ? r.type.trim() : "",
       address: r.address ? r.address.trim() : "",
+      location_note: r.location_note ? r.location_note.trim() : "",
       phone: r.phone ? r.phone.trim() : "",
       notes: r.notes ? r.notes.trim() : "",
       link: r.link ? r.link.trim() : "",
@@ -162,6 +163,7 @@ async function fetchAllData() {
       name: r.name.trim(),
       denomination: r.denomination ? r.denomination.trim() : "",
       address: r.address ? r.address.trim() : "",
+      location_note: r.location_note ? r.location_note.trim() : "",
       service: r.service ? r.service.trim() : "",
       notes: r.notes ? r.notes.trim() : "",
       link: r.link ? r.link.trim() : "",
@@ -186,6 +188,7 @@ async function fetchAllData() {
       type: r.type ? r.type.trim() : "",
       description: r.description ? r.description.trim() : "",
       address: r.address ? r.address.trim() : "",
+      location_note: r.location_note ? r.location_note.trim() : "",
       hours: r.hours ? r.hours.trim() : "",
       link: r.link ? r.link.trim() : "",
     })),
@@ -850,6 +853,16 @@ function AddressLink({ address, mapsUrl }) {
   );
 }
 
+// ─── Location Note (non-address location info) ───
+// Use this for entries whose "location" isn't a real address; for example,
+// telehealth providers, membership numbers shown as location context, or
+// churches meeting in rotating homes. Renders as plain italic gray text,
+// never linked, no pin icon.
+function LocationNote({ note }) {
+  if (!note) return null;
+  return <span style={{ color: C.stone, fontStyle: "italic" }}>{note}</span>;
+}
+
 // ─── Link Helper ───
 function LinkButton({ url }) {
   if (!url) return null;
@@ -946,6 +959,7 @@ function LocalView({ data }) {
                 </div>
                 <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {h.address && <><AddressLink address={h.address} /><br /></>}
+                  {h.location_note && <><LocationNote note={h.location_note} /><br /></>}
                   {h.phone && <>{h.phone}<br /></>}
                   {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
                 </div>
@@ -976,6 +990,7 @@ function LocalView({ data }) {
                 </div>
                 <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {ch.address && <><AddressLink address={ch.address} /><br /></>}
+                  {ch.location_note && <><LocationNote note={ch.location_note} /><br /></>}
                   {ch.service && <>{ch.service}<br /></>}
                   {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
                 </div>
@@ -1006,6 +1021,7 @@ function LocalView({ data }) {
                 <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, whiteSpace: "pre-line" }}>
                   {p.description && <>{p.description}<br /></>}
                   {p.address && <span style={{ color: C.stone }}><AddressLink address={p.address} /><br /></span>}
+                  {p.location_note && <><LocationNote note={p.location_note} /><br /></>}
                   {p.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{p.hours}</span>}
                 </div>
                 <LinkButton url={p.link} />
