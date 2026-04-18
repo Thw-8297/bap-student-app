@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-18 — Policies renamed to FAQ; Apps sub-tab added to Local";
+const BUILD_VERSION = "2026-04-18 — FAQ rename, Apps sub-tab, Local pill labels (Healthcare, Explore BA)";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -987,10 +987,10 @@ function LocalView({ data }) {
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
-        <Pill active={sub === "health"} onClick={() => setSub("health")}>Health Providers</Pill>
+        <Pill active={sub === "health"} onClick={() => setSub("health")}>Healthcare</Pill>
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
         <Pill active={sub === "apps"} onClick={() => setSub("apps")}>Apps</Pill>
-        <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Exploring BA</Pill>
+        <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Explore BA</Pill>
       </div>
 
       {sub === "health" && (
