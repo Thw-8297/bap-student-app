@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-16 — event sort fix";
+const BUILD_VERSION = "2026-04-18 — Policies renamed to FAQ; Apps sub-tab added to Local";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -40,11 +40,24 @@ const DEFAULT_DATA = {
     { name: "Saddleback Buenos Aires", denomination: "Non-denom.", address: "Mario Bravo 559", service: "11AM, 5PM, 7PM (Spanish & English)", notes: "35 mins by subte/bus", link: "" },
     { name: "Comunidad Cristiana BA", denomination: "Non-denom.", address: "Av. Medrano 951, Almagro", service: "Sun 11:00 (Spanish)", notes: "Young congregation; contemporary worship", link: "" },
   ],
-  policies: [
+  faq: [
     { title: "Independent Travel", content: "Students may travel independently on weekends and during break. A travel form must be submitted 48 hours in advance via the program portal. Group travel of 2+ is strongly encouraged.", link: "https://example.com/handbook/travel-policy" },
     { title: "Curfew", content: "There is no formal curfew, but students must be reachable by phone at all times. Quiet hours in the residences are 11:00 PM – 7:00 AM.", link: "" },
     { title: "Attendance", content: "Attendance is mandatory for all classes and program excursions. Two unexcused absences per course may result in a grade reduction.", link: "https://example.com/handbook/attendance" },
     { title: "Emergency Contact", content: "Program Director is available 24/7 at the emergency number provided during orientation. In a life-threatening emergency, call 107 (SAME ambulance) or 911.", link: "https://example.com/handbook/emergency" },
+  ],
+  apps: [
+    { name: "Google Maps", category: "Navigation", description: "Maps, transit, and walking directions.", ios_url: "https://apps.apple.com/app/google-maps/id585027354", android_url: "https://play.google.com/store/apps/details?id=com.google.android.apps.maps", web_url: "", priority: "essential" },
+    { name: "BA Cómo Llego", category: "Navigation", description: "Official CABA transit planner; bus, subte, and train combos.", ios_url: "", android_url: "", web_url: "https://www.buenosaires.gob.ar/comollego", priority: "essential" },
+    { name: "Uber", category: "Transportation", description: "Rideshare; widely available in BA.", ios_url: "https://apps.apple.com/app/uber/id368677368", android_url: "https://play.google.com/store/apps/details?id=com.ubercab", web_url: "", priority: "essential" },
+    { name: "Cabify", category: "Transportation", description: "Rideshare alternative; often cheaper than Uber.", ios_url: "", android_url: "", web_url: "https://cabify.com/ar", priority: "recommended" },
+    { name: "DiDi", category: "Transportation", description: "Rideshare; frequent promos for new users.", ios_url: "", android_url: "", web_url: "https://global.didiglobal.com", priority: "recommended" },
+    { name: "PedidosYa", category: "Food & Delivery", description: "Food and grocery delivery; dominant in BA.", ios_url: "", android_url: "", web_url: "https://www.pedidosya.com.ar", priority: "essential" },
+    { name: "Rappi", category: "Food & Delivery", description: "Food, groceries, pharmacy, and cash delivery.", ios_url: "", android_url: "", web_url: "https://www.rappi.com.ar", priority: "essential" },
+    { name: "SUBE", category: "Finance", description: "Check SUBE card balance; top up online.", ios_url: "", android_url: "", web_url: "https://www.argentina.gob.ar/sube", priority: "essential" },
+    { name: "Mercado Pago", category: "Finance", description: "QR payments and transfers; ubiquitous in Argentina.", ios_url: "", android_url: "", web_url: "https://www.mercadopago.com.ar", priority: "recommended" },
+    { name: "Dólar Hoy", category: "Finance", description: "Track the blue dollar exchange rate.", ios_url: "", android_url: "", web_url: "https://dolarhoy.com", priority: "recommended" },
+    { name: "WhatsApp", category: "Comms", description: "Primary messaging app in Argentina.", ios_url: "https://apps.apple.com/app/whatsapp-messenger/id310633997", android_url: "https://play.google.com/store/apps/details?id=com.whatsapp", web_url: "", priority: "essential" },
   ],
   contacts: [
     { name: "Buenos Aires Program", role: "Program Office", phone: "+5491151561793", whatsapp: "", email: "buenosaires@pepperdine.edu", address: "11 de Septiembre de 1888 955, CABA", maps: "https://maps.app.goo.gl/HQt8A6ZQABrhL7rG7", type: "office" },
@@ -101,14 +114,14 @@ function parseDays(raw) {
 }
 
 async function fetchAllData() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, policiesRaw, contactsRaw, exploreRaw] =
+  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, faqRaw, contactsRaw, exploreRaw] =
     await Promise.all([
       fetchTab("Settings"),
       fetchTab("Classes"),
       fetchTab("Calendar"),
       fetchTab("Health"),
       fetchTab("Churches"),
-      fetchTab("Policies"),
+      fetchTab("FAQ"),
       fetchTab("Contacts"),
       fetchTab("Explore"),
     ]);
@@ -120,6 +133,10 @@ async function fetchAllData() {
   // Announcements tab is optional — only populates when a reminder is active
   let announcementsRaw = [];
   try { announcementsRaw = await fetchTab("Announcements"); } catch (e) { /* tab not created yet */ }
+
+  // Apps tab is optional — won't break if missing
+  let appsRaw = [];
+  try { appsRaw = await fetchTab("Apps"); } catch (e) { /* tab not created yet */ }
 
   const settings = {};
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
@@ -168,7 +185,7 @@ async function fetchAllData() {
       notes: r.notes ? r.notes.trim() : "",
       link: r.link ? r.link.trim() : "",
     })),
-    policies: policiesRaw.filter(r => r.title).map((r) => ({
+    faq: faqRaw.filter(r => r.title).map((r) => ({
       title: r.title.trim(),
       content: r.content ? r.content.trim() : "",
       link: r.link ? r.link.trim() : "",
@@ -205,6 +222,15 @@ async function fetchAllData() {
       end_date: r.end_date ? r.end_date.trim() : "",
       icon: r.icon ? r.icon.trim() : "📋",
       link: r.link ? r.link.trim() : "",
+    })),
+    apps: appsRaw.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      category: r.category ? r.category.trim() : "",
+      description: r.description ? r.description.trim() : "",
+      ios_url: r.ios_url ? r.ios_url.trim() : "",
+      android_url: r.android_url ? r.android_url.trim() : "",
+      web_url: r.web_url ? r.web_url.trim() : "",
+      priority: r.priority ? r.priority.trim().toLowerCase() : "",
     })),
   };
 }
@@ -932,17 +958,28 @@ function LocalView({ data }) {
   const [sub, setSub] = useState("health");
   const [healthFilter, setHealthFilter] = useState("all");
   const [churchFilter, setChurchFilter] = useState("all");
+  const [appsFilter, setAppsFilter] = useState("all");
   const [exploreFilter, setExploreFilter] = useState("all");
 
-  // Extract unique types/denominations
+  // Extract unique types/denominations/categories
   const healthTypes = [...new Set(data.healthProviders.map((h) => h.type).filter(Boolean))].sort();
   const churchDenoms = [...new Set(data.churches.map((c) => c.denomination).filter(Boolean))].sort();
+  const appsCategories = [...new Set((data.apps || []).map((a) => a.category).filter(Boolean))].sort();
   const exploreTypes = [...new Set((data.explore || []).map((p) => p.type).filter(Boolean))].sort();
 
   // Filtered lists
   const filteredHealth = healthFilter === "all" ? data.healthProviders : data.healthProviders.filter((h) => h.type === healthFilter);
   const filteredChurches = churchFilter === "all" ? data.churches : data.churches.filter((c) => c.denomination === churchFilter);
+  const filteredApps = appsFilter === "all" ? (data.apps || []) : (data.apps || []).filter((a) => a.category === appsFilter);
   const filteredExplore = exploreFilter === "all" ? (data.explore || []) : (data.explore || []).filter((p) => p.type === exploreFilter);
+
+  // Sort apps: essentials first, then by name
+  const sortedApps = [...filteredApps].sort((a, b) => {
+    const aEss = a.priority === "essential" ? 0 : 1;
+    const bEss = b.priority === "essential" ? 0 : 1;
+    if (aEss !== bEss) return aEss - bEss;
+    return a.name.localeCompare(b.name);
+  });
 
   // Badge style
   const badge = { fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12, whiteSpace: "nowrap", flexShrink: 0 };
@@ -952,6 +989,7 @@ function LocalView({ data }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
         <Pill active={sub === "health"} onClick={() => setSub("health")}>Health Providers</Pill>
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
+        <Pill active={sub === "apps"} onClick={() => setSub("apps")}>Apps</Pill>
         <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Exploring BA</Pill>
       </div>
 
@@ -1023,6 +1061,68 @@ function LocalView({ data }) {
         </div>
       )}
 
+      {sub === "apps" && (
+        <div>
+          {appsCategories.length > 1 && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+              <FilterPill active={appsFilter === "all"} onClick={() => setAppsFilter("all")}>All</FilterPill>
+              {appsCategories.map((c) => (
+                <FilterPill key={c} active={appsFilter === c} onClick={() => setAppsFilter(c)}>{c}</FilterPill>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {sortedApps.map((a, i) => {
+              const isEssential = a.priority === "essential";
+              return (
+                <Card key={i} bg={isEssential ? C.ice : undefined}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
+                    <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>
+                      {isEssential && <span style={{ color: C.pepOrange, marginRight: 6 }}>●</span>}
+                      {a.name}
+                    </span>
+                    {a.category && <span style={badge}>{a.category}</span>}
+                  </div>
+                  {a.description && (
+                    <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                      {a.description}
+                    </div>
+                  )}
+                  {(a.ios_url || a.android_url || a.web_url) && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                      {a.ios_url && (
+                        <a href={a.ios_url} target="_blank" rel="noopener noreferrer" style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                          textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                          background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
+                        }}>📱 iOS</a>
+                      )}
+                      {a.android_url && (
+                        <a href={a.android_url} target="_blank" rel="noopener noreferrer" style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                          textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                          background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
+                        }}>🤖 Android</a>
+                      )}
+                      {a.web_url && !a.ios_url && !a.android_url && (
+                        <a href={a.web_url} target="_blank" rel="noopener noreferrer" style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                          textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                          background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
+                        }}>🌐 Website</a>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {sub === "explore" && (
         <div>
           {exploreTypes.length > 1 && (
@@ -1056,12 +1156,12 @@ function LocalView({ data }) {
   );
 }
 
-// ─── Policies ───
-function PoliciesView({ data }) {
+// ─── FAQ ───
+function FaqView({ data }) {
   const [open, setOpen] = useState(null);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {data.policies.map((p, i) => (
+      {data.faq.map((p, i) => (
         <div key={i} style={{ background: C.white, borderRadius: 10, border: `1px solid ${C.fog}`, overflow: "hidden" }}>
           <button onClick={() => setOpen(open === i ? null : i)} style={{
             width: "100%", padding: "14px 16px", border: "none", background: "transparent",
@@ -1226,7 +1326,7 @@ const icons = {
   schedule: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   calendar: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,
   local: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-  policies: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  faq: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
   contacts: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>,
 };
 
@@ -1234,7 +1334,7 @@ const TABS = [
   { key: "schedule", label: "Schedule", icon: icons.schedule },
   { key: "calendar", label: "Calendar", icon: icons.calendar },
   { key: "local",    label: "Local",    icon: icons.local },
-  { key: "policies", label: "Policies", icon: icons.policies },
+  { key: "faq",      label: "FAQ",      icon: icons.faq },
   { key: "contacts", label: "Contacts", icon: icons.contacts },
 ];
 
@@ -1309,13 +1409,13 @@ export default function App() {
               {tab === "schedule" && "Program Schedule"}
               {tab === "calendar" && "Semester Calendar"}
               {tab === "local" && "Local Resources"}
-              {tab === "policies" && "Policies & Travel"}
+              {tab === "faq" && "Frequently Asked Questions"}
               {tab === "contacts" && "Contacts"}
             </div>
             {tab === "schedule" && <ScheduleView data={data} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
-            {tab === "policies" && <PoliciesView data={data} />}
+            {tab === "faq" && <FaqView data={data} />}
             {tab === "contacts" && <ContactsView data={data} />}
           </>
         )}
