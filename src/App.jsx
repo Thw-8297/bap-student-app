@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-18 — FAQ rename, Apps sub-tab, Local pill labels (Healthcare, Explore BA)";
+const BUILD_VERSION = "2026-04-25 — Stale-while-revalidate localStorage cache; faster repeat loads";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -233,6 +233,42 @@ async function fetchAllData() {
       priority: r.priority ? r.priority.trim().toLowerCase() : "",
     })),
   };
+}
+
+// ============================================================
+// LOCAL CACHE — Stale-while-revalidate
+// Renders cached data instantly on repeat opens, then refreshes
+// in the background. Drops perceived load time to ~zero.
+// Bump CACHE_VERSION whenever the data shape changes so old
+// caches are ignored instead of crashing the app.
+// ============================================================
+
+const CACHE_KEY = "bap-app-cache";
+const CACHE_VERSION = 1;
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.version !== CACHE_VERSION) return null;
+    if (!parsed.data) return null;
+    return { data: parsed.data, timestamp: parsed.timestamp || 0 };
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveCache(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      version: CACHE_VERSION,
+      data,
+      timestamp: Date.now(),
+    }));
+  } catch (e) {
+    // Quota exceeded or storage disabled; silently skip
+  }
 }
 
 // ============================================================
@@ -1344,8 +1380,19 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState("schedule");
-  const [data, setData] = useState(DEFAULT_DATA);
-  const [status, setStatus] = useState(SHEET_ID ? "loading" : "default");
+
+  // Lazy-init from localStorage cache so repeat opens render instantly.
+  // First-ever open (no cache) falls through to "loading"; if SHEET_ID
+  // is empty we treat the build as preview/default mode.
+  const [data, setData] = useState(() => {
+    if (!SHEET_ID) return DEFAULT_DATA;
+    const cached = loadCache();
+    return cached ? cached.data : DEFAULT_DATA;
+  });
+  const [status, setStatus] = useState(() => {
+    if (!SHEET_ID) return "default";
+    return loadCache() ? "refreshing" : "loading";
+  });
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -1356,16 +1403,29 @@ export default function App() {
 
   useEffect(() => {
     if (!SHEET_ID) return;
-    setStatus("loading");
     fetchAllData()
-      .then((d) => { setData(d); setStatus("live"); })
-      .catch((err) => { console.error("Sheet fetch failed:", err); setStatus("fallback"); });
+      .then((d) => {
+        setData(d);
+        setStatus("live");
+        saveCache(d);
+      })
+      .catch((err) => {
+        console.error("Sheet fetch failed:", err);
+        // If we were already showing cached data, keep it on screen.
+        // Otherwise drop to the hardcoded defaults.
+        setStatus((prev) => (prev === "refreshing" ? "cached" : "fallback"));
+      });
   }, []);
 
   const statusLabel = status === "live" ? "Synced"
+    : status === "refreshing" ? "Refreshing..."
     : status === "loading" ? "Loading..."
+    : status === "cached" ? "Saved version (offline)"
     : status === "fallback" ? "Using saved data (sheet unavailable)"
     : "Preview mode";
+
+  // Treat "live" and "refreshing" as the healthy/synced visual state
+  const isHealthy = status === "live" || status === "refreshing";
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.parchment, display: "flex", flexDirection: "column" }}>
@@ -1388,8 +1448,8 @@ export default function App() {
               <span style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.fog }}>{data.semester}</span>
               <span style={{
                 fontFamily: "'DM Mono', monospace", fontSize: 10, padding: "2px 8px", borderRadius: 10,
-                background: status === "live" ? "rgba(100,181,246,0.25)" : "rgba(255,255,255,0.15)",
-                color: status === "live" ? "#E3F2FD" : "rgba(255,255,255,0.6)",
+                background: isHealthy ? "rgba(100,181,246,0.25)" : "rgba(255,255,255,0.15)",
+                color: isHealthy ? "#E3F2FD" : "rgba(255,255,255,0.6)",
               }}>{statusLabel}</span>
             </div>
           </div>
