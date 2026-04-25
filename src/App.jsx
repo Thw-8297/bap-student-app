@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-25 — Medium moves: Today hero in Weekly Overview; per-tab color identity in bottom nav with sliding pill and active-icon lift; Southern Cross constellation in header; Apps view grouped by transport vs daily life with section-divider glyphs and dot-grid pattern fill; mini-illustration library (sun, colectivo, obelisco, tango, palm, río wave, southern cross) added alongside the existing mate gourd";
+const BUILD_VERSION = "2026-04-25 — Today dashboard added as new default tab (Today / Hoy). Time-of-day greeting strip with rotating sun (day) or crescent moon (night) glyph and Spanish date in italic EB Garamond. Quick-stats row with live weather (Open-Meteo, no key required) and dólar blue rate (dolarapi.com); both cached locally with a 30-minute TTL. Live 'Próximo en X min' countdown that auto-updates every minute. Rotating tip card pulling from the Tips sheet. Whimsical '¡Día libre!' empty state with a steaming mate gourd and an 'Explorar BA' shortcut to Local > Explore. TodayHero removed from Weekly Overview; six-tab nav (Today, Schedule, Calendar, Local, FAQ, Contacts) with Today taking BAP Blue and Local shifted to Sky. CACHE_VERSION stays at 2; weather/dólar use a separate localStorage entry";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -450,6 +450,7 @@ function compactSchedule(days, timeStr) {
 // English headline anchors the page; the gloss adds bicultural
 // character without doubling the cognitive load.
 const TAB_TITLES = {
+  today:    { en: "Today",                       es: "Hoy" },
   schedule: { en: "Program Schedule",            es: "Cronograma" },
   calendar: { en: "Semester Calendar",           es: "Calendario" },
   local:    { en: "Local Resources",             es: "Buenos Aires" },
@@ -575,6 +576,131 @@ function RioWaveIcon({ size = 36 }) {
   );
 }
 
+// Crescent moon for the Today greeting strip after sunset. Companion
+// to SunIcon; same 64×64 viewBox so the two swap cleanly without
+// layout shift. A few stars added at low opacity for character.
+function MoonIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M44 12 Q26 16 22 32 Q22 48 38 52 Q26 54 18 46 Q10 38 12 26 Q14 14 28 10 Q36 8 44 12 Z"
+            fill={C.bapBlue} stroke={C.fog} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="50" cy="20" r="1.2" fill={C.fog} opacity="0.8" />
+      <circle cx="54" cy="36" r="0.9" fill={C.fog} opacity="0.6" />
+      <circle cx="46" cy="48" r="0.9" fill={C.fog} opacity="0.6" />
+    </svg>
+  );
+}
+
+// Compact weather glyph for the Today quick-stats tile. Picks one of
+// six states from the Open-Meteo weather_code plus is_day. Kept small
+// (28–32 px) and palette-aligned so it sits beside the temp without
+// overpowering the tile.
+function WeatherIcon({ code = 0, isDay = true, size = 30 }) {
+  // Map WMO weather codes to a small set of states.
+  // 0 = clear, 1/2 = mainly clear / partly cloudy, 3 = overcast,
+  // 45/48 = fog, 51/53/55 = drizzle, 61/63/65 = rain,
+  // 80/81/82 = rain showers, 71/73/75/77 = snow, 95/96/99 = thunder.
+  let state = "clear";
+  if (code === 0) state = isDay ? "clear" : "clearNight";
+  else if (code === 1 || code === 2) state = isDay ? "partly" : "partlyNight";
+  else if (code === 3 || code === 45 || code === 48) state = "cloudy";
+  else if ((code >= 51 && code <= 55) || (code >= 61 && code <= 65) || (code >= 80 && code <= 82)) state = "rain";
+  else if (code >= 71 && code <= 77) state = "snow";
+  else if (code >= 95 && code <= 99) state = "thunder";
+
+  const stroke = C.pepBlue;
+  const fill = C.bapBlue;
+  const cloudPath = "M14 38 Q14 30 22 30 Q24 22 32 22 Q42 22 44 30 Q52 30 52 38 Q52 44 46 44 L20 44 Q14 44 14 38 Z";
+
+  if (state === "clear") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="32" cy="32" r="11" fill={fill} stroke={stroke} strokeWidth="2" />
+        <g stroke={stroke} strokeWidth="2.5" strokeLinecap="round">
+          <line x1="32" y1="6"  x2="32" y2="14" />
+          <line x1="32" y1="50" x2="32" y2="58" />
+          <line x1="6"  y1="32" x2="14" y2="32" />
+          <line x1="50" y1="32" x2="58" y2="32" />
+          <line x1="13" y1="13" x2="19" y2="19" />
+          <line x1="45" y1="45" x2="51" y2="51" />
+          <line x1="51" y1="13" x2="45" y2="19" />
+          <line x1="19" y1="45" x2="13" y2="51" />
+        </g>
+      </svg>
+    );
+  }
+  if (state === "clearNight") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M44 12 Q26 16 22 32 Q22 48 38 52 Q26 54 18 46 Q10 38 12 26 Q14 14 28 10 Q36 8 44 12 Z"
+              fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (state === "partly") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="22" cy="22" r="9" fill={C.parchment} stroke={stroke} strokeWidth="2" />
+        <g stroke={stroke} strokeWidth="2" strokeLinecap="round">
+          <line x1="22" y1="6"  x2="22" y2="10" />
+          <line x1="6"  y1="22" x2="10" y2="22" />
+          <line x1="11" y1="11" x2="14" y2="14" />
+          <line x1="33" y1="11" x2="30" y2="14" />
+        </g>
+        <path d={cloudPath} fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (state === "partlyNight") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M28 8 Q18 11 16 21 Q16 31 26 33 Q19 33 14 28 Q9 23 11 16 Q14 9 22 7 Q26 6 28 8 Z"
+              fill={C.parchment} stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" />
+        <path d={cloudPath} fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (state === "cloudy") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d={cloudPath} fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+        <path d="M8 50 Q14 46 22 50 Q30 54 38 50 Q46 46 56 50" stroke={stroke} strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5" />
+      </svg>
+    );
+  }
+  if (state === "rain") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d={cloudPath} fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+        <g stroke={C.ocean} strokeWidth="2.5" strokeLinecap="round">
+          <line x1="22" y1="48" x2="20" y2="56" />
+          <line x1="32" y1="48" x2="30" y2="56" />
+          <line x1="42" y1="48" x2="40" y2="56" />
+        </g>
+      </svg>
+    );
+  }
+  if (state === "snow") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d={cloudPath} fill={fill} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+        <g fill={C.fog}>
+          <circle cx="22" cy="52" r="2" />
+          <circle cx="32" cy="54" r="2" />
+          <circle cx="42" cy="52" r="2" />
+        </g>
+      </svg>
+    );
+  }
+  // thunder
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d={cloudPath} fill={C.mountain} stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
+      <path d="M30 46 L24 56 L30 56 L26 62 L40 50 L34 50 L38 46 Z" fill={C.pepOrange} stroke={C.pepOrange} strokeWidth="1" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // Header decoration. Five-star Southern Cross constellation positioned
 // in the top-right corner of the app header. Replaces the previous
 // faint circle. Faint lines connect the stars to suggest the cross.
@@ -608,18 +734,134 @@ function formatSpanishDate(d) {
   return `${wdCap}, ${day} de ${month}`;
 }
 
-// Today hero card for the Weekly Overview. A glance-able anchor for
-// "what's happening today": today's classes (from data.classes filtered
-// to today's day-of-week) plus today's calendar events (excluding
-// semester-only items). Empty days fall back to a mate-gourd "¡Día
-// libre!" treatment that visually rhymes with the EmptyDay card below.
-function TodayHero({ data }) {
+// ─── Today dashboard helpers ───
+//
+// The Today tab is the app's daily-open hook: greeting strip with a
+// time-of-day gradient, weather + dólar blue tiles, today's activity
+// list with a live "Próximo" countdown, active announcements, and a
+// rotating tip. All rendered from a single TodayView component using
+// the helpers below.
+
+// Greeting picker. Argentine convention: buen día through late
+// morning, buenas tardes through evening, buenas noches at night.
+function getGreeting(hour) {
+  if (hour >= 5 && hour < 12) return { en: "Good morning", es: "Buen día" };
+  if (hour >= 12 && hour < 19) return { en: "Good afternoon", es: "Buenas tardes" };
+  return { en: "Good evening", es: "Buenas noches" };
+}
+
+// Time-of-day gradient for the greeting strip. Stays inside the BAP
+// palette (BAP Blue, Sky, Ocean, Pep Blue) and shifts subtly across
+// the day so the strip feels alive without breaking brand.
+function getGreetingGradient(hour) {
+  if (hour >= 5 && hour < 9)   return `linear-gradient(135deg, #6CACE4 0%, #64B5F6 60%, #B9D9EB 100%)`; // dawn
+  if (hour >= 9 && hour < 17)  return `linear-gradient(135deg, #64B5F6 0%, #6CACE4 50%, #0057B8 100%)`; // day
+  if (hour >= 17 && hour < 20) return `linear-gradient(135deg, #0057B8 0%, #00205B 100%)`;              // dusk
+  return `linear-gradient(135deg, #00205B 0%, #0a1635 100%)`;                                            // night
+}
+
+// Dress hint based on temperature and weather code. Bilingual,
+// short, glanceable. Argentine °C; never longer than the temp itself.
+function getDressHint(temp, code) {
+  if (typeof temp !== "number") return "";
+  const isThunder = code >= 95 && code <= 99;
+  const isRain = (code >= 51 && code <= 65) || (code >= 80 && code <= 82);
+  const isSnow = code >= 71 && code <= 77;
+  if (isThunder) return "Quedate adentro / Stay inside";
+  let base;
+  if (temp < 5)       base = "Mucho abrigo / Heavy coat";
+  else if (temp < 13) base = "Abrigo y bufanda / Coat & scarf";
+  else if (temp < 18) base = "Un sweater / A sweater";
+  else if (temp < 23) base = "Algo liviano / Something light";
+  else if (temp < 29) base = "Manga corta / Short sleeves";
+  else                base = "¡A la pileta! / Beach weather";
+  if (isSnow) return base + " · ❄";
+  if (isRain) return base + " · paraguas";
+  return base;
+}
+
+// Format the dólar blue rate with Spanish-locale thousand separators.
+function formatPesos(n) {
+  if (typeof n !== "number") return "—";
+  return "$" + Math.round(n).toLocaleString("es-AR");
+}
+
+// Live "in X min" / "in X h Ym" countdown to a target minutes-since-
+// midnight. Returns null if the target is in the past or unparseable.
+function formatCountdown(targetMin, nowMin) {
+  if (typeof targetMin !== "number" || typeof nowMin !== "number") return null;
+  const delta = targetMin - nowMin;
+  if (delta <= 0) return null;
+  if (delta < 60) return `en ${delta} min`;
+  const h = Math.floor(delta / 60);
+  const m = delta % 60;
+  return m === 0 ? `en ${h} h` : `en ${h} h ${m} min`;
+}
+
+// Today's quick-data cache. Separate from the main sheet cache because
+// these values turn over much faster (every 30 minutes) and are
+// fetched from different APIs. Errors are swallowed silently so a
+// failed weather call never blocks dólar, and vice versa.
+const TODAY_CACHE_KEY = "bap-today-cache";
+const TODAY_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function loadTodayCache() {
+  try {
+    const raw = localStorage.getItem(TODAY_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveTodayCache(payload) {
+  try {
+    localStorage.setItem(TODAY_CACHE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // Quota or storage disabled; silently skip
+  }
+}
+
+// Buenos Aires coordinates for the Open-Meteo weather call.
+const BA_LAT = -34.6037;
+const BA_LON = -58.3816;
+
+async function fetchWeather() {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${BA_LAT}&longitude=${BA_LON}&current=temperature_2m,weather_code,is_day&timezone=America/Argentina/Buenos_Aires`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Weather fetch failed");
+  const j = await res.json();
+  const c = j.current || {};
+  return {
+    temp: typeof c.temperature_2m === "number" ? c.temperature_2m : null,
+    code: typeof c.weather_code === "number" ? c.weather_code : 0,
+    isDay: c.is_day === 1 || c.is_day === true,
+    ts: Date.now(),
+  };
+}
+
+async function fetchDolarBlue() {
+  const res = await fetch("https://dolarapi.com/v1/dolares/blue");
+  if (!res.ok) throw new Error("Dólar fetch failed");
+  const j = await res.json();
+  return {
+    venta: typeof j.venta === "number" ? j.venta : null,
+    compra: typeof j.compra === "number" ? j.compra : null,
+    ts: Date.now(),
+  };
+}
+
+// Compute today's items: classes scheduled for today's day-of-week
+// plus calendar events that overlap today (excluding semester-only).
+// Sorted by start time; untimed items first.
+function getTodayItems(data) {
   const today = new Date();
   const todayDow = WEEK_DAYS_SHORT[today.getDay()];
   today.setHours(12, 0, 0, 0);
   const todayStr = toDateStr(today);
 
-  // Today's classes for this day-of-week
   const todayClasses = (data.classes || [])
     .filter((c) => c.days && c.days.includes(todayDow))
     .map((c) => ({
@@ -628,9 +870,9 @@ function TodayHero({ data }) {
       code: c.code,
       time: getTimeForDay(c.time, todayDow),
       sortMin: toMinutes(getTimeForDay(c.time, todayDow)),
+      location: c.location,
     }));
 
-  // Today's calendar events (exclude semester-only items)
   const todayEvents = (data.calendarEvents || [])
     .filter((e) => e.visibility !== "semester")
     .filter((e) => eventOverlaps(e, todayStr, todayStr))
@@ -642,121 +884,337 @@ function TodayHero({ data }) {
         ? (e.end_time ? `${e.start_time}–${e.end_time}` : e.start_time)
         : "",
       sortMin: toMinutes(e.start_time),
+      location: "",
     }));
 
-  // Combine and sort: untimed first, then by minutes-since-midnight
-  const items = [...todayClasses, ...todayEvents].sort((a, b) => {
+  return [...todayClasses, ...todayEvents].sort((a, b) => {
     if (a.sortMin === null && b.sortMin === null) return 0;
     if (a.sortMin === null) return -1;
     if (b.sortMin === null) return 1;
     return a.sortMin - b.sortMin;
   });
+}
 
-  // "Next" item: first timed item that hasn't started yet
-  const now = new Date();
+// ─── Today View ───
+function TodayView({ data, onJumpToTab }) {
+  // Clock tick. Updates every minute so the Próximo countdown stays
+  // accurate and the greeting/gradient shifts as the day progresses.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Weather + dólar with a 30-minute localStorage TTL. Lazy-init from
+  // cache so the tiles render instantly on repeat opens; refresh in
+  // the background whenever the cached value is missing or stale.
+  const cached = loadTodayCache();
+  const [weather, setWeather] = useState(cached.weather || null);
+  const [dolar, setDolar] = useState(cached.dolar || null);
+
+  useEffect(() => {
+    const c = loadTodayCache();
+    const fresh = (entry) => entry && entry.ts && (Date.now() - entry.ts < TODAY_CACHE_TTL);
+
+    let nextCache = { ...c };
+
+    if (!fresh(c.weather)) {
+      fetchWeather()
+        .then((w) => {
+          setWeather(w);
+          nextCache = { ...nextCache, weather: w };
+          saveTodayCache(nextCache);
+        })
+        .catch(() => { /* keep cached or null */ });
+    }
+    if (!fresh(c.dolar)) {
+      fetchDolarBlue()
+        .then((d) => {
+          setDolar(d);
+          nextCache = { ...nextCache, dolar: d };
+          saveTodayCache(nextCache);
+        })
+        .catch(() => { /* keep cached or null */ });
+    }
+  }, []);
+
+  const hour = now.getHours();
+  const greeting = getGreeting(hour);
+  const gradient = getGreetingGradient(hour);
+  const isDayHour = hour >= 6 && hour < 19;
+  const dateLabel = formatSpanishDate(now);
+
+  const items = getTodayItems(data);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nextItem = items.find((i) => i.sortMin !== null && i.sortMin > nowMin);
+  const countdown = nextItem ? formatCountdown(nextItem.sortMin, nowMin) : null;
 
-  const dateLabel = formatSpanishDate(today);
-  const summary = items.length === 0
-    ? "Día libre"
-    : items.length === 1 ? "1 actividad hoy" : `${items.length} actividades hoy`;
+  // Tip rotator. Picks from the Tips sheet (or falls back to a small
+  // built-in set), rotating every 7 seconds with a soft fade.
+  const tipList = (data.tips && data.tips.length > 0) ? data.tips : FALLBACK_TIPS;
+  const [tipIdx, setTipIdx] = useState(() => Math.floor(Math.random() * tipList.length));
+  const [tipFading, setTipFading] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTipFading(true);
+      setTimeout(() => {
+        setTipIdx((i) => (i + 1) % tipList.length);
+        setTipFading(false);
+      }, 320);
+    }, 7000);
+    return () => clearInterval(id);
+  }, [tipList.length]);
+  const tip = tipList[tipIdx] || tipList[0];
 
-  // Empty state: weekend, holiday, or no scheduled activity
-  if (items.length === 0) {
-    return (
-      <div style={{
-        background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
-        color: "#FFFFFF", borderRadius: 16, padding: "18px 18px 16px",
-        marginBottom: 18, position: "relative", overflow: "hidden",
-        boxShadow: "0 4px 16px rgba(0, 32, 91, 0.18)",
-      }}>
-        <div style={{ position: "absolute", top: -16, right: -16, opacity: 0.2, transform: "scale(1.6)" }}>
-          <SunIcon size={64} />
-        </div>
-        <div style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
-          letterSpacing: 2, color: C.bapBlue, marginBottom: 4,
-        }}>Hoy / Today</div>
-        <div style={{
-          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-          fontSize: 22, fontWeight: 700, lineHeight: 1.1, letterSpacing: -0.3,
-        }}>{dateLabel}</div>
-        <div style={{
-          fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.fog,
-          marginTop: 10, display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <MateGourdIcon size={28} />
-          <span><em style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15 }}>¡Día libre!</em>{" "}Nada en agenda hoy.</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
+  // ── Greeting strip ──
+  const greetingStrip = (
     <div style={{
-      background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
-      color: "#FFFFFF", borderRadius: 16, padding: "18px 18px 16px",
-      marginBottom: 18, position: "relative", overflow: "hidden",
-      boxShadow: "0 4px 16px rgba(0, 32, 91, 0.18)",
+      background: gradient, color: "#FFFFFF", borderRadius: 16,
+      padding: "20px 20px 18px", marginBottom: 14, position: "relative",
+      overflow: "hidden", boxShadow: "0 4px 16px rgba(0, 32, 91, 0.18)",
     }}>
-      <div style={{ position: "absolute", top: -16, right: -16, opacity: 0.2, transform: "scale(1.6)" }}>
-        <SunIcon size={64} />
+      <div className={isDayHour ? "bap-sun-rotate" : ""} style={{
+        position: "absolute", top: -10, right: -10, opacity: 0.22,
+        transform: "scale(1.7)", transformOrigin: "center",
+      }}>
+        {isDayHour ? <SunIcon size={64} /> : <MoonIcon size={64} />}
       </div>
       <div style={{
         fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
         letterSpacing: 2, color: C.bapBlue, marginBottom: 4,
-        display: "flex", alignItems: "center", gap: 8,
-      }}>
-        <span>Hoy / Today</span>
-        <span style={{ flex: 1, height: 1, background: "rgba(100, 181, 246, 0.3)" }} />
-      </div>
+      }}>Hoy / Today</div>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontSize: 26, fontWeight: 700,
+        lineHeight: 1.05, letterSpacing: -0.4,
+      }}>{greeting.es}</div>
       <div style={{
         fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-        fontSize: 22, fontWeight: 700, lineHeight: 1.1, letterSpacing: -0.3,
+        fontSize: 16, color: C.fog, marginTop: 4,
       }}>{dateLabel}</div>
-      <div style={{
-        fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.fog,
-        marginTop: 2, marginBottom: 12,
-      }}>{summary}</div>
-      <div>
-        {items.map((item, i) => (
-          <div key={i} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "baseline",
-            padding: "7px 0",
-            borderTop: `1px solid rgba(100, 181, 246, ${i === 0 ? 0.3 : 0.18})`,
-          }}>
-            <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13.5, fontWeight: 500 }}>
-              {item.code && (
-                <span style={{
-                  fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                  color: C.bapBlue, marginRight: 6, letterSpacing: 0.5,
-                }}>{item.code}</span>
-              )}
-              {item.title}
-            </div>
-            {item.time && (
-              <div style={{
-                fontFamily: "'DM Mono', monospace", fontSize: 11,
-                color: "rgba(255, 255, 255, 0.85)", whiteSpace: "nowrap", marginLeft: 10,
-              }}>{item.time}</div>
-            )}
-          </div>
-        ))}
-      </div>
-      {nextItem && (
+    </div>
+  );
+
+  // ── Quick-stats row ──
+  const statTile = (children, key) => (
+    <div key={key} className="bap-press" style={{
+      flex: 1, background: C.white, border: `1px solid ${C.fog}`,
+      borderRadius: 12, padding: "12px 14px", minWidth: 0,
+    }}>{children}</div>
+  );
+
+  const weatherTile = statTile(
+    weather ? (
+      <>
         <div style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          fontFamily: "'DM Mono', monospace", fontSize: 10,
-          textTransform: "uppercase", letterSpacing: 1.2,
-          background: "rgba(255, 255, 255, 0.15)",
-          padding: "4px 10px", borderRadius: 10, marginTop: 10,
-          color: C.bapBlue,
-        }}>
-          <span className="bap-pulse-dot" aria-hidden="true" />
-          Próximo: {nextItem.code || nextItem.title}{nextItem.time ? ` · ${nextItem.time.split("–")[0]}` : ""}
+          fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
+        }}>Buenos Aires</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <WeatherIcon code={weather.code} isDay={weather.isDay} size={32} />
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 700,
+            color: C.pepBlue, lineHeight: 1,
+          }}>{weather.temp !== null ? Math.round(weather.temp) + "°" : "—"}</div>
         </div>
-      )}
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.mountain,
+          marginTop: 6, lineHeight: 1.3,
+        }}>{getDressHint(weather.temp, weather.code)}</div>
+      </>
+    ) : (
+      <>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
+        }}>Buenos Aires</div>
+        <div style={{ height: 32, display: "flex", alignItems: "center", color: C.stone, fontSize: 12 }}>—</div>
+      </>
+    ),
+    "weather",
+  );
+
+  const dolarTile = statTile(
+    dolar && dolar.venta ? (
+      <>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
+        }}>Dólar blue</div>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 700,
+          color: C.pepBlue, lineHeight: 1,
+        }}>{formatPesos(dolar.venta)}</div>
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.mountain,
+          marginTop: 6, lineHeight: 1.3,
+        }}>
+          venta · compra {dolar.compra ? formatPesos(dolar.compra) : "—"}
+        </div>
+      </>
+    ) : (
+      <>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
+        }}>Dólar blue</div>
+        <div style={{ height: 32, display: "flex", alignItems: "center", color: C.stone, fontSize: 12 }}>—</div>
+      </>
+    ),
+    "dolar",
+  );
+
+  // ── Today's activity (or empty state) ──
+  let activityCard;
+  if (items.length === 0) {
+    activityCard = (
+      <div style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+        padding: "18px 18px 16px", marginBottom: 14, position: "relative",
+        overflow: "hidden",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            {/* Faint steam wisps rising from the gourd */}
+            <div className="bap-steam" style={{
+              position: "absolute", top: -10, left: 14, width: 2, height: 12,
+              borderRadius: 2, background: C.fog, opacity: 0,
+            }} />
+            <div className="bap-steam delayed" style={{
+              position: "absolute", top: -10, left: 22, width: 2, height: 12,
+              borderRadius: 2, background: C.fog, opacity: 0,
+            }} />
+            <MateGourdIcon size={48} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: "'EB Garamond', serif", fontSize: 22, fontWeight: 700,
+              fontStyle: "italic", color: C.pepBlue, lineHeight: 1.1,
+            }}>¡Día libre!</div>
+            <div style={{
+              fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain,
+              marginTop: 4, lineHeight: 1.4,
+            }}>Nada en agenda hoy. Date una vuelta; Buenos Aires te espera.</div>
+          </div>
+        </div>
+        {onJumpToTab && (
+          <button
+            onClick={() => onJumpToTab("local")}
+            className="bap-press"
+            style={{
+              marginTop: 14, background: C.ice, color: C.ocean,
+              border: `1px solid ${C.fog}`, borderRadius: 10,
+              padding: "9px 14px", cursor: "pointer", width: "100%",
+              fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 500,
+              textTransform: "uppercase", letterSpacing: 1.2,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            Explorar BA <span aria-hidden="true">→</span>
+          </button>
+        )}
+      </div>
+    );
+  } else {
+    activityCard = (
+      <div style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+        padding: "14px 16px 12px", marginBottom: 14,
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: 10,
+        }}>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.ocean,
+          }}>Agenda</div>
+          {countdown && nextItem && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              fontFamily: "'DM Mono', monospace", fontSize: 10,
+              textTransform: "uppercase", letterSpacing: 1.2,
+              background: C.ice, color: C.ocean,
+              padding: "4px 10px", borderRadius: 10,
+            }}>
+              <span className="bap-pulse-dot" aria-hidden="true" />
+              Próximo {countdown}
+            </div>
+          )}
+        </div>
+        {items.map((item, i) => {
+          const isNext = nextItem && nextItem === item;
+          return (
+            <div key={i} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
+              padding: "9px 0",
+              borderTop: i === 0 ? "none" : `1px solid ${C.fog}`,
+              opacity: item.sortMin !== null && item.sortMin <= nowMin ? 0.55 : 1,
+            }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{
+                  fontFamily: "'Roboto', sans-serif", fontSize: 14,
+                  fontWeight: isNext ? 700 : 500, color: C.pepBlack,
+                  lineHeight: 1.3,
+                }}>
+                  {item.code && (
+                    <span style={{
+                      fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                      color: C.ocean, marginRight: 6, letterSpacing: 0.5,
+                    }}>{item.code}</span>
+                  )}
+                  {item.title}
+                </div>
+                {item.location && (
+                  <div style={{
+                    fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
+                    color: C.stone, marginTop: 2,
+                  }}>{item.location}</div>
+                )}
+              </div>
+              {item.time && (
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 11,
+                  color: isNext ? C.ocean : C.stone, fontWeight: isNext ? 700 : 400,
+                  whiteSpace: "nowrap", marginLeft: 12,
+                }}>{item.time}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Tip card ──
+  const tipCard = (
+    <div style={{
+      background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+      padding: "14px 16px",
+    }}>
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 9.5, color: C.ocean,
+        textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 6,
+        display: "flex", alignItems: "center", gap: 6,
+      }}>
+        <span>¿Sabías que…?</span>
+      </div>
+      <div className={`bap-tip-text${tipFading ? " fading" : ""}`} style={{
+        fontFamily: "'Roboto', sans-serif", fontSize: 13.5, lineHeight: 1.5,
+        color: C.pepBlack, minHeight: 40,
+      }}>{renderTip(tip.text)}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      {greetingStrip}
+      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+        {weatherTile}
+        {dolarTile}
+      </div>
+      <AnnouncementBanner announcements={data.announcements} />
+      {activityCard}
+      {tipCard}
     </div>
   );
 }
@@ -1064,9 +1522,6 @@ function WeeklyOverviewView({ data }) {
 
   return (
     <div>
-      {/* Today hero — anchors the page on what's happening right now */}
-      <TodayHero data={data} />
-
       {/* Week navigation */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <button onClick={() => setWeekOffset((o) => o - 1)} style={{
@@ -1101,9 +1556,6 @@ function WeeklyOverviewView({ data }) {
           ↓ TODAY
         </button>
       )}
-
-      {/* Announcement banner — only renders when active announcements exist */}
-      <AnnouncementBanner announcements={data.announcements} />
 
       {/* Days */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1893,6 +2345,7 @@ function ContactsView({ data }) {
 
 // ─── Nav Icons ───
 const icons = {
+  today: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
   schedule: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   calendar: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,
   local: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
@@ -1901,9 +2354,10 @@ const icons = {
 };
 
 const TABS = [
+  { key: "today",    label: "Today",    icon: icons.today,    color: C.bapBlue },
   { key: "schedule", label: "Schedule", icon: icons.schedule, color: C.pepBlue },
   { key: "calendar", label: "Calendar", icon: icons.calendar, color: C.ocean },
-  { key: "local",    label: "Local",    icon: icons.local,    color: C.bapBlue },
+  { key: "local",    label: "Local",    icon: icons.local,    color: C.sky },
   { key: "faq",      label: "FAQ",      icon: icons.faq,      color: C.mountain },
   { key: "contacts", label: "Contacts", icon: icons.contacts, color: C.pepOrange },
 ];
@@ -1913,7 +2367,7 @@ const TABS = [
 // ============================================================
 
 export default function App() {
-  const [tab, setTab] = useState("schedule");
+  const [tab, setTab] = useState("today");
 
   // Bottom-nav pill positioning. The pill slides under whichever tab is
   // active; its color adopts the active tab's color identity. We measure
@@ -1922,7 +2376,7 @@ export default function App() {
   // re-render of the whole component tree.
   const navRef = useRef(null);
   const navBtnRefs = useRef({});
-  const [pillTransform, setPillTransform] = useState({ x: 0, color: C.pepBlue });
+  const [pillTransform, setPillTransform] = useState({ x: 0, color: C.bapBlue });
 
   // Lazy-init from localStorage cache so repeat opens render instantly.
   // First-ever open (no cache) falls through to "loading"; if SHEET_ID
@@ -1956,6 +2410,12 @@ export default function App() {
           100% { box-shadow: 0 0 0 0 rgba(124, 252, 158, 0);     transform: scale(1); }
         }
         @keyframes bap-spin { to { transform: rotate(360deg); } }
+        @keyframes bap-sun-spin { to { transform: rotate(360deg); } }
+        @keyframes bap-steam {
+          0%   { opacity: 0; transform: translateY(0); }
+          50%  { opacity: 0.55; transform: translateY(-6px); }
+          100% { opacity: 0; transform: translateY(-12px); }
+        }
         .bap-pulse-dot {
           width: 6px; height: 6px; border-radius: 50%;
           background: #7CFC9E;
@@ -1964,6 +2424,14 @@ export default function App() {
           display: inline-block;
         }
         .bap-spin { animation: bap-spin 0.9s linear infinite; }
+        .bap-sun-rotate {
+          animation: bap-sun-spin 80s linear infinite;
+          transform-origin: center;
+        }
+        .bap-steam {
+          animation: bap-steam 3.5s ease-in-out infinite;
+        }
+        .bap-steam.delayed { animation-delay: 1.7s; }
         .bap-tip-text { transition: opacity 0.3s ease-in-out; }
         .bap-tip-text.fading { opacity: 0; }
         .bap-press {
@@ -2038,7 +2506,7 @@ export default function App() {
       const pillWidth = 44;
       const x = (btnRect.left - navRect.left) + (btnRect.width - pillWidth) / 2;
       const t = TABS.find((t) => t.key === tab);
-      setPillTransform({ x, color: t ? t.color : C.pepBlue });
+      setPillTransform({ x, color: t ? t.color : C.bapBlue });
     }
     requestAnimationFrame(positionPill);
     window.addEventListener("resize", positionPill);
@@ -2094,7 +2562,8 @@ export default function App() {
           <LoadingScreen tips={data.tips} />
         ) : (
           <>
-            <SectionTitle tabKey={tab} />
+            {tab !== "today" && <SectionTitle tabKey={tab} />}
+            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} />}
             {tab === "schedule" && <ScheduleView data={data} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
