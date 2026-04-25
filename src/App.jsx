@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-25 — Personality moves: editorial titles with Spanish gloss; pulsing 'Synced' dot; rotating loading tips (new Tips sheet tab); whimsical empty days in Weekly Overview; press feedback on cards";
+const BUILD_VERSION = "2026-04-25 — Medium moves: Today hero in Weekly Overview; per-tab color identity in bottom nav with sliding pill and active-icon lift; Southern Cross constellation in header; Apps view grouped by transport vs daily life with section-divider glyphs and dot-grid pattern fill; mini-illustration library (sun, colectivo, obelisco, tango, palm, río wave, southern cross) added alongside the existing mate gourd";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -490,6 +490,311 @@ function MateGourdIcon({ size = 36 }) {
   );
 }
 
+// ─── Mini-illustration library ───
+// Small inline SVGs in the BAP palette used as section decorations,
+// hero ornaments, and empty-state mascots. All 64×64 source, scale to
+// any size, no external dependencies.
+
+function SunIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="32" cy="32" r="11" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="2" />
+      <g stroke={C.pepBlue} strokeWidth="2.5" strokeLinecap="round">
+        <line x1="32" y1="6"  x2="32" y2="14" />
+        <line x1="32" y1="50" x2="32" y2="58" />
+        <line x1="6"  y1="32" x2="14" y2="32" />
+        <line x1="50" y1="32" x2="58" y2="32" />
+        <line x1="13" y1="13" x2="19" y2="19" />
+        <line x1="45" y1="45" x2="51" y2="51" />
+        <line x1="51" y1="13" x2="45" y2="19" />
+        <line x1="19" y1="45" x2="13" y2="51" />
+      </g>
+    </svg>
+  );
+}
+
+function ColectivoIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="6" y="18" width="52" height="28" rx="4" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="2" />
+      <rect x="10" y="22" width="14" height="10" rx="1.5" fill={C.ice} stroke={C.pepBlue} strokeWidth="1.5" />
+      <rect x="28" y="22" width="14" height="10" rx="1.5" fill={C.ice} stroke={C.pepBlue} strokeWidth="1.5" />
+      <rect x="46" y="22" width="8"  height="10" rx="1.5" fill={C.ice} stroke={C.pepBlue} strokeWidth="1.5" />
+      <rect x="6"  y="38" width="52" height="3" fill={C.pepBlue} />
+      <circle cx="17" cy="48" r="5" fill={C.mountain} stroke={C.pepBlue} strokeWidth="1.5" />
+      <circle cx="47" cy="48" r="5" fill={C.mountain} stroke={C.pepBlue} strokeWidth="1.5" />
+      <circle cx="17" cy="48" r="1.8" fill="#FFFFFF" />
+      <circle cx="47" cy="48" r="1.8" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+function ObeliscoIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M32 4 L36 50 L28 50 Z" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="2" strokeLinejoin="round" />
+      <line x1="32" y1="10" x2="32" y2="48" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" />
+      <rect x="24" y="50" width="16" height="6" rx="0.5" fill="#FFFFFF" stroke={C.pepBlue} strokeWidth="2" />
+      <rect x="20" y="56" width="24" height="4" rx="0.5" fill={C.mountain} stroke={C.pepBlue} strokeWidth="2" />
+    </svg>
+  );
+}
+
+function TangoShoeIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M8 40 Q8 36 12 36 L40 36 Q46 36 48 30 Q49 26 53 25 L53 32 Q53 38 47 41 Q44 43 40 43 L20 43 L20 48 Q20 52 16 52 L11 52 Q8 52 8 48 Z"
+            fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="2" strokeLinejoin="round" />
+      <line x1="48" y1="32" x2="48" y2="55" stroke={C.pepBlue} strokeWidth="3" strokeLinecap="round" />
+      <ellipse cx="48" cy="56" rx="5" ry="1.5" fill={C.pepBlue} />
+      <path d="M20 38 L36 38" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function PalmIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M30 22 Q28 38 26 56" stroke={C.mountain} strokeWidth="3" strokeLinecap="round" fill="none" />
+      <path d="M30 22 Q14 14 6 18 Q10 22 18 22 Q24 22 30 22 Z" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M30 22 Q46 12 56 14 Q54 20 46 22 Q38 23 30 22 Z" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M30 22 Q22 8 18 4 Q22 10 24 16 Q26 20 30 22 Z" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M30 22 Q40 8 48 6 Q46 14 40 18 Q34 21 30 22 Z" fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="30" cy="22" r="2.5" fill={C.mountain} />
+    </svg>
+  );
+}
+
+function RioWaveIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M2 32 Q12 22 22 32 T42 32 T62 32" stroke={C.bapBlue} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d="M2 42 Q12 32 22 42 T42 42 T62 42" stroke={C.bapBlue} strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.7" />
+      <path d="M2 22 Q12 12 22 22 T42 22 T62 22" stroke={C.bapBlue} strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+// Header decoration. Five-star Southern Cross constellation positioned
+// in the top-right corner of the app header. Replaces the previous
+// faint circle. Faint lines connect the stars to suggest the cross.
+function SouthernCrossDecoration() {
+  return (
+    <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
+         style={{ position: "absolute", top: -10, right: -10, opacity: 0.55 }} aria-hidden="true">
+      <line x1="50" y1="14" x2="55" y2="86" stroke={C.bapBlue} strokeWidth="0.5" opacity="0.35" />
+      <line x1="18" y1="56" x2="85" y2="48" stroke={C.bapBlue} strokeWidth="0.5" opacity="0.35" />
+      <circle cx="50" cy="14" r="2.5" fill={C.bapBlue} />
+      <circle cx="55" cy="86" r="3"   fill={C.bapBlue} />
+      <circle cx="85" cy="48" r="2.5" fill={C.bapBlue} />
+      <circle cx="18" cy="56" r="2"   fill={C.bapBlue} />
+      <circle cx="40" cy="70" r="1.2" fill={C.bapBlue} />
+    </svg>
+  );
+}
+
+// Spanish weekday and month names. Used by formatSpanishDate for the
+// Today hero card. Argentine convention: lowercase day and month names,
+// numeric day, "de" connector before the month.
+const SPANISH_WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const SPANISH_MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+function formatSpanishDate(d) {
+  const wd = SPANISH_WEEKDAYS[d.getDay()];
+  const day = d.getDate();
+  const month = SPANISH_MONTHS[d.getMonth()];
+  // Capitalize the weekday for display: "Lunes, 28 de abril"
+  const wdCap = wd.charAt(0).toUpperCase() + wd.slice(1);
+  return `${wdCap}, ${day} de ${month}`;
+}
+
+// Today hero card for the Weekly Overview. A glance-able anchor for
+// "what's happening today": today's classes (from data.classes filtered
+// to today's day-of-week) plus today's calendar events (excluding
+// semester-only items). Empty days fall back to a mate-gourd "¡Día
+// libre!" treatment that visually rhymes with the EmptyDay card below.
+function TodayHero({ data }) {
+  const today = new Date();
+  const todayDow = WEEK_DAYS_SHORT[today.getDay()];
+  today.setHours(12, 0, 0, 0);
+  const todayStr = toDateStr(today);
+
+  // Today's classes for this day-of-week
+  const todayClasses = (data.classes || [])
+    .filter((c) => c.days && c.days.includes(todayDow))
+    .map((c) => ({
+      kind: "class",
+      title: c.title,
+      code: c.code,
+      time: getTimeForDay(c.time, todayDow),
+      sortMin: toMinutes(getTimeForDay(c.time, todayDow)),
+    }));
+
+  // Today's calendar events (exclude semester-only items)
+  const todayEvents = (data.calendarEvents || [])
+    .filter((e) => e.visibility !== "semester")
+    .filter((e) => eventOverlaps(e, todayStr, todayStr))
+    .map((e) => ({
+      kind: "event",
+      title: e.title,
+      code: "",
+      time: e.start_time
+        ? (e.end_time ? `${e.start_time}–${e.end_time}` : e.start_time)
+        : "",
+      sortMin: toMinutes(e.start_time),
+    }));
+
+  // Combine and sort: untimed first, then by minutes-since-midnight
+  const items = [...todayClasses, ...todayEvents].sort((a, b) => {
+    if (a.sortMin === null && b.sortMin === null) return 0;
+    if (a.sortMin === null) return -1;
+    if (b.sortMin === null) return 1;
+    return a.sortMin - b.sortMin;
+  });
+
+  // "Next" item: first timed item that hasn't started yet
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nextItem = items.find((i) => i.sortMin !== null && i.sortMin > nowMin);
+
+  const dateLabel = formatSpanishDate(today);
+  const summary = items.length === 0
+    ? "Día libre"
+    : items.length === 1 ? "1 actividad hoy" : `${items.length} actividades hoy`;
+
+  // Empty state: weekend, holiday, or no scheduled activity
+  if (items.length === 0) {
+    return (
+      <div style={{
+        background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
+        color: "#FFFFFF", borderRadius: 16, padding: "18px 18px 16px",
+        marginBottom: 18, position: "relative", overflow: "hidden",
+        boxShadow: "0 4px 16px rgba(0, 32, 91, 0.18)",
+      }}>
+        <div style={{ position: "absolute", top: -16, right: -16, opacity: 0.2, transform: "scale(1.6)" }}>
+          <SunIcon size={64} />
+        </div>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+          letterSpacing: 2, color: C.bapBlue, marginBottom: 4,
+        }}>Hoy / Today</div>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 22, fontWeight: 700, lineHeight: 1.1, letterSpacing: -0.3,
+        }}>{dateLabel}</div>
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.fog,
+          marginTop: 10, display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <MateGourdIcon size={28} />
+          <span><em style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15 }}>¡Día libre!</em>{" "}Nada en agenda hoy.</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
+      color: "#FFFFFF", borderRadius: 16, padding: "18px 18px 16px",
+      marginBottom: 18, position: "relative", overflow: "hidden",
+      boxShadow: "0 4px 16px rgba(0, 32, 91, 0.18)",
+    }}>
+      <div style={{ position: "absolute", top: -16, right: -16, opacity: 0.2, transform: "scale(1.6)" }}>
+        <SunIcon size={64} />
+      </div>
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+        letterSpacing: 2, color: C.bapBlue, marginBottom: 4,
+        display: "flex", alignItems: "center", gap: 8,
+      }}>
+        <span>Hoy / Today</span>
+        <span style={{ flex: 1, height: 1, background: "rgba(100, 181, 246, 0.3)" }} />
+      </div>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+        fontSize: 22, fontWeight: 700, lineHeight: 1.1, letterSpacing: -0.3,
+      }}>{dateLabel}</div>
+      <div style={{
+        fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.fog,
+        marginTop: 2, marginBottom: 12,
+      }}>{summary}</div>
+      <div>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "baseline",
+            padding: "7px 0",
+            borderTop: `1px solid rgba(100, 181, 246, ${i === 0 ? 0.3 : 0.18})`,
+          }}>
+            <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13.5, fontWeight: 500 }}>
+              {item.code && (
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                  color: C.bapBlue, marginRight: 6, letterSpacing: 0.5,
+                }}>{item.code}</span>
+              )}
+              {item.title}
+            </div>
+            {item.time && (
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 11,
+                color: "rgba(255, 255, 255, 0.85)", whiteSpace: "nowrap", marginLeft: 10,
+              }}>{item.time}</div>
+            )}
+          </div>
+        ))}
+      </div>
+      {nextItem && (
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          fontFamily: "'DM Mono', monospace", fontSize: 10,
+          textTransform: "uppercase", letterSpacing: 1.2,
+          background: "rgba(255, 255, 255, 0.15)",
+          padding: "4px 10px", borderRadius: 10, marginTop: 10,
+          color: C.bapBlue,
+        }}>
+          <span className="bap-pulse-dot" aria-hidden="true" />
+          Próximo: {nextItem.code || nextItem.title}{nextItem.time ? ` · ${nextItem.time.split("–")[0]}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Small section divider used inside grouped lists (e.g., the Apps view's
+// "Getting around" vs "Daily life" groups). Pairs a glyph in a soft
+// rounded container with a bilingual label. Decorative; helps the eye
+// scan a long flat list.
+function SectionDivider({ icon, en, es }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      margin: "18px 0 10px",
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: "50%",
+        background: C.ice,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+        border: `1px solid rgba(108, 172, 228, 0.4)`,
+      }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700,
+          color: C.pepBlue, lineHeight: 1,
+        }}>{en}</div>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9.5,
+          textTransform: "uppercase", letterSpacing: 1.5, color: C.ocean,
+          marginTop: 2,
+        }}>{es}</div>
+      </div>
+    </div>
+  );
+}
+
 // Whimsical empty-day card for the Weekly Overview. Replaces the
 // flat "No events" line with a small mate gourd and Argentine-flavored
 // copy. One uniform treatment for every empty day in the visible week.
@@ -759,6 +1064,9 @@ function WeeklyOverviewView({ data }) {
 
   return (
     <div>
+      {/* Today hero — anchors the page on what's happening right now */}
+      <TodayHero data={data} />
+
       {/* Week navigation */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <button onClick={() => setWeekOffset((o) => o - 1)} style={{
@@ -1262,67 +1570,128 @@ function LocalView({ data }) {
         </div>
       )}
 
-      {sub === "apps" && (
-        <div>
-          {appsCategories.length > 1 && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-              <FilterPill active={appsFilter === "all"} onClick={() => setAppsFilter("all")}>All</FilterPill>
-              {appsCategories.map((c) => (
-                <FilterPill key={c} active={appsFilter === c} onClick={() => setAppsFilter(c)}>{c}</FilterPill>
-              ))}
+      {sub === "apps" && (() => {
+        // Internal renderer so the same card markup serves both
+        // grouped and flat (filtered) layouts without duplication.
+        const renderAppCard = (a, key) => {
+          const isEssential = a.priority === "essential";
+          return (
+            <Card key={key} bg={isEssential ? C.ice : undefined}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
+                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>
+                  {isEssential && <span style={{ color: C.pepOrange, marginRight: 6 }}>●</span>}
+                  {a.name}
+                </span>
+                {a.category && <span style={badge}>{a.category}</span>}
+              </div>
+              {a.description && (
+                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
+                  {a.description}
+                </div>
+              )}
+              {(a.ios_url || a.android_url || a.web_url) && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  {a.ios_url && (
+                    <a href={a.ios_url} target="_blank" rel="noopener noreferrer" style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                      background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
+                    }}>📱 iOS</a>
+                  )}
+                  {a.android_url && (
+                    <a href={a.android_url} target="_blank" rel="noopener noreferrer" style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                      background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
+                    }}>🤖 Android</a>
+                  )}
+                  {a.web_url && !a.ios_url && !a.android_url && (
+                    <a href={a.web_url} target="_blank" rel="noopener noreferrer" style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+                      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                      background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
+                    }}>🌐 Website</a>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        };
+
+        // Group apps. "Transport" covers anything in Navigation,
+        // Transportation, or Transit categories; everything else falls
+        // into "Daily life." Grouping only applies when filter === "all"
+        // (when a single category is selected, a flat list is clearer).
+        const TRANSPORT_PATTERN = /navigation|transport|transit/i;
+        const transportApps = sortedApps.filter((a) => a.category && TRANSPORT_PATTERN.test(a.category));
+        const dailyApps     = sortedApps.filter((a) => !a.category || !TRANSPORT_PATTERN.test(a.category));
+
+        return (
+          <div>
+            {/* Pattern-fill section header anchors the Apps view. */}
+            <div className="bap-dot-pattern" style={{
+              backgroundColor: C.ice,
+              borderRadius: 12,
+              padding: "14px 16px 16px",
+              marginBottom: 14,
+              border: `1px solid rgba(108, 172, 228, 0.4)`,
+            }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center",
+                fontFamily: "'DM Mono', monospace", fontSize: 10,
+                textTransform: "uppercase", letterSpacing: 1.2,
+                background: C.ocean, color: "#FFFFFF",
+                padding: "3px 10px", borderRadius: 10, marginBottom: 8,
+              }}>Apps</span>
+              <h4 style={{
+                fontFamily: "'EB Garamond', serif", fontSize: 18, fontWeight: 700,
+                color: C.pepBlue, margin: "0 0 4px", letterSpacing: -0.3,
+              }}>Argentine essentials</h4>
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 10,
+                textTransform: "uppercase", letterSpacing: 1.5, color: C.ocean,
+              }}>Lo que vas a usar todos los días</div>
             </div>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {sortedApps.map((a, i) => {
-              const isEssential = a.priority === "essential";
-              return (
-                <Card key={i} bg={isEssential ? C.ice : undefined}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
-                    <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>
-                      {isEssential && <span style={{ color: C.pepOrange, marginRight: 6 }}>●</span>}
-                      {a.name}
-                    </span>
-                    {a.category && <span style={badge}>{a.category}</span>}
-                  </div>
-                  {a.description && (
-                    <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
-                      {a.description}
+
+            {appsCategories.length > 1 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                <FilterPill active={appsFilter === "all"} onClick={() => setAppsFilter("all")}>All</FilterPill>
+                {appsCategories.map((c) => (
+                  <FilterPill key={c} active={appsFilter === c} onClick={() => setAppsFilter(c)}>{c}</FilterPill>
+                ))}
+              </div>
+            )}
+
+            {appsFilter !== "all" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {sortedApps.map((a, i) => renderAppCard(a, i))}
+              </div>
+            ) : (
+              <>
+                {transportApps.length > 0 && (
+                  <>
+                    <SectionDivider icon={<ColectivoIcon size={24} />} en="Getting around" es="Transporte" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {transportApps.map((a, i) => renderAppCard(a, "t" + i))}
                     </div>
-                  )}
-                  {(a.ios_url || a.android_url || a.web_url) && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                      {a.ios_url && (
-                        <a href={a.ios_url} target="_blank" rel="noopener noreferrer" style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
-                          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
-                          textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                          background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
-                        }}>📱 iOS</a>
-                      )}
-                      {a.android_url && (
-                        <a href={a.android_url} target="_blank" rel="noopener noreferrer" style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
-                          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
-                          textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                          background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
-                        }}>🤖 Android</a>
-                      )}
-                      {a.web_url && !a.ios_url && !a.android_url && (
-                        <a href={a.web_url} target="_blank" rel="noopener noreferrer" style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
-                          fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
-                          textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                          background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
-                        }}>🌐 Website</a>
-                      )}
+                  </>
+                )}
+                {dailyApps.length > 0 && (
+                  <>
+                    <SectionDivider icon={<PalmIcon size={24} />} en="Daily life" es="Día a día" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {dailyApps.map((a, i) => renderAppCard(a, "d" + i))}
                     </div>
-                  )}
-                </Card>
-              );
-            })}
+                  </>
+                )}
+              </>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {sub === "explore" && (
         <div>
@@ -1532,11 +1901,11 @@ const icons = {
 };
 
 const TABS = [
-  { key: "schedule", label: "Schedule", icon: icons.schedule },
-  { key: "calendar", label: "Calendar", icon: icons.calendar },
-  { key: "local",    label: "Local",    icon: icons.local },
-  { key: "faq",      label: "FAQ",      icon: icons.faq },
-  { key: "contacts", label: "Contacts", icon: icons.contacts },
+  { key: "schedule", label: "Schedule", icon: icons.schedule, color: C.pepBlue },
+  { key: "calendar", label: "Calendar", icon: icons.calendar, color: C.ocean },
+  { key: "local",    label: "Local",    icon: icons.local,    color: C.bapBlue },
+  { key: "faq",      label: "FAQ",      icon: icons.faq,      color: C.mountain },
+  { key: "contacts", label: "Contacts", icon: icons.contacts, color: C.pepOrange },
 ];
 
 // ============================================================
@@ -1545,6 +1914,15 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState("schedule");
+
+  // Bottom-nav pill positioning. The pill slides under whichever tab is
+  // active; its color adopts the active tab's color identity. We measure
+  // each button via a ref-keyed map so re-positioning works on layout
+  // changes (window resize, font load, etc.) without a layout-only
+  // re-render of the whole component tree.
+  const navRef = useRef(null);
+  const navBtnRefs = useRef({});
+  const [pillTransform, setPillTransform] = useState({ x: 0, color: C.pepBlue });
 
   // Lazy-init from localStorage cache so repeat opens render instantly.
   // First-ever open (no cache) falls through to "loading"; if SHEET_ID
@@ -1592,12 +1970,38 @@ export default function App() {
           transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
         }
         .bap-press:active { transform: scale(0.97); }
+        .bap-dot-pattern {
+          background-image:
+            radial-gradient(circle at 0 0, rgba(0, 87, 184, 0.10) 1px, transparent 1.5px),
+            radial-gradient(circle at 8px 8px, rgba(0, 87, 184, 0.10) 1px, transparent 1.5px);
+          background-size: 16px 16px;
+          background-repeat: repeat;
+        }
+        .bap-nav-pill {
+          position: absolute;
+          bottom: 6px;
+          left: 0;
+          width: 44px;
+          height: 4px;
+          border-radius: 2px;
+          transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease-out;
+          pointer-events: none;
+          will-change: transform;
+        }
+        .bap-nav-icon {
+          display: inline-flex;
+          transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .bap-nav-icon.lifted { transform: translateY(-3px); }
         @media (prefers-reduced-motion: reduce) {
           .bap-pulse-dot { animation: none; }
           .bap-spin      { animation: none; border-top-color: ${C.fog}; }
           .bap-tip-text  { transition: none; }
           .bap-press     { transition: none; }
           .bap-press:active { transform: none; }
+          .bap-nav-pill  { transition: none; }
+          .bap-nav-icon  { transition: none; }
+          .bap-nav-icon.lifted { transform: none; }
         }
       `;
       document.head.appendChild(style);
@@ -1620,6 +2024,27 @@ export default function App() {
       });
   }, []);
 
+  // Position the bottom-nav pill under the active tab. Re-runs on tab
+  // change and on window resize so the pill stays anchored when the
+  // viewport changes width. Uses requestAnimationFrame to wait for
+  // layout to settle (especially on first mount before fonts paint).
+  useEffect(() => {
+    function positionPill() {
+      if (!navRef.current) return;
+      const activeBtn = navBtnRefs.current[tab];
+      if (!activeBtn) return;
+      const navRect = navRef.current.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const pillWidth = 44;
+      const x = (btnRect.left - navRect.left) + (btnRect.width - pillWidth) / 2;
+      const t = TABS.find((t) => t.key === tab);
+      setPillTransform({ x, color: t ? t.color : C.pepBlue });
+    }
+    requestAnimationFrame(positionPill);
+    window.addEventListener("resize", positionPill);
+    return () => window.removeEventListener("resize", positionPill);
+  }, [tab]);
+
   const statusLabel = status === "live" ? "Synced"
     : status === "refreshing" ? "Refreshing..."
     : status === "loading" ? "Loading..."
@@ -1634,7 +2059,7 @@ export default function App() {
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.parchment, display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div style={{ padding: "16px 20px", background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`, color: C.white, position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -40, right: -40, width: 120, height: 120, borderRadius: "50%", border: "2px solid rgba(100,181,246,0.2)" }} />
+        <SouthernCrossDecoration />
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <img src={LOGO_URI} alt="Buenos Aires Program" style={{
             width: 80, height: 80, borderRadius: "50%", flexShrink: 0,
@@ -1680,7 +2105,7 @@ export default function App() {
       </div>
 
       {/* Bottom nav */}
-      <div style={{
+      <div ref={navRef} style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "100%", maxWidth: 480, background: C.white,
         borderTop: `1px solid ${C.fog}`, display: "flex", justifyContent: "space-around",
@@ -1688,18 +2113,38 @@ export default function App() {
       }}>
         {TABS.map((t) => {
           const active = tab === t.key;
+          const color = active ? t.color : C.stone;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} className="bap-press" style={{
-              background: "none", border: "none", cursor: "pointer",
-              display: "flex", flexDirection: "column", alignItems: "center",
-              gap: 3, padding: "4px 8px", transition: "all 0.15s",
-            }}>
-              {t.icon(active ? C.pepBlue : C.stone)}
-              <span style={{ fontSize: 10, fontWeight: active ? 700 : 400, color: active ? C.pepBlue : C.stone, fontFamily: "'Roboto', sans-serif" }}>{t.label}</span>
-              {active && <div style={{ width: 4, height: 4, borderRadius: 2, background: C.bapBlue, marginTop: 1 }} />}
+            <button
+              key={t.key}
+              ref={(el) => { navBtnRefs.current[t.key] = el; }}
+              onClick={() => setTab(t.key)}
+              className="bap-press"
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                display: "flex", flexDirection: "column", alignItems: "center",
+                gap: 3, padding: "4px 8px", flex: 1,
+              }}
+            >
+              <span className={`bap-nav-icon${active ? " lifted" : ""}`}>
+                {t.icon(color)}
+              </span>
+              <span style={{
+                fontSize: 10, fontWeight: active ? 700 : 400,
+                color, fontFamily: "'Roboto', sans-serif",
+                transition: "color 0.2s ease-out",
+              }}>{t.label}</span>
             </button>
           );
         })}
+        <span
+          className="bap-nav-pill"
+          aria-hidden="true"
+          style={{
+            transform: `translateX(${pillTransform.x}px)`,
+            background: pillTransform.color,
+          }}
+        />
       </div>
     </div>
   );
