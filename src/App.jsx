@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-25 — Stale-while-revalidate localStorage cache; faster repeat loads";
+const BUILD_VERSION = "2026-04-25 — Personality moves: editorial titles with Spanish gloss; pulsing 'Synced' dot; rotating loading tips (new Tips sheet tab); whimsical empty days in Weekly Overview; press feedback on cards";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -79,6 +79,12 @@ const DEFAULT_DATA = {
   announcements: [
     { message: "Add/Drop period ends Friday, August 28. Contact your advisor with any changes.", type: "info", start_date: "2026-08-24", end_date: "2026-08-28", icon: "📋", link: "" },
   ],
+  tips: [
+    { text: 'Buenos Aires literally means "Good Air."', category: "city" },
+    { text: "*Dale* is yes, no, sure, ok, and \u201clet\u2019s go,\u201d all at once.", category: "phrases" },
+    { text: "Most caf\u00e9s bring you a free glass of soda water with every coffee.", category: "food" },
+    { text: "*Che* is how you get someone\u2019s attention. No one takes offense.", category: "phrases" },
+  ],
 };
 
 // ============================================================
@@ -137,6 +143,10 @@ async function fetchAllData() {
   // Apps tab is optional — won't break if missing
   let appsRaw = [];
   try { appsRaw = await fetchTab("Apps"); } catch (e) { /* tab not created yet */ }
+
+  // Tips tab is optional — used by the loading screen rotator
+  let tipsRaw = [];
+  try { tipsRaw = await fetchTab("Tips"); } catch (e) { /* tab not created yet */ }
 
   const settings = {};
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
@@ -232,6 +242,10 @@ async function fetchAllData() {
       web_url: r.web_url ? r.web_url.trim() : "",
       priority: r.priority ? r.priority.trim().toLowerCase() : "",
     })),
+    tips: tipsRaw.filter(r => r.text).map((r) => ({
+      text: r.text.trim(),
+      category: r.category ? r.category.trim().toLowerCase() : "",
+    })),
   };
 }
 
@@ -244,7 +258,7 @@ async function fetchAllData() {
 // ============================================================
 
 const CACHE_KEY = "bap-app-cache";
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 function loadCache() {
   try {
@@ -432,9 +446,162 @@ function compactSchedule(days, timeStr) {
 // UI COMPONENTS
 // ============================================================
 
+// Tab titles paired with a small Argentine Spanish gloss. The
+// English headline anchors the page; the gloss adds bicultural
+// character without doubling the cognitive load.
+const TAB_TITLES = {
+  schedule: { en: "Program Schedule",            es: "Cronograma" },
+  calendar: { en: "Semester Calendar",           es: "Calendario" },
+  local:    { en: "Local Resources",             es: "Buenos Aires" },
+  faq:      { en: "Frequently Asked Questions",  es: "Preguntas Frecuentes" },
+  contacts: { en: "Contacts",                    es: "Contactos" },
+};
+
+// Render a tip string with markdown-style *italic* segments. Splits on
+// asterisks and alternates between regular text and EB Garamond italic
+// spans. Safe (no innerHTML) and lightweight enough to use inline.
+function renderTip(text) {
+  if (!text) return null;
+  const parts = text.split(/(\*[^*]+\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith("*") && p.endsWith("*") && p.length > 2) {
+      return (
+        <em key={i} style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic" }}>
+          {p.slice(1, -1)}
+        </em>
+      );
+    }
+    return <span key={i}>{p}</span>;
+  });
+}
+
+// Mate gourd glyph used in the Weekly Overview empty-day card. Kept
+// as inline SVG so it inherits color and adds zero bundle weight.
+function MateGourdIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <line x1="42" y1="8" x2="42" y2="22" stroke={C.mountain} strokeWidth="2.5" strokeLinecap="round" />
+      <ellipse cx="42" cy="9" rx="3" ry="1.5" fill={C.mountain} />
+      <path d="M16 30 Q14 50 32 56 Q50 50 48 30 Q48 24 44 22 Q40 21 32 21 Q24 21 20 22 Q16 24 16 30 Z"
+            fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="2" strokeLinejoin="round" />
+      <ellipse cx="32" cy="22" rx="11" ry="2.5" fill={C.mountain} />
+      <path d="M22 30 Q21 42 26 50" stroke="rgba(255,255,255,0.45)" strokeWidth="2" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Whimsical empty-day card for the Weekly Overview. Replaces the
+// flat "No events" line with a small mate gourd and Argentine-flavored
+// copy. One uniform treatment for every empty day in the visible week.
+function EmptyDay() {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      background: C.ice, border: `1px dashed ${C.fog}`, borderRadius: 8,
+      padding: "10px 14px", marginTop: 4,
+    }}>
+      <MateGourdIcon size={32} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700,
+          fontStyle: "italic", color: C.pepBlue, lineHeight: 1.1,
+        }}>¡Día libre!</div>
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.mountain,
+          marginTop: 2, lineHeight: 1.3,
+        }}>Nada en agenda hoy.</div>
+      </div>
+    </div>
+  );
+}
+
+// Section title used at the top of every main view. English headline
+// in EB Garamond at 28 px; Spanish gloss below in DM Mono uppercase.
+function SectionTitle({ tabKey }) {
+  const t = TAB_TITLES[tabKey];
+  if (!t) return null;
+  return (
+    <div style={{ marginBottom: 18, lineHeight: 1 }}>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontSize: 28, fontWeight: 700,
+        color: C.pepBlue, letterSpacing: -0.5, lineHeight: 1.05,
+      }}>{t.en}</div>
+      <div style={{
+        marginTop: 4,
+        fontFamily: "'DM Mono', monospace", fontSize: 11,
+        textTransform: "uppercase", letterSpacing: 2.2, color: C.ocean,
+      }}>{t.es}</div>
+    </div>
+  );
+}
+
+// Loading screen with a rotating BA tip. Pulls tips from the cached
+// data when available and falls back to a small built-in set so the
+// first-ever load is never blank. New tip every 4 seconds with a
+// soft fade. Honors prefers-reduced-motion via the .bap-tip-fade class.
+const FALLBACK_TIPS = [
+  { text: 'Buenos Aires literally means "Good Air."' },
+  { text: "*Dale* is yes, no, sure, ok, and \u201clet\u2019s go,\u201d all at once." },
+  { text: "Most caf\u00e9s bring you a free glass of soda water with every coffee." },
+];
+
+function LoadingScreen({ tips }) {
+  const list = (tips && tips.length > 0) ? tips : FALLBACK_TIPS;
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * list.length));
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFading(true);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % list.length);
+        setFading(false);
+      }, 320);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [list.length]);
+
+  const current = list[idx] || list[0];
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      padding: "40px 28px", textAlign: "center",
+    }}>
+      <div className="bap-spin" style={{
+        width: 36, height: 36, borderRadius: "50%",
+        border: `3px solid ${C.fog}`, borderTopColor: C.pepBlue,
+        marginBottom: 20,
+      }} />
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontSize: 18, color: C.pepBlue,
+        marginBottom: 18,
+      }}>Cargando…</div>
+      <div style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+        padding: "16px 18px", boxShadow: "0 1px 4px rgba(0, 32, 91, 0.05)",
+        width: "100%", maxWidth: 280,
+      }}>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.ocean,
+          textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+        }}>
+          <span style={{ fontSize: 12 }}>💡</span>
+          <span>Tip of the load</span>
+        </div>
+        <div className={`bap-tip-text${fading ? " fading" : ""}`} style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 13.5, lineHeight: 1.5,
+          color: C.pepBlack, minHeight: 60,
+        }}>{renderTip(current.text)}</div>
+      </div>
+    </div>
+  );
+}
+
 function Pill({ active, onClick, children }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} className="bap-press" style={{
       padding: "5px 14px", borderRadius: 20,
       border: active ? `2px solid ${C.pepBlue}` : "2px solid transparent",
       background: active ? C.pepBlue : C.ice,
@@ -700,9 +867,7 @@ function WeeklyOverviewView({ data }) {
                 </div>
               )}
 
-              {!hasContent && (
-                <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.fog, fontStyle: "italic", marginTop: -2 }}>No events</div>
-              )}
+              {!hasContent && <EmptyDay />}
             </div>
           );
         })}
@@ -769,7 +934,7 @@ function ClassScheduleView({ data, view }) {
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {classes.map((c) => (
-                        <div key={c.code + day} style={{ display: "flex", alignItems: "stretch", background: C.white, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.fog}` }}>
+                        <div key={c.code + day} className="bap-press" style={{ display: "flex", alignItems: "stretch", background: C.white, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.fog}` }}>
                           <div style={{ width: 4, background: c.color, flexShrink: 0 }} />
                           <div style={{ padding: "10px 14px", flex: 1 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -1199,7 +1364,7 @@ function FaqView({ data }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {data.faq.map((p, i) => (
         <div key={i} style={{ background: C.white, borderRadius: 10, border: `1px solid ${C.fog}`, overflow: "hidden" }}>
-          <button onClick={() => setOpen(open === i ? null : i)} style={{
+          <button onClick={() => setOpen(open === i ? null : i)} className="bap-press" style={{
             width: "100%", padding: "14px 16px", border: "none", background: "transparent",
             display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
             fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, textAlign: "left",
@@ -1399,6 +1564,44 @@ export default function App() {
     link.href = "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&family=EB+Garamond:wght@400;700&family=Roboto:wght@400;500;700&display=swap";
     link.rel = "stylesheet";
     document.head.appendChild(link);
+
+    // Inject the small set of keyframes and helper classes the
+    // personality moves rely on. Idempotent: bails if the style tag
+    // is already present (e.g., during hot-reload).
+    if (!document.getElementById("bap-personality-styles")) {
+      const style = document.createElement("style");
+      style.id = "bap-personality-styles";
+      style.textContent = `
+        @keyframes bap-pulse {
+          0%   { box-shadow: 0 0 0 0 rgba(124, 252, 158, 0.55); transform: scale(1); }
+          70%  { box-shadow: 0 0 0 8px rgba(124, 252, 158, 0);   transform: scale(1.08); }
+          100% { box-shadow: 0 0 0 0 rgba(124, 252, 158, 0);     transform: scale(1); }
+        }
+        @keyframes bap-spin { to { transform: rotate(360deg); } }
+        .bap-pulse-dot {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: #7CFC9E;
+          box-shadow: 0 0 0 0 rgba(124, 252, 158, 0.6);
+          animation: bap-pulse 1.8s ease-out infinite;
+          display: inline-block;
+        }
+        .bap-spin { animation: bap-spin 0.9s linear infinite; }
+        .bap-tip-text { transition: opacity 0.3s ease-in-out; }
+        .bap-tip-text.fading { opacity: 0; }
+        .bap-press {
+          transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+        }
+        .bap-press:active { transform: scale(0.97); }
+        @media (prefers-reduced-motion: reduce) {
+          .bap-pulse-dot { animation: none; }
+          .bap-spin      { animation: none; border-top-color: ${C.fog}; }
+          .bap-tip-text  { transition: none; }
+          .bap-press     { transition: none; }
+          .bap-press:active { transform: none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
   }, []);
 
   useEffect(() => {
@@ -1450,7 +1653,11 @@ export default function App() {
                 fontFamily: "'DM Mono', monospace", fontSize: 10, padding: "2px 8px", borderRadius: 10,
                 background: isHealthy ? "rgba(100,181,246,0.25)" : "rgba(255,255,255,0.15)",
                 color: isHealthy ? "#E3F2FD" : "rgba(255,255,255,0.6)",
-              }}>{statusLabel}</span>
+                display: "inline-flex", alignItems: "center", gap: 6,
+              }}>
+                {isHealthy && <span className="bap-pulse-dot" aria-hidden="true" />}
+                {statusLabel}
+              </span>
             </div>
           </div>
         </div>
@@ -1459,19 +1666,10 @@ export default function App() {
       {/* Content */}
       <div style={{ flex: 1, padding: "20px 16px 100px", overflowY: "auto" }}>
         {status === "loading" ? (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 18, color: C.pepBlue, marginBottom: 8 }}>Loading data...</div>
-            <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, color: C.stone }}>Fetching from Google Sheets</div>
-          </div>
+          <LoadingScreen tips={data.tips} />
         ) : (
           <>
-            <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 22, fontWeight: 700, color: C.pepBlue, marginBottom: 16 }}>
-              {tab === "schedule" && "Program Schedule"}
-              {tab === "calendar" && "Semester Calendar"}
-              {tab === "local" && "Local Resources"}
-              {tab === "faq" && "Frequently Asked Questions"}
-              {tab === "contacts" && "Contacts"}
-            </div>
+            <SectionTitle tabKey={tab} />
             {tab === "schedule" && <ScheduleView data={data} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
@@ -1491,7 +1689,7 @@ export default function App() {
         {TABS.map((t) => {
           const active = tab === t.key;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{
+            <button key={t.key} onClick={() => setTab(t.key)} className="bap-press" style={{
               background: "none", border: "none", cursor: "pointer",
               display: "flex", flexDirection: "column", alignItems: "center",
               gap: 3, padding: "4px 8px", transition: "all 0.15s",
