@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Weekly Overview cleanup: removed the '↓ TODAY' scroll-to-today pill from the top of the week view, since the dedicated Today tab (the leftmost tab and the default on app open) is now the canonical entry point for today-of-day context. The visual highlighting of today's day card stays intact (Ice-tinted background, BAP Blue border, Pep Blue date circle, and inline 'TODAY' badge next to the weekday name) — that's orientation, not navigation. The matching todayRef, todayInView, and scrollToToday helpers were dropped along with the button. The TODAY pill in Schedule → Class Schedule (which scrolls to today's row within the Mon–Fri grid of classes) is intentionally untouched; that's a different navigation affordance for a class-only view.";
+const BUILD_VERSION = "2026-04-26 — Birthday card on Today. New optional Birthdays sheet tab (name, date, role) drives a celebratory card that appears on any day matching one or more rows. Card sits between the announcement banner and the holiday card. Bilingual treatment: Spanish title in italic EB Garamond primary, English in smaller serif italic underneath. Three layout tiers based on count: 1 person gets a personalized title (¡Feliz cumple, María!), 2 people get joined names with proper Spanish/English conjunctions (María y Carlos / María and Carlos), 3+ people get a generic '¡Feliz cumple!' header with names listed beneath in a comma-joined line. New <CupcakeIcon> SVG glyph at 44 px: BAP Blue fluted wrapper, Sky Blue frosting with sprinkles, parchment candle with a Pep Orange flame and inner glow. New helpers parseBirthdayMD() (accepts MM-DD, M-D, YYYY-MM-DD; year stripped), getTodayMD(), findTodayBirthdays(), joinSpanish(), joinEnglish(). The app NEVER displays or computes age — year of birth is intentionally discarded during parsing. role column captured but unused in v1; reserved for future filtering. CACHE_VERSION bumped from 4 to 5 because the data shape gained a birthdays array; old caches are invalidated automatically.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -28,7 +28,6 @@ const DEFAULT_DATA = {
     { date: "2026-08-10", end_date: "", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "", visibility: "both" },
     { date: "2026-08-11", end_date: "2026-08-13", title: "Orientation", type: "orientation", description: "Three-day orientation program", start_time: "", end_time: "", visibility: "both" },
     { date: "2026-08-14", end_date: "", title: "Classes begin", type: "academic", description: "First day of classes", start_time: "", end_time: "", visibility: "both" },
-    { date: "2026-08-17", end_date: "", title: "Día del Paso a la Inmortalidad del Gral. San Martín", type: "holiday", description: "National holiday; no classes", start_time: "", end_time: "", visibility: "both" },
     { date: "2026-08-21", end_date: "2026-08-24", title: "Study Tour: Córdoba", type: "excursion", description: "Four-day study tour", start_time: "", end_time: "", visibility: "both" },
     { date: "2026-08-28", end_date: "", title: "City Tour", type: "excursion", description: "Guided walking tour of downtown BA", start_time: "10:00", end_time: "13:00", visibility: "both" },
     { date: "2026-09-04", end_date: "", title: "Asado", type: "program", description: "Weekly asado", start_time: "13:40", end_time: "14:40", visibility: "week" },
@@ -91,6 +90,23 @@ const DEFAULT_DATA = {
     { title: "La Bomba de Tiempo", category: "music", description: "Improvised percussion ensemble; a Monday-night BA institution.", start_date: "2026-08-17", end_date: "", time: "20:00", venue: "Konex", neighborhood: "Almagro", address: "Sarmiento 3131", link: "https://ciudadculturalkonex.org", cost: "$8.000 ARS" },
     { title: "Comedor comunitario en Barracas", category: "service", description: "Help serve dinner at a neighborhood soup kitchen; Spanish helpful but not required.", start_date: "2026-08-20", end_date: "", time: "18:00", venue: "Comedor Los Pibes", neighborhood: "Barracas", address: "", link: "", cost: "Free" },
   ],
+  // Sample holidays so the fallback / first-load case still surfaces
+  // an example. The live Holidays sheet tab supersedes this list once
+  // the cohort's app fetches.
+  holidays: [
+    {
+      date: "2026-08-17",
+      name_es: "Paso a la Inmortalidad del Gral. San Martín",
+      name_en: "General San Martín Memorial Day",
+      cancels_classes: true,
+      observance_type: "national",
+      description_es: "Día del Libertador. Honra a José de San Martín, que liberó a Argentina, Chile y Perú del dominio español. Su figura es central en la identidad nacional; vas a ver su nombre en plazas, calles, billetes y monumentos por todo el país.",
+      description_en: "Liberator's Day. Honors José de San Martín, who freed Argentina, Chile, and Peru from Spanish rule. His name and image are everywhere in the country — plazas, streets, currency, and monuments.",
+    },
+  ],
+  // Birthdays default to empty — the program office populates the
+  // sheet tab; without real data, the card simply doesn't render.
+  birthdays: [],
 };
 
 // ============================================================
@@ -123,6 +139,71 @@ function parseDays(raw) {
   }
   // Otherwise treat each character as a single-letter day code
   return [...s].map((ch) => DAY_LETTER_MAP[ch.toUpperCase()]).filter(Boolean);
+}
+
+// Parse a spreadsheet cell's boolean-ish value. Google Sheets exports
+// booleans as upper-case "TRUE"/"FALSE" via the gviz CSV endpoint, but
+// users often type "yes", "1", "x", "✓", or even leave a non-empty
+// blank-ish string. Anything that doesn't look affirmative is false.
+function parseBoolean(raw) {
+  if (raw === true) return true;
+  if (raw === false || raw == null) return false;
+  const s = String(raw).trim().toLowerCase();
+  return s === "true" || s === "yes" || s === "y" || s === "1" || s === "x" || s === "✓" || s === "si" || s === "sí";
+}
+
+// Normalize a birthday date cell to a "MM-DD" string for matching.
+// Accepts MM-DD, M-D, or full YYYY-MM-DD; the year is intentionally
+// stripped because birthdays match annually and the app never wants
+// to display or compute age. Returns null on anything unparseable.
+function parseBirthdayMD(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  // Full date YYYY-MM-DD (year ignored)
+  const full = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (full) {
+    return `${String(parseInt(full[2], 10)).padStart(2, "0")}-${String(parseInt(full[3], 10)).padStart(2, "0")}`;
+  }
+  // MM-DD or M-D
+  const md = s.match(/^(\d{1,2})-(\d{1,2})$/);
+  if (md) {
+    return `${String(parseInt(md[1], 10)).padStart(2, "0")}-${String(parseInt(md[2], 10)).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+// Today's MM-DD for matching against birthday rows. Uses the user's
+// local clock (intentional: a student in Buenos Aires sees birthdays
+// based on their wall clock, regardless of where the app is hosted).
+function getTodayMD() {
+  const d = new Date();
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// All birthday rows whose MM-DD matches today's. Caller renders zero
+// or more matches. Multiple matches are common-enough to design for
+// (1-3 names per day in a small program; >3 falls back to a list view).
+function findTodayBirthdays(birthdays) {
+  if (!Array.isArray(birthdays)) return [];
+  const today = getTodayMD();
+  return birthdays.filter((b) => b.md === today);
+}
+
+// Spanish-style list join: "A, B, C y D". Different from English
+// where the convention is "A, B, C, and D" (Oxford comma). Both
+// variants are exposed so the bilingual title can use the right one
+// per language.
+function joinSpanish(items) {
+  if (!items || items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} y ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+function joinEnglish(items) {
+  if (!items || items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 async function fetchAllData() {
@@ -159,6 +240,19 @@ async function fetchAllData() {
   // app simply hides the sub-tab content area and Today tile.
   let eventsRaw = [];
   try { eventsRaw = await fetchTab("Events"); } catch (e) { /* tab not created yet */ }
+
+  // Holidays tab is optional — when present, takes over class-cancellation
+  // logic (and the Today holiday card) from the calendar's holiday-typed
+  // events. Lets the program office distinguish feriados that cancel
+  // classes from cultural observances that don't, and provide bilingual
+  // descriptions richer than what the calendar's description field allows.
+  let holidaysRaw = [];
+  try { holidaysRaw = await fetchTab("Holidays"); } catch (e) { /* tab not created yet */ }
+
+  // Birthdays tab is optional — populates the Today birthday card.
+  // Year is stripped during parsing; the app never displays age.
+  let birthdaysRaw = [];
+  try { birthdaysRaw = await fetchTab("Birthdays"); } catch (e) { /* tab not created yet */ }
 
   const settings = {};
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
@@ -271,6 +365,27 @@ async function fetchAllData() {
       link: r.link ? r.link.trim() : "",
       cost: r.cost ? r.cost.trim() : "",
     })),
+    // Holidays sheet rows. cancels_classes is parsed as a boolean from
+    // common spreadsheet truthy strings ("TRUE", "true", "1", "yes",
+    // "x", "✓"). Anything else is false. observance_type is free-form
+    // text but we lowercase it for downstream comparison.
+    holidays: holidaysRaw.filter(r => r.date && (r.name_es || r.name_en)).map((r) => ({
+      date: r.date.trim().slice(0, 10),
+      name_es: r.name_es ? r.name_es.trim() : "",
+      name_en: r.name_en ? r.name_en.trim() : "",
+      cancels_classes: parseBoolean(r.cancels_classes),
+      observance_type: r.observance_type ? r.observance_type.trim().toLowerCase() : "",
+      description_es: r.description_es ? r.description_es.trim() : "",
+      description_en: r.description_en ? r.description_en.trim() : "",
+    })),
+    // Birthday rows. Date is normalized to MM-DD; rows that fail to
+    // parse are dropped silently. The role column is preserved but
+    // unused by the current UI.
+    birthdays: birthdaysRaw.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      md: parseBirthdayMD(r.date),
+      role: r.role ? r.role.trim().toLowerCase() : "",
+    })).filter((b) => b.md),
   };
 }
 
@@ -283,7 +398,7 @@ async function fetchAllData() {
 // ============================================================
 
 const CACHE_KEY = "bap-app-cache";
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 5;
 
 function loadCache() {
   try {
@@ -368,6 +483,54 @@ function filterClassesByProfile(classes, profile) {
   if (!shouldFilterClasses(profile)) return classes;
   const set = new Set(profile.enrolledClasses);
   return (classes || []).filter((c) => set.has(c.code));
+}
+
+// Look up a Holidays-tab entry for a YYYY-MM-DD date string. Returns
+// the row (with cancels_classes already a boolean) or null. Used by
+// both the Today tab and the Weekly Overview to decide (a) whether to
+// suppress classes that day and (b) what to render in the holiday
+// card. The Holidays sheet tab is the single source of truth; the
+// older calendar event of type "holiday" is only used as a fallback
+// when the Holidays tab is missing or empty (see findHolidayContext).
+function findHolidayForDate(holidays, dateStr) {
+  if (!dateStr || !Array.isArray(holidays)) return null;
+  return holidays.find((h) => h.date === dateStr) || null;
+}
+
+// Compose the holiday context for a given date. Prefers the Holidays
+// sheet row (richer, bilingual, has cancels_classes flag); falls back
+// to a calendar event of type "holiday" for backwards compatibility
+// when no Holidays tab exists yet. Returns null when neither source
+// has a match. The shape returned is normalized so the Today card
+// and Weekly Overview gating use a single code path.
+function findHolidayContext(data, dateStr) {
+  const fromTab = findHolidayForDate(data.holidays, dateStr);
+  if (fromTab) {
+    return {
+      source: "tab",
+      name_es: fromTab.name_es || fromTab.name_en,
+      name_en: fromTab.name_en || fromTab.name_es,
+      description_es: fromTab.description_es,
+      description_en: fromTab.description_en,
+      cancels_classes: fromTab.cancels_classes,
+    };
+  }
+  // Legacy fallback: calendar event tagged type:"holiday". Treat as
+  // class-cancelling because the old behavior assumed that.
+  const legacy = (data.calendarEvents || []).find(
+    (e) => e.type === "holiday" && eventOverlaps(e, dateStr, dateStr)
+  );
+  if (legacy) {
+    return {
+      source: "legacy",
+      name_es: legacy.title,
+      name_en: legacy.title,
+      description_es: legacy.description,
+      description_en: legacy.description,
+      cancels_classes: true,
+    };
+  }
+  return null;
 }
 
 // ============================================================
@@ -877,6 +1040,36 @@ function HandsHeartIcon({ size = 36, color = C.pepBlue }) {
   );
 }
 
+// Cupcake glyph — used on the Today birthday card. BAP Blue fluted
+// wrapper, Sky Blue frosting with sprinkles, parchment candle with a
+// Pep Orange flame and a small inner glow. Same 64×64 viewBox style
+// as the rest of the inline glyph library.
+function CupcakeIcon({ size = 44 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      {/* Frosting — curvy mound on top, drawn first so wrapper sits on top */}
+      <path d="M14 38 Q14 27, 22 29 Q26 22, 32 25 Q38 21, 42 28 Q50 27, 50 38 Z"
+            fill={C.sky} stroke={C.pepBlue} strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Sprinkles on the frosting */}
+      <circle cx="22" cy="34" r="0.9" fill={C.pepOrange} />
+      <circle cx="29" cy="31" r="0.9" fill={C.white} />
+      <circle cx="38" cy="33" r="0.9" fill={C.pepOrange} />
+      <circle cx="44" cy="35" r="0.9" fill={C.white} />
+      {/* Wrapper — trapezoid with vertical fluting */}
+      <path d="M14 38 L20 58 L44 58 L50 38 Z"
+            fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="1.5" strokeLinejoin="round" />
+      <line x1="22" y1="40" x2="24" y2="56" stroke={C.white} strokeWidth="1" opacity="0.55" />
+      <line x1="32" y1="40" x2="32" y2="56" stroke={C.white} strokeWidth="1" opacity="0.55" />
+      <line x1="42" y1="40" x2="40" y2="56" stroke={C.white} strokeWidth="1" opacity="0.55" />
+      {/* Candle */}
+      <rect x="30.5" y="14" width="3" height="11" fill={C.parchment} stroke={C.pepBlue} strokeWidth="1" />
+      {/* Flame */}
+      <ellipse cx="32" cy="11" rx="2.2" ry="3.2" fill={C.pepOrange} />
+      <ellipse cx="32" cy="10.5" rx="0.9" ry="1.6" fill="#FFE082" />
+    </svg>
+  );
+}
+
 // Megaphone glyph — used as the leading mark on the standard
 // "Aviso / Notice" announcement banner. Designed to feel editorial
 // and warm rather than alert-coded.
@@ -1145,19 +1338,44 @@ const BA_LAT = -34.6037;
 const BA_LON = -58.3816;
 
 async function fetchWeather() {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${BA_LAT}&longitude=${BA_LON}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=America/Argentina/Buenos_Aires`;
+  // Pull current conditions, today's high/low, and a 48-hour hourly
+  // slice covering precipitation, precipitation probability, wind
+  // gusts, weather code, and apparent temp. The hourly slice powers
+  // the impending-weather alert rendered under the high/low line.
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${BA_LAT}&longitude=${BA_LON}` +
+    `&current=temperature_2m,weather_code,is_day,wind_speed_10m` +
+    `&daily=temperature_2m_max,temperature_2m_min` +
+    `&hourly=temperature_2m,weather_code,precipitation,precipitation_probability,wind_gusts_10m` +
+    `&forecast_days=3&timezone=America/Argentina/Buenos_Aires`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather fetch failed");
   const j = await res.json();
   const c = j.current || {};
   const d = j.daily || {};
+  const h = j.hourly || {};
   const firstNum = (arr) => (Array.isArray(arr) && typeof arr[0] === "number" ? arr[0] : null);
+  // Slice the hourly arrays to the next 48 hours starting from now.
+  // Open-Meteo returns from midnight today, so we find the index of
+  // the current hour and slice forward.
+  const times = Array.isArray(h.time) ? h.time : [];
+  const nowIso = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+  let startIdx = times.findIndex((t) => typeof t === "string" && t.slice(0, 13) >= nowIso);
+  if (startIdx < 0) startIdx = 0;
+  const sliceN = (arr) => Array.isArray(arr) ? arr.slice(startIdx, startIdx + 48) : [];
   return {
     temp: typeof c.temperature_2m === "number" ? c.temperature_2m : null,
     code: typeof c.weather_code === "number" ? c.weather_code : 0,
     isDay: c.is_day === 1 || c.is_day === true,
     tempMax: firstNum(d.temperature_2m_max),
     tempMin: firstNum(d.temperature_2m_min),
+    hourly: {
+      time: sliceN(times),
+      temp: sliceN(h.temperature_2m),
+      code: sliceN(h.weather_code),
+      precip: sliceN(h.precipitation),
+      precipProb: sliceN(h.precipitation_probability),
+      windGust: sliceN(h.wind_gusts_10m),
+    },
     ts: Date.now(),
   };
 }
@@ -1168,6 +1386,96 @@ async function fetchWeather() {
 function cToF(c) {
   if (typeof c !== "number") return null;
   return Math.round((c * 9) / 5 + 32);
+}
+
+// Scan the next 48h of hourly forecast data for "significant" weather
+// worth flagging on the Today tile. Returns either { es, en } with a
+// short bilingual alert string, or null when conditions are normal.
+//
+// Thresholds are deliberately conservative so the alert means
+// something when it appears. Buenos Aires gets light drizzle often;
+// surfacing every shower would dilute the signal.
+//
+// Detection order matters: we return the most weather-disruptive
+// signal first. Thunderstorm > heavy rain > freezing > strong wind
+// > moderate rain. Only one alert at a time.
+function computeWeatherAlert(weather) {
+  if (!weather || !weather.hourly) return null;
+  const h = weather.hourly;
+  const codes = h.code || [];
+  const precip = h.precip || [];
+  const precipProb = h.precipProb || [];
+  const gust = h.windGust || [];
+  const temp = h.temp || [];
+  const times = h.time || [];
+  const n = Math.min(48, codes.length, precip.length, gust.length, temp.length);
+  if (n === 0) return null;
+
+  // Helper: figure out roughly when in the window something happens.
+  // "Esta tarde" / "esta noche" / "mañana" feels more useful than a
+  // raw "in 7 hours" countdown for a weather heads-up.
+  const phaseFor = (idx) => {
+    const t = times[idx];
+    if (!t) return { es: "pronto", en: "soon" };
+    const dt = new Date(t);
+    const now = new Date();
+    const sameDay = dt.toDateString() === now.toDateString();
+    const hour = dt.getHours();
+    if (sameDay) {
+      if (hour < 12) return { es: "esta mañana", en: "this morning" };
+      if (hour < 18) return { es: "esta tarde", en: "this afternoon" };
+      return { es: "esta noche", en: "tonight" };
+    }
+    // Tomorrow (or beyond, but the window caps at 48h)
+    if (hour < 12) return { es: "mañana a la mañana", en: "tomorrow morning" };
+    if (hour < 18) return { es: "mañana a la tarde", en: "tomorrow afternoon" };
+    return { es: "mañana a la noche", en: "tomorrow night" };
+  };
+
+  // 1. Thunderstorm (WMO 95-99)
+  for (let i = 0; i < n; i++) {
+    const c = codes[i];
+    if (c === 95 || c === 96 || c === 99) {
+      const p = phaseFor(i);
+      return { es: `Tormenta eléctrica ${p.es}`, en: `Thunderstorm ${p.en}` };
+    }
+  }
+
+  // 2. Heavy rain (>5mm in any single hour, or sustained moderate)
+  for (let i = 0; i < n; i++) {
+    if (precip[i] >= 5) {
+      const p = phaseFor(i);
+      return { es: `Lluvia fuerte ${p.es}`, en: `Heavy rain ${p.en}` };
+    }
+  }
+
+  // 3. Freezing temps (≤2°C, ~36°F)
+  for (let i = 0; i < n; i++) {
+    if (typeof temp[i] === "number" && temp[i] <= 2) {
+      const p = phaseFor(i);
+      return { es: `Frío extremo ${p.es}`, en: `Freezing ${p.en}` };
+    }
+  }
+
+  // 4. Strong winds (gusts ≥50 km/h)
+  for (let i = 0; i < n; i++) {
+    if (gust[i] >= 50) {
+      const p = phaseFor(i);
+      return { es: `Vientos fuertes ${p.es}`, en: `Strong winds ${p.en}` };
+    }
+  }
+
+  // 5. Notable rain (≥2mm in an hour with high probability) — softer
+  // signal worth surfacing because students often plan their day
+  // around staying dry.
+  for (let i = 0; i < n; i++) {
+    if (precip[i] >= 2 && precipProb[i] >= 70) {
+      const p = phaseFor(i);
+      return { es: `Lluvia ${p.es}`, en: `Rain expected ${p.en}` };
+    }
+  }
+
+  return null;
 }
 
 // Pull Blue and MEP (bolsa) in parallel via Promise.allSettled so a
@@ -1200,13 +1508,37 @@ async function fetchDolar() {
 // Compute today's items: classes scheduled for today's day-of-week
 // plus calendar events that overlap today (excluding semester-only).
 // Sorted by start time; untimed items first.
+//
+// Filtering rules:
+//   1. Classes only show when shouldFilterClasses(profile) is true —
+//      i.e., the student has personalized their enrollment AND the
+//      filter toggle is on. The toggle auto-enables when classes are
+//      first selected (see toggleClass in the Profile editor).
+//   2. Classes are also suppressed on a holiday whose Holidays-tab
+//      row has cancels_classes=true (national feriados, Semana Santa,
+//      días no laborables turísticos). Cultural observances with
+//      cancels_classes=false don't suppress classes.
+//   3. The legacy calendar-event `type:"holiday"` path still works as
+//      a fallback when the Holidays tab is empty; for backwards compat,
+//      legacy holiday events always cancel classes.
+//
+// Returns { items, holiday } so TodayView can render a small
+// holiday context card alongside the (possibly empty) activity card.
 function getTodayItems(data, profile) {
   const today = new Date();
   const todayDow = WEEK_DAYS_SHORT[today.getDay()];
   today.setHours(12, 0, 0, 0);
   const todayStr = toDateStr(today);
 
-  const visibleClasses = filterClassesByProfile(data.classes || [], profile);
+  const holiday = findHolidayContext(data, todayStr);
+  const suppressClasses = holiday && holiday.cancels_classes;
+
+  // Classes only render if (a) the student has personalized AND
+  // (b) today's holiday (if any) doesn't cancel classes.
+  const showClasses = shouldFilterClasses(profile) && !suppressClasses;
+  const visibleClasses = showClasses
+    ? filterClassesByProfile(data.classes || [], profile)
+    : [];
 
   const todayClasses = visibleClasses
     .filter((c) => c.days && c.days.includes(todayDow))
@@ -1219,9 +1551,14 @@ function getTodayItems(data, profile) {
       location: c.location,
     }));
 
+  // The legacy holiday calendar event (if used) is filtered out of
+  // the events list to avoid double-rendering with the holiday card.
+  // Holidays-tab rows aren't in calendarEvents at all, so no filter
+  // needed for that path.
   const todayEvents = (data.calendarEvents || [])
     .filter((e) => e.visibility !== "semester")
     .filter((e) => eventOverlaps(e, todayStr, todayStr))
+    .filter((e) => !(holiday && holiday.source === "legacy" && e.type === "holiday"))
     .map((e) => ({
       kind: "event",
       title: e.title,
@@ -1233,12 +1570,14 @@ function getTodayItems(data, profile) {
       location: "",
     }));
 
-  return [...todayClasses, ...todayEvents].sort((a, b) => {
+  const items = [...todayClasses, ...todayEvents].sort((a, b) => {
     if (a.sortMin === null && b.sortMin === null) return 0;
     if (a.sortMin === null) return -1;
     if (b.sortMin === null) return 1;
     return a.sortMin - b.sortMin;
   });
+
+  return { items, holiday };
 }
 
 // ─── Today View ───
@@ -1290,7 +1629,7 @@ function TodayView({ data, onJumpToTab, profile }) {
   const isDayHour = hour >= 6 && hour < 19;
   const dateLabel = formatSpanishDate(now);
 
-  const items = getTodayItems(data, profile);
+  const { items, holiday } = getTodayItems(data, profile);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nextItem = items.find((i) => i.sortMin !== null && i.sortMin > nowMin);
   const countdown = nextItem ? formatCountdown(nextItem.sortMin, nowMin) : null;
@@ -1348,6 +1687,8 @@ function TodayView({ data, onJumpToTab, profile }) {
     }}>{children}</div>
   );
 
+  const weatherAlert = weather ? computeWeatherAlert(weather) : null;
+
   const weatherTile = statTile(
     weather ? (
       <>
@@ -1376,6 +1717,25 @@ function TodayView({ data, onJumpToTab, profile }) {
           fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.mountain,
           marginTop: 6, lineHeight: 1.3,
         }}>{getDressHint(weather.temp, weather.code)}</div>
+        {weatherAlert && (
+          <div style={{
+            marginTop: 8,
+            background: C.parchment,
+            borderLeft: `2.5px solid ${C.pepOrange}`,
+            borderRadius: 4,
+            padding: "5px 8px",
+            lineHeight: 1.3,
+          }}>
+            <div style={{
+              fontFamily: "'Roboto', sans-serif", fontSize: 11.5, fontWeight: 500,
+              color: C.pepBlack,
+            }}>{weatherAlert.es}</div>
+            <div style={{
+              fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+              fontSize: 11, color: C.mountain, marginTop: 1,
+            }}>{weatherAlert.en}</div>
+          </div>
+        )}
       </>
     ) : (
       <>
@@ -1419,9 +1779,76 @@ function TodayView({ data, onJumpToTab, profile }) {
     "dolar",
   );
 
+  // ── Holiday card ──
+  // Renders above the activity card on a feriado or cultural
+  // observance. On a class-cancelling holiday it serves as context
+  // for why the day is open; on an observance day it's a small
+  // cultural primer. Bilingual: Spanish primary, English in italic
+  // serif underneath. Pulls title and descriptions from the Holidays
+  // sheet tab (or, as fallback, from a calendar holiday event).
+  let holidayCard = null;
+  if (holiday) {
+    const sameTitle = holiday.name_es && holiday.name_en && holiday.name_es === holiday.name_en;
+    const sameDesc = holiday.description_es && holiday.description_en && holiday.description_es === holiday.description_en;
+    const labelEs = holiday.cancels_classes ? "Feriado" : "Día especial";
+    const labelEn = holiday.cancels_classes ? "Holiday" : "Cultural day";
+    const accent = holiday.cancels_classes ? "#C62828" : C.ocean;
+    const bg = holiday.cancels_classes ? "#FCE4EC" : C.ice;
+    holidayCard = (
+      <div style={{
+        background: bg,
+        borderLeft: `4px solid ${accent}`,
+        borderRadius: 12,
+        padding: "13px 16px",
+        marginBottom: 14,
+      }}>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
+          textTransform: "uppercase", letterSpacing: 1.5, color: accent,
+          marginBottom: 6,
+        }}>
+          {labelEs} <span style={{ color: C.stone, margin: "0 2px" }}>/</span> {labelEn}
+        </div>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontSize: 19, fontWeight: 700,
+          fontStyle: "italic", color: C.pepBlack, lineHeight: 1.2,
+        }}>{holiday.name_es || holiday.name_en}</div>
+        {!sameTitle && holiday.name_en && (
+          <div style={{
+            fontFamily: "'EB Garamond', serif", fontSize: 14,
+            fontStyle: "italic", color: C.mountain, lineHeight: 1.25,
+            marginTop: 2,
+          }}>{holiday.name_en}</div>
+        )}
+        {holiday.description_es && (
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
+            marginTop: 8, lineHeight: 1.45, whiteSpace: "pre-line",
+          }}>{holiday.description_es}</div>
+        )}
+        {!sameDesc && holiday.description_en && (
+          <div style={{
+            fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12.5,
+            color: C.mountain, marginTop: 6, lineHeight: 1.45, whiteSpace: "pre-line",
+          }}>{holiday.description_en}</div>
+        )}
+      </div>
+    );
+  }
+
   // ── Today's activity (or empty state) ──
+  // Branches:
+  //   - items > 0 → list of items (the holiday is already surfaced
+  //     above as its own card)
+  //   - empty + class-cancelling holiday → no activityCard at all
+  //     (holiday card alone is enough; "¡Día libre!" would be redundant)
+  //   - empty otherwise → "¡Día libre!" empty state. Cultural
+  //     observances (cancels_classes=false) still get this when
+  //     there's nothing else on, since they don't change the day's
+  //     rhythm.
+  const suppressEmptyForHoliday = !!(holiday && holiday.cancels_classes);
   let activityCard;
-  if (items.length === 0) {
+  if (items.length === 0 && !suppressEmptyForHoliday) {
     activityCard = (
       <div style={{
         background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
@@ -1569,6 +1996,8 @@ function TodayView({ data, onJumpToTab, profile }) {
         {dolarTile}
       </div>
       <AnnouncementBanner announcements={data.announcements} />
+      <BirthdayCard birthdays={data.birthdays} />
+      {holidayCard}
       {activityCard}
       <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
       {tipCard}
@@ -1877,8 +2306,71 @@ function AnnouncementBanner({ announcements }) {
   );
 }
 
+// Birthday card — surfaced on Today between the announcement banner
+// and the holiday card on any day where one or more rows in
+// data.birthdays match today's MM-DD. Three layout tiers:
+//   - 1 person:  personalized title with their name in the headline
+//   - 2 people:  bilingual title with both names joined ("María y Carlos")
+//   - 3+ people: generic "¡Feliz cumple!" header with names listed
+//                beneath in a single comma-joined line
+// Year of birth (if present in the source data) is intentionally
+// stripped during parsing — the app never displays or computes age.
+function BirthdayCard({ birthdays }) {
+  const today = findTodayBirthdays(birthdays);
+  if (today.length === 0) return null;
+  const names = today.map((b) => b.name);
+
+  let titleEs;
+  let titleEn;
+  let listLine = null;
+  if (names.length === 1) {
+    titleEs = `¡Feliz cumple, ${names[0]}!`;
+    titleEn = `Happy birthday, ${names[0]}`;
+  } else if (names.length === 2) {
+    titleEs = `¡Feliz cumple a ${joinSpanish(names)}!`;
+    titleEn = `Happy birthday, ${joinEnglish(names)}`;
+  } else {
+    titleEs = "¡Feliz cumple!";
+    titleEn = "Happy birthday";
+    listLine = names.join(", ");
+  }
+
+  return (
+    <div style={{
+      background: C.parchment,
+      borderLeft: `4px solid ${C.pepOrange}`,
+      borderRadius: 12,
+      padding: "13px 16px",
+      marginBottom: 14,
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+    }}>
+      <div style={{ flexShrink: 0 }}>
+        <CupcakeIcon size={44} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 18, fontWeight: 700, color: C.pepBlack, lineHeight: 1.2,
+        }}>{titleEs}</div>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 14, color: C.mountain, marginTop: 2, lineHeight: 1.25,
+        }}>{titleEn}</div>
+        {listLine && (
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
+            marginTop: 6, lineHeight: 1.4,
+          }}>{listLine}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Weekly Overview ───
-function WeeklyOverviewView({ data }) {
+function WeeklyOverviewView({ data, profile }) {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const today = new Date();
@@ -1926,6 +2418,25 @@ function WeeklyOverviewView({ data }) {
     });
   });
 
+  // Personalized classes by day-of-week. Only computed when the
+  // student has personalized AND the filter toggle is on (which
+  // auto-enables when classes are first selected). Empty otherwise,
+  // and never rendered on a day that has a holiday event.
+  const showClasses = shouldFilterClasses(profile);
+  const visibleClasses = showClasses
+    ? filterClassesByProfile(data.classes || [], profile)
+    : [];
+  const classesByDow = {};
+  if (showClasses) {
+    DAYS_ORDER.forEach((dow) => {
+      classesByDow[dow] = visibleClasses
+        .filter((c) => c.days && c.days.includes(dow))
+        .sort((a, b) =>
+          getSortTime(a.time, dow).localeCompare(getSortTime(b.time, dow))
+        );
+    });
+  }
+
   const weekLabel = `${formatDate(weekStartStr)} – ${formatDate(weekEndStr)}`;
 
   return (
@@ -1959,9 +2470,20 @@ function WeeklyOverviewView({ data }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {weekDates.map((d) => {
           const ds = toDateStr(d);
+          const dow = WEEK_DAYS_SHORT[d.getDay()];
           const isToday = ds === todayStr;
           const dayEvents = eventsByDate[ds] || [];
-          const hasContent = dayEvents.length > 0;
+          const holidayContext = findHolidayContext(data, ds);
+          const cancelsClasses = !!(holidayContext && holidayContext.cancels_classes);
+          // Personal classes only render when (a) the student has
+          // personalized AND (b) the day's holiday (if any) cancels
+          // classes. Cultural observances (cancels_classes=false) do
+          // NOT suppress classes. Class Schedule's own week view
+          // stays unaffected; this is only for the weekly overview.
+          const dayClasses = (showClasses && !cancelsClasses)
+            ? (classesByDow[dow] || [])
+            : [];
+          const hasContent = dayEvents.length > 0 || dayClasses.length > 0 || !!holidayContext;
 
           return (
             <div key={ds} style={{
@@ -1989,10 +2511,43 @@ function WeeklyOverviewView({ data }) {
                 </div>
               </div>
 
-              {/* Events for the day */}
-              {dayEvents.length > 0 && (
+              {/* Holiday banner inside the day card. Renders for any
+                  Holidays-tab row hitting this date (or a legacy
+                  calendar holiday event). Class-cancelling holidays
+                  get the red feriado treatment; cultural observances
+                  get a quieter Ocean treatment so they don't shout. */}
+              {holidayContext && (() => {
+                const accent = holidayContext.cancels_classes ? "#C62828" : C.ocean;
+                const bg = holidayContext.cancels_classes ? "#FCE4EC" : C.ice;
+                const labelEs = holidayContext.cancels_classes ? "Feriado" : "Día especial";
+                return (
+                  <div style={{
+                    background: bg, borderLeft: `3px solid ${accent}`,
+                    borderRadius: 8, padding: "8px 12px", marginBottom: 6,
+                  }}>
+                    <div style={{
+                      fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500,
+                      textTransform: "uppercase", letterSpacing: 1.2, color: accent,
+                      marginBottom: 2,
+                    }}>{labelEs}</div>
+                    <div style={{
+                      fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+                      fontSize: 14, fontWeight: 700, color: C.pepBlack, lineHeight: 1.2,
+                    }}>{holidayContext.name_es || holidayContext.name_en}</div>
+                  </div>
+                );
+              })()}
+
+              {/* Events + classes for the day. Events render first
+                  (they're typically time-blocked program events that
+                  reshape the day's schedule); classes follow as a
+                  thinner secondary list with a faint top divider. */}
+              {(dayEvents.length > 0 || dayClasses.length > 0) && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {dayEvents.map((e, i) => {
+                    // Skip legacy holiday events when there's already a
+                    // Holidays-tab row driving the holiday banner above.
+                    if (holidayContext && holidayContext.source === "legacy" && e.type === "holiday") return null;
                     const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
                     const isMulti = e.end_date && e.end_date > e.date;
                     const timeStr = e.start_time
@@ -2018,6 +2573,35 @@ function WeeklyOverviewView({ data }) {
                         )}
                         {e.description && (
                           <div style={{ fontSize: 12, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif", lineHeight: 1.4, whiteSpace: "pre-line" }}>{e.description}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {dayClasses.map((c, i) => {
+                    const t = getTimeForDay(c.time, dow);
+                    return (
+                      <div key={`cls-${i}`} style={{
+                        display: "flex", alignItems: "baseline", justifyContent: "space-between",
+                        gap: 8, padding: "4px 12px 4px 15px",
+                        borderLeft: `2px solid ${C.fog}`,
+                      }}>
+                        <span style={{
+                          fontFamily: "'Roboto', sans-serif", fontSize: 12,
+                          color: C.mountain, lineHeight: 1.35,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          <span style={{
+                            fontFamily: "'DM Mono', monospace", fontSize: 10,
+                            color: C.stone, marginRight: 6,
+                          }}>{c.code}</span>
+                          {c.title}
+                        </span>
+                        {t && (
+                          <span style={{
+                            fontFamily: "'DM Mono', monospace", fontSize: 10,
+                            color: C.stone, whiteSpace: "nowrap",
+                          }}>{t}</span>
                         )}
                       </div>
                     );
@@ -2184,7 +2768,7 @@ function ScheduleView({ data, profile, onOpenSettings }) {
           </span>
         </div>
       )}
-      {section === "overview" && <WeeklyOverviewView data={data} />}
+      {section === "overview" && <WeeklyOverviewView data={data} profile={profile} />}
       {(section === "week" || section === "list") && <ClassScheduleView data={data} view={section} profile={profile} />}
     </div>
   );
@@ -3077,7 +3661,20 @@ function ProfileModal({ open, onClose, profile, onChange, classes }) {
   const toggleClass = (code) => {
     const next = new Set(enrolledSet);
     if (next.has(code)) next.delete(code); else next.add(code);
-    onChange({ ...profile, enrolledClasses: Array.from(next) });
+    const nextArr = Array.from(next);
+    // Auto-enable the personalization filter the first time a class
+    // is selected, so the student's choices take effect immediately
+    // on Today and in Weekly Overview without needing to also flip
+    // the toggle below. We only flip false → true; never override
+    // a deliberate user-off state once classes are already chosen.
+    const wasEmpty = enrolledSet.size === 0;
+    const nowHasOne = nextArr.length > 0;
+    const shouldAutoEnable = wasEmpty && nowHasOne && !profile.filterEnabled;
+    onChange({
+      ...profile,
+      enrolledClasses: nextArr,
+      ...(shouldAutoEnable ? { filterEnabled: true } : {}),
+    });
   };
   const toggleFilter = () => onChange({ ...profile, filterEnabled: !profile.filterEnabled });
   const clearAll = () => onChange({
