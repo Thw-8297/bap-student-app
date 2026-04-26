@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-25 — Today dashboard added as new default tab (Today / Hoy). Time-of-day greeting strip with rotating sun (day) or crescent moon (night) glyph and Spanish date in italic EB Garamond. Quick-stats row with live weather (Open-Meteo, no key required) and dólar blue rate (dolarapi.com); both cached locally with a 30-minute TTL. Live 'Próximo en X min' countdown that auto-updates every minute. Rotating tip card pulling from the Tips sheet. Whimsical '¡Día libre!' empty state with a steaming mate gourd and an 'Explorar BA' shortcut to Local > Explore. TodayHero removed from Weekly Overview; six-tab nav (Today, Schedule, Calendar, Local, FAQ, Contacts) with Today taking BAP Blue and Local shifted to Sky. CACHE_VERSION stays at 2; weather/dólar use a separate localStorage entry";
+const BUILD_VERSION = "2026-04-25 — Service category added to Events. Tenth category 'service' (Spanish: 'Servicio') captures opportunities to volunteer, do service learning, and give back to the community. New <HandsHeartIcon> glyph (cupped hands cradling a heart) in BAP Blue (#64B5F6, previously unused in events). EVENT_CATEGORIES extended; sample service event added to DEFAULT_DATA. No CACHE_VERSION bump because the change is purely additive in value space (the events shape is unchanged).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -85,6 +85,12 @@ const DEFAULT_DATA = {
     { text: "Most caf\u00e9s bring you a free glass of soda water with every coffee.", category: "food" },
     { text: "*Che* is how you get someone\u2019s attention. No one takes offense.", category: "phrases" },
   ],
+  events: [
+    { title: "Festival de Tango BA", category: "festival", description: "Citywide tango festival; free milongas across town.", start_date: "2026-08-15", end_date: "2026-08-25", time: "", venue: "Various", neighborhood: "Citywide", address: "", link: "https://festivales.buenosaires.gob.ar", cost: "Free" },
+    { title: "Frida Kahlo en MALBA", category: "exhibit", description: "Touring exhibition; recommended on a weekday.", start_date: "2026-08-01", end_date: "2026-09-30", time: "", venue: "MALBA", neighborhood: "Palermo", address: "Av. Figueroa Alcorta 3415", link: "https://www.malba.org.ar", cost: "$5.000 ARS" },
+    { title: "La Bomba de Tiempo", category: "music", description: "Improvised percussion ensemble; a Monday-night BA institution.", start_date: "2026-08-17", end_date: "", time: "20:00", venue: "Konex", neighborhood: "Almagro", address: "Sarmiento 3131", link: "https://ciudadculturalkonex.org", cost: "$8.000 ARS" },
+    { title: "Comedor comunitario en Barracas", category: "service", description: "Help serve dinner at a neighborhood soup kitchen; Spanish helpful but not required.", start_date: "2026-08-20", end_date: "", time: "18:00", venue: "Comedor Los Pibes", neighborhood: "Barracas", address: "", link: "", cost: "Free" },
+  ],
 };
 
 // ============================================================
@@ -147,6 +153,12 @@ async function fetchAllData() {
   // Tips tab is optional — used by the loading screen rotator
   let tipsRaw = [];
   try { tipsRaw = await fetchTab("Tips"); } catch (e) { /* tab not created yet */ }
+
+  // Events tab is optional — populates the "This Week" sub-tab in Local
+  // and the "Esta semana" tile on Today. Empty/missing tab is fine; the
+  // app simply hides the sub-tab content area and Today tile.
+  let eventsRaw = [];
+  try { eventsRaw = await fetchTab("Events"); } catch (e) { /* tab not created yet */ }
 
   const settings = {};
   settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
@@ -246,6 +258,19 @@ async function fetchAllData() {
       text: r.text.trim(),
       category: r.category ? r.category.trim().toLowerCase() : "",
     })),
+    events: eventsRaw.filter(r => r.title && r.start_date).map((r) => ({
+      title: r.title.trim(),
+      category: r.category ? r.category.trim().toLowerCase() : "other",
+      description: r.description ? r.description.trim() : "",
+      start_date: r.start_date.trim().slice(0, 10),
+      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
+      time: r.time ? r.time.trim() : "",
+      venue: r.venue ? r.venue.trim() : "",
+      neighborhood: r.neighborhood ? r.neighborhood.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      link: r.link ? r.link.trim() : "",
+      cost: r.cost ? r.cost.trim() : "",
+    })),
   };
 }
 
@@ -258,7 +283,7 @@ async function fetchAllData() {
 // ============================================================
 
 const CACHE_KEY = "bap-app-cache";
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 function loadCache() {
   try {
@@ -283,6 +308,78 @@ function saveCache(data) {
   } catch (e) {
     // Quota exceeded or storage disabled; silently skip
   }
+}
+
+// ============================================================
+// STUDENT PROFILE — Per-student personalization
+// Stored at its own localStorage key (bap-profile) so it survives
+// CACHE_VERSION bumps to the data cache. Profile is optional: an
+// empty profile leaves the app behaving as it did before, showing
+// every student every class. Bump PROFILE_VERSION only if the
+// profile shape itself changes (new field, renamed field).
+// ============================================================
+
+const PROFILE_KEY = "bap-profile";
+const PROFILE_VERSION = 1;
+
+const EMPTY_PROFILE = {
+  version: PROFILE_VERSION,
+  name: "",
+  enrolledClasses: [],
+  filterEnabled: false,
+  dismissedAnnouncements: [],
+};
+
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (!raw) return { ...EMPTY_PROFILE };
+    const parsed = JSON.parse(raw);
+    if (parsed.version !== PROFILE_VERSION) return { ...EMPTY_PROFILE };
+    return {
+      ...EMPTY_PROFILE,
+      ...parsed,
+      enrolledClasses: Array.isArray(parsed.enrolledClasses) ? parsed.enrolledClasses : [],
+      dismissedAnnouncements: Array.isArray(parsed.dismissedAnnouncements) ? parsed.dismissedAnnouncements : [],
+    };
+  } catch (e) {
+    return { ...EMPTY_PROFILE };
+  }
+}
+
+function saveProfile(profile) {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      ...profile,
+      version: PROFILE_VERSION,
+    }));
+  } catch (e) {
+    // Quota exceeded or storage disabled; silently skip
+  }
+}
+
+// Stable, lightweight hash for announcement dismissal tracking. Not
+// cryptographic; just enough to recognize "this exact message has
+// been dismissed before" across reloads. djb2 variant.
+function hashAnnouncement(message) {
+  const s = String(message || "");
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+
+// Returns true when the profile has classes selected AND the filter
+// toggle is on; everywhere else, classes render unfiltered.
+function shouldFilterClasses(profile) {
+  return !!(profile && profile.filterEnabled && profile.enrolledClasses && profile.enrolledClasses.length > 0);
+}
+
+function filterClassesByProfile(classes, profile) {
+  if (!shouldFilterClasses(profile)) return classes;
+  const set = new Set(profile.enrolledClasses);
+  return (classes || []).filter((c) => set.has(c.code));
 }
 
 // ============================================================
@@ -408,6 +505,82 @@ function countDays(startDate, endDate) {
   const s = new Date(startDate + "T12:00:00");
   const e = new Date(endDate + "T12:00:00");
   return Math.round((e - s) / 86400000) + 1;
+}
+
+// ============================================================
+// EVENTS — "This Week in BA" category config and helpers
+// ============================================================
+
+// Each category gets a color accent and a glyph component. The icon
+// receives a color prop so the rendered glyph matches the accent.
+// Falls through to "other" for unknown categories so the sheet can
+// add tentative new categories without crashing the view.
+const EVENT_CATEGORIES = {
+  music:    { label: "Music",    es: "Música",     color: "#E35205", Icon: MusicNoteIcon },
+  theater:  { label: "Theater",  es: "Teatro",     color: "#00205B", Icon: TheaterMaskIcon },
+  film:     { label: "Film",     es: "Cine",       color: "#425563", Icon: FilmReelIcon },
+  exhibit:  { label: "Exhibit",  es: "Muestra",    color: "#6CACE4", Icon: PictureFrameIcon },
+  dance:    { label: "Dance",    es: "Danza",      color: "#E35205", Icon: TangoShoeIcon },
+  festival: { label: "Festival", es: "Festival",   color: "#E35205", Icon: SparkleIcon },
+  food:     { label: "Food",     es: "Gastronomía",color: "#0057B8", Icon: ForkPlateIcon },
+  talk:     { label: "Talk",     es: "Charla",     color: "#425563", Icon: MicrophoneIcon },
+  service:  { label: "Service",  es: "Servicio",   color: "#64B5F6", Icon: HandsHeartIcon },
+  other:    { label: "Other",    es: "Otro",       color: "#7A99AC", Icon: PinIcon },
+};
+
+function getEventCategory(key) {
+  return EVENT_CATEGORIES[key] || EVENT_CATEGORIES.other;
+}
+
+// Filter an event list to entries that haven't yet ended. Events with
+// an end_date are kept until the day after end_date; single-day events
+// are kept on their start_date.
+function filterUpcomingEvents(events, todayStr) {
+  return (events || []).filter((e) => {
+    const last = e.end_date && e.end_date >= e.start_date ? e.end_date : e.start_date;
+    return last >= todayStr;
+  });
+}
+
+// Sort events chronologically by start_date, then by time when both
+// share the same start. Untimed events come before timed ones on the
+// same day so "all-day" entries lead the day.
+function sortEventsChronological(events) {
+  return [...(events || [])].sort((a, b) => {
+    if (a.start_date !== b.start_date) return a.start_date.localeCompare(b.start_date);
+    const ma = toMinutes(a.time);
+    const mb = toMinutes(b.time);
+    if (ma === null && mb === null) return 0;
+    if (ma === null) return -1;
+    if (mb === null) return 1;
+    return ma - mb;
+  });
+}
+
+// Returns events whose date range intersects today through today+7d.
+// Used by the Today tile and by EventsView to highlight "this week."
+function getThisWeekEvents(data) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const weekEnd = new Date(today);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const todayStr = toDateStr(today);
+  const weekEndStr = toDateStr(weekEnd);
+  const upcoming = (data.events || []).filter((e) => {
+    const last = e.end_date && e.end_date >= e.start_date ? e.end_date : e.start_date;
+    return last >= todayStr && e.start_date <= weekEndStr;
+  });
+  return sortEventsChronological(upcoming);
+}
+
+// Compact, friendly date label for an event card. Single-day → "Mon, May 4";
+// multi-day → "May 4 – May 8" using the existing dateRangeLabel().
+function eventDateLabel(event) {
+  if (event.end_date && event.end_date > event.start_date) {
+    return dateRangeLabel(event.start_date, event.end_date);
+  }
+  const d = new Date(event.start_date + "T12:00:00");
+  return `${WEEK_DAYS_SHORT[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
 // Compact day abbreviations: M T W R F
@@ -541,14 +714,14 @@ function ObeliscoIcon({ size = 36 }) {
   );
 }
 
-function TangoShoeIcon({ size = 36 }) {
+function TangoShoeIcon({ size = 36, color = C.pepBlue }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <path d="M8 40 Q8 36 12 36 L40 36 Q46 36 48 30 Q49 26 53 25 L53 32 Q53 38 47 41 Q44 43 40 43 L20 43 L20 48 Q20 52 16 52 L11 52 Q8 52 8 48 Z"
-            fill={C.bapBlue} stroke={C.pepBlue} strokeWidth="2" strokeLinejoin="round" />
-      <line x1="48" y1="32" x2="48" y2="55" stroke={C.pepBlue} strokeWidth="3" strokeLinecap="round" />
-      <ellipse cx="48" cy="56" rx="5" ry="1.5" fill={C.pepBlue} />
-      <path d="M20 38 L36 38" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      <line x1="48" y1="32" x2="48" y2="55" stroke={color} strokeWidth="3" strokeLinecap="round" />
+      <ellipse cx="48" cy="56" rx="5" ry="1.5" fill={color} />
+      <path d="M20 38 L36 38" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -587,6 +760,131 @@ function MoonIcon({ size = 36 }) {
       <circle cx="50" cy="20" r="1.2" fill={C.fog} opacity="0.8" />
       <circle cx="54" cy="36" r="0.9" fill={C.fog} opacity="0.6" />
       <circle cx="46" cy="48" r="0.9" fill={C.fog} opacity="0.6" />
+    </svg>
+  );
+}
+
+// ─── Event category glyphs ───
+// One per Events category. All accept a color prop so the EventsView
+// can render them in a colored circle that matches the category accent.
+// Default fill stays in the BAP palette so they look correct anywhere
+// else they get reused.
+
+function MusicNoteIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M26 14 L48 10 L48 42" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <ellipse cx="22" cy="44" rx="8" ry="6" fill={color} />
+      <ellipse cx="44" cy="46" rx="8" ry="6" fill={color} />
+      <line x1="26" y1="14" x2="48" y2="22" stroke={color} strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TheaterMaskIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M14 14 Q14 10 18 10 L40 10 Q44 10 44 14 L44 30 Q44 44 30 50 Q14 44 14 30 Z"
+            fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      <ellipse cx="22" cy="24" rx="2.5" ry="3.5" fill={C.white} />
+      <ellipse cx="36" cy="24" rx="2.5" ry="3.5" fill={C.white} />
+      <path d="M22 36 Q29 42 36 36" stroke={C.white} strokeWidth="2" fill="none" strokeLinecap="round" />
+      <path d="M44 26 Q52 28 56 36 Q58 48 46 54 Q42 56 38 54" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" opacity="0.55" />
+    </svg>
+  );
+}
+
+function FilmReelIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="32" cy="32" r="22" fill={color} />
+      <circle cx="32" cy="32" r="4" fill={C.white} />
+      <circle cx="32" cy="14" r="3.5" fill={C.white} />
+      <circle cx="32" cy="50" r="3.5" fill={C.white} />
+      <circle cx="14" cy="32" r="3.5" fill={C.white} />
+      <circle cx="50" cy="32" r="3.5" fill={C.white} />
+      <circle cx="20" cy="20" r="2.5" fill={C.white} />
+      <circle cx="44" cy="20" r="2.5" fill={C.white} />
+      <circle cx="20" cy="44" r="2.5" fill={C.white} />
+      <circle cx="44" cy="44" r="2.5" fill={C.white} />
+    </svg>
+  );
+}
+
+function PictureFrameIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="10" y="12" width="44" height="40" rx="2" fill={color} stroke={color} strokeWidth="2" />
+      <rect x="14" y="16" width="36" height="32" fill={C.white} />
+      <circle cx="22" cy="26" r="3" fill={color} opacity="0.6" />
+      <path d="M14 44 L24 32 L34 40 L42 30 L50 44 Z" fill={color} opacity="0.55" />
+    </svg>
+  );
+}
+
+function SparkleIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M32 6 L36 28 L58 32 L36 36 L32 58 L28 36 L6 32 L28 28 Z" fill={color} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="50" cy="14" r="2.5" fill={color} opacity="0.7" />
+      <circle cx="14" cy="50" r="2" fill={color} opacity="0.7" />
+      <circle cx="14" cy="14" r="1.5" fill={color} opacity="0.5" />
+    </svg>
+  );
+}
+
+function ForkPlateIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <ellipse cx="32" cy="38" rx="22" ry="6" fill={color} />
+      <ellipse cx="32" cy="34" rx="22" ry="6" fill={C.white} stroke={color} strokeWidth="2" />
+      <ellipse cx="32" cy="34" rx="14" ry="3" fill={color} opacity="0.25" />
+      <line x1="14" y1="10" x2="14" y2="28" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="18" y1="10" x2="18" y2="22" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="22" y1="10" x2="22" y2="28" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="48" y1="10" x2="48" y2="30" stroke={color} strokeWidth="3" strokeLinecap="round" />
+      <ellipse cx="48" cy="14" rx="4" ry="6" fill={color} />
+    </svg>
+  );
+}
+
+function MicrophoneIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="24" y="8" width="16" height="30" rx="8" fill={color} stroke={color} strokeWidth="2" />
+      <path d="M16 32 Q16 46 32 46 Q48 46 48 32" stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <line x1="32" y1="46" x2="32" y2="56" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="24" y1="56" x2="40" y2="56" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="28" y1="18" x2="36" y2="18" stroke={C.white} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+      <line x1="28" y1="24" x2="36" y2="24" stroke={C.white} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+    </svg>
+  );
+}
+
+function PinIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M32 8 Q18 8 18 24 Q18 36 32 56 Q46 36 46 24 Q46 8 32 8 Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      <circle cx="32" cy="24" r="6" fill={C.white} />
+    </svg>
+  );
+}
+
+function HandsHeartIcon({ size = 36, color = C.pepBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      {/* Heart cradled above the hands */}
+      <path d="M32 14 Q26 6 20 12 Q15 18 22 26 L32 34 L42 26 Q49 18 44 12 Q38 6 32 14 Z"
+            fill={color} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Left cupped hand */}
+      <path d="M10 36 Q10 30 16 30 Q22 30 24 34 L32 40 L32 54 L18 54 Q10 54 10 48 Z"
+            fill={color} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Right cupped hand */}
+      <path d="M54 36 Q54 30 48 30 Q42 30 40 34 L32 40 L32 54 L46 54 Q54 54 54 48 Z"
+            fill={color} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Subtle palm crease for definition */}
+      <path d="M16 40 Q20 42 24 41" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      <path d="M48 40 Q44 42 40 41" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2" fill="none" strokeLinecap="round" />
     </svg>
   );
 }
@@ -856,13 +1154,15 @@ async function fetchDolarBlue() {
 // Compute today's items: classes scheduled for today's day-of-week
 // plus calendar events that overlap today (excluding semester-only).
 // Sorted by start time; untimed items first.
-function getTodayItems(data) {
+function getTodayItems(data, profile) {
   const today = new Date();
   const todayDow = WEEK_DAYS_SHORT[today.getDay()];
   today.setHours(12, 0, 0, 0);
   const todayStr = toDateStr(today);
 
-  const todayClasses = (data.classes || [])
+  const visibleClasses = filterClassesByProfile(data.classes || [], profile);
+
+  const todayClasses = visibleClasses
     .filter((c) => c.days && c.days.includes(todayDow))
     .map((c) => ({
       kind: "class",
@@ -896,7 +1196,7 @@ function getTodayItems(data) {
 }
 
 // ─── Today View ───
-function TodayView({ data, onJumpToTab }) {
+function TodayView({ data, onJumpToTab, profile, onDismissAnnouncement }) {
   // Clock tick. Updates every minute so the Próximo countdown stays
   // accurate and the greeting/gradient shifts as the day progresses.
   const [now, setNow] = useState(() => new Date());
@@ -944,7 +1244,7 @@ function TodayView({ data, onJumpToTab }) {
   const isDayHour = hour >= 6 && hour < 19;
   const dateLabel = formatSpanishDate(now);
 
-  const items = getTodayItems(data);
+  const items = getTodayItems(data, profile);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nextItem = items.find((i) => i.sortMin !== null && i.sortMin > nowMin);
   const countdown = nextItem ? formatCountdown(nextItem.sortMin, nowMin) : null;
@@ -986,7 +1286,7 @@ function TodayView({ data, onJumpToTab }) {
       <div style={{
         fontFamily: "'EB Garamond', serif", fontSize: 26, fontWeight: 700,
         lineHeight: 1.05, letterSpacing: -0.4,
-      }}>{greeting.es}</div>
+      }}>{profile && profile.name ? `${greeting.es}, ${profile.name}` : greeting.es}</div>
       <div style={{
         fontFamily: "'EB Garamond', serif", fontStyle: "italic",
         fontSize: 16, color: C.fog, marginTop: 4,
@@ -1212,8 +1512,13 @@ function TodayView({ data, onJumpToTab }) {
         {weatherTile}
         {dolarTile}
       </div>
-      <AnnouncementBanner announcements={data.announcements} />
+      <AnnouncementBanner
+        announcements={data.announcements}
+        profile={profile}
+        onDismiss={onDismissAnnouncement}
+      />
       {activityCard}
+      <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
       {tipCard}
     </div>
   );
@@ -1385,15 +1690,17 @@ function Card({ children, borderLeft, bg }) {
 }
 
 // ─── Announcement Banner ───
-function AnnouncementBanner({ announcements }) {
-  const [dismissed, setDismissed] = useState({});
+function AnnouncementBanner({ announcements, profile, onDismiss }) {
   const todayStr = getTodayStr();
+  const dismissedSet = new Set((profile && profile.dismissedAnnouncements) || []);
 
   // Filter to only active announcements (today is within date range)
+  // and not already dismissed (persistently, by message hash).
   const active = (announcements || []).filter((a) => {
     if (!a.start_date || !a.end_date) return false;
-    return todayStr >= a.start_date && todayStr <= a.end_date;
-  }).filter((_, i) => !dismissed[i]);
+    if (todayStr < a.start_date || todayStr > a.end_date) return false;
+    return !dismissedSet.has(hashAnnouncement(a.message));
+  });
 
   if (active.length === 0) return null;
 
@@ -1444,7 +1751,7 @@ function AnnouncementBanner({ announcements }) {
                 )}
               </div>
               <button
-                onClick={() => setDismissed((d) => ({ ...d, [i]: true }))}
+                onClick={() => { if (onDismiss) onDismiss(hashAnnouncement(a.message)); }}
                 style={{
                   background: "none", border: "none", cursor: "pointer",
                   color: C.stone, fontSize: 18, lineHeight: 1, padding: "0 2px",
@@ -1637,7 +1944,7 @@ function WeeklyOverviewView({ data }) {
 }
 
 // ─── Schedule (Class Schedule) ───
-function ClassScheduleView({ data, view }) {
+function ClassScheduleView({ data, view, profile }) {
   const todayRef = useRef(null);
 
   const todayAbbrev = WEEK_DAYS_SHORT[new Date().getDay()];
@@ -1649,11 +1956,15 @@ function ClassScheduleView({ data, view }) {
     }
   };
 
+  // Apply the profile-driven "My classes only" filter once at the top;
+  // both the week view and the All Courses list draw from this list.
+  const visibleClasses = filterClassesByProfile(data.classes || [], profile);
+
   const classesForDay = (day) =>
-    data.classes.filter((c) => c.days.includes(day)).sort((a, b) => getSortTime(a.time, day).localeCompare(getSortTime(b.time, day)));
+    visibleClasses.filter((c) => c.days.includes(day)).sort((a, b) => getSortTime(a.time, day).localeCompare(getSortTime(b.time, day)));
 
   // Sort courses by code for "All Courses"
-  const sortedClasses = [...data.classes].sort((a, b) => a.code.localeCompare(b.code));
+  const sortedClasses = [...visibleClasses].sort((a, b) => a.code.localeCompare(b.code));
 
   return (
     <div>
@@ -1749,8 +2060,9 @@ function ClassScheduleView({ data, view }) {
 }
 
 // ─── Schedule Tab (flat three-pill navigation) ───
-function ScheduleView({ data }) {
+function ScheduleView({ data, profile, onOpenSettings }) {
   const [section, setSection] = useState("overview");
+  const filterActive = shouldFilterClasses(profile);
 
   return (
     <div>
@@ -1759,8 +2071,30 @@ function ScheduleView({ data }) {
         <Pill active={section === "week"} onClick={() => setSection("week")}>Class Schedule</Pill>
         <Pill active={section === "list"} onClick={() => setSection("list")}>Courses</Pill>
       </div>
+      {filterActive && section !== "overview" && (
+        <div
+          onClick={onOpenSettings}
+          className="bap-press"
+          role="button"
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: C.ice, border: `1px solid ${C.fog}`, borderRadius: 10,
+            padding: "8px 12px", marginBottom: 14, cursor: "pointer",
+          }}
+        >
+          <span style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
+            textTransform: "uppercase", letterSpacing: 1, color: C.ocean,
+            background: C.white, padding: "2px 8px", borderRadius: 10,
+            border: `1px solid ${C.fog}`,
+          }}>My classes only</span>
+          <span style={{ fontSize: 12, color: C.mountain, fontFamily: "'Roboto', sans-serif", flex: 1 }}>
+            Showing {profile.enrolledClasses.length} of {(data.classes || []).length}. Tap to change.
+          </span>
+        </div>
+      )}
       {section === "overview" && <WeeklyOverviewView data={data} />}
-      {(section === "week" || section === "list") && <ClassScheduleView data={data} view={section} />}
+      {(section === "week" || section === "list") && <ClassScheduleView data={data} view={section} profile={profile} />}
     </div>
   );
 }
@@ -1914,19 +2248,270 @@ function isFacility(provider) {
   return FACILITY_TYPES.test(provider.type);
 }
 
+// ─── Events ("This Week in BA") ───
+// Renders the curated weekly cultural list under Local. Each card is
+// anchored by a colored category circle holding a glyph (music, theater,
+// film, exhibit, dance, festival, food, talk, other), with title, date
+// label, optional time, description, venue + neighborhood, address (via
+// AddressLink), cost, and an external link button.
+function EventsView({ events, activeFilter, onFilterChange, categoriesPresent }) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const todayStr = toDateStr(today);
+
+  // Hide events that have already ended; sort chronologically.
+  const upcoming = sortEventsChronological(filterUpcomingEvents(events, todayStr));
+
+  // Apply category filter if the student picked one.
+  const visible = activeFilter === "all" ? upcoming : upcoming.filter((e) => e.category === activeFilter);
+
+  // Filter pills only show when 2+ categories are actually present.
+  const showPills = (categoriesPresent || []).length > 1;
+
+  // Group events into "This week" (today through +7d) vs "Coming up" so
+  // students see the most actionable rows first without losing the rest.
+  const weekEnd = new Date(today);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const weekEndStr = toDateStr(weekEnd);
+  const thisWeek = visible.filter((e) => e.start_date <= weekEndStr);
+  const later = visible.filter((e) => e.start_date > weekEndStr);
+
+  if (upcoming.length === 0) {
+    return (
+      <div style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+        padding: "24px 18px", textAlign: "center",
+      }}>
+        <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 18, fontWeight: 700, color: C.pepBlack, marginBottom: 6 }}>
+          Nothing curated yet
+        </div>
+        <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain, lineHeight: 1.5 }}>
+          The director updates this list weekly. Check back soon — or tap Explore BA below for evergreen recommendations.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {showPills && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+          <FilterPill active={activeFilter === "all"} onClick={() => onFilterChange("all")}>All</FilterPill>
+          {categoriesPresent.map((cat) => {
+            const meta = getEventCategory(cat);
+            return (
+              <FilterPill key={cat} active={activeFilter === cat} onClick={() => onFilterChange(cat)}>
+                {meta.label}
+              </FilterPill>
+            );
+          })}
+        </div>
+      )}
+
+      {thisWeek.length > 0 && (
+        <>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+          }}>This week / Esta semana</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: later.length > 0 ? 18 : 0 }}>
+            {thisWeek.map((e, i) => <EventCard key={`tw-${i}`} event={e} />)}
+          </div>
+        </>
+      )}
+
+      {later.length > 0 && (
+        <>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+          }}>Coming up / Próximamente</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {later.map((e, i) => <EventCard key={`lt-${i}`} event={e} />)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function EventCard({ event }) {
+  const meta = getEventCategory(event.category);
+  const Icon = meta.Icon;
+  const dateLabel = eventDateLabel(event);
+
+  return (
+    <div className="bap-press" style={{
+      background: C.white, border: `1px solid ${C.fog}`,
+      borderRadius: 12, padding: "12px 14px",
+      display: "flex", alignItems: "flex-start", gap: 12,
+    }}>
+      {/* Category glyph circle */}
+      <div style={{
+        width: 44, height: 44, borderRadius: "50%",
+        background: meta.color, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Icon size={26} color={C.white} />
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlack, lineHeight: 1.2 }}>
+            {event.title}
+          </div>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11,
+            color: meta.color, background: C.ice,
+            padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap",
+            border: `1px solid ${C.fog}`,
+          }}>
+            {dateLabel}{event.time ? ` · ${event.time}` : ""}
+          </div>
+        </div>
+
+        {event.description && (
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain,
+            marginTop: 6, lineHeight: 1.45,
+          }}>{event.description}</div>
+        )}
+
+        {(event.venue || event.neighborhood) && (
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.stone,
+            marginTop: 6,
+          }}>
+            {event.venue}
+            {event.venue && event.neighborhood ? " · " : ""}
+            {event.neighborhood}
+          </div>
+        )}
+
+        {event.address && (
+          <div style={{ marginTop: 4 }}>
+            <AddressLink address={event.address} />
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: event.cost || event.link ? 8 : 0, alignItems: "center" }}>
+          {event.cost && (
+            <span style={{
+              fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain,
+              background: C.parchment, padding: "2px 8px", borderRadius: 10,
+              border: `1px solid ${C.fog}`,
+            }}>
+              {event.cost}
+            </span>
+          )}
+          {event.link && <LinkButton url={event.link} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Today tile: Esta semana ───
+// Compact preview for the Today dashboard. Shows the next 1-2 upcoming
+// events from the weekly window. Renders nothing when no events are
+// populated for the week, so weeks without curated content stay clean.
+function EventsTodayTile({ data, onJumpToTab }) {
+  const events = getThisWeekEvents(data);
+  if (events.length === 0) return null;
+
+  const preview = events.slice(0, 2);
+
+  return (
+    <div
+      onClick={() => { if (onJumpToTab) onJumpToTab("local"); }}
+      className="bap-press"
+      role="button"
+      style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
+        padding: "12px 14px 14px", marginBottom: 14, cursor: "pointer",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.pepOrange, marginBottom: 2,
+          }}>Esta semana</div>
+          <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 17, fontWeight: 700, color: C.pepBlack, lineHeight: 1.1 }}>
+            This Week in BA
+          </div>
+        </div>
+        <span style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.ocean,
+          display: "inline-flex", alignItems: "center", gap: 4,
+        }}>
+          See all →
+        </span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {preview.map((e, i) => {
+          const meta = getEventCategory(e.category);
+          const Icon = meta.Icon;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: "50%",
+                background: meta.color, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon size={18} color={C.white} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'EB Garamond', serif", fontSize: 14, fontWeight: 700,
+                  color: C.pepBlack, lineHeight: 1.2,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>{e.title}</div>
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                  color: C.stone, marginTop: 1,
+                }}>
+                  {eventDateLabel(e)}{e.time ? ` · ${e.time}` : ""}
+                  {e.neighborhood ? ` · ${e.neighborhood}` : ""}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {events.length > preview.length && (
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.stone,
+          marginTop: 8, textAlign: "center",
+        }}>
+          +{events.length - preview.length} more this week
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Local ───
 function LocalView({ data }) {
-  const [sub, setSub] = useState("health");
+  // Default to the events sub-tab when at least one event is upcoming
+  // this week; otherwise fall back to health so the existing flow is
+  // unchanged on weeks with no curated events.
+  const initialSub = (data.events && data.events.length > 0 && getThisWeekEvents(data).length > 0) ? "events" : "health";
+  const [sub, setSub] = useState(initialSub);
   const [healthFilter, setHealthFilter] = useState("all");
   const [churchFilter, setChurchFilter] = useState("all");
   const [appsFilter, setAppsFilter] = useState("all");
   const [exploreFilter, setExploreFilter] = useState("all");
+  const [eventsFilter, setEventsFilter] = useState("all");
 
   // Extract unique types/denominations/categories
   const healthTypes = [...new Set(data.healthProviders.map((h) => h.type).filter(Boolean))].sort();
   const churchDenoms = [...new Set(data.churches.map((c) => c.denomination).filter(Boolean))].sort();
   const appsCategories = [...new Set((data.apps || []).map((a) => a.category).filter(Boolean))].sort();
   const exploreTypes = [...new Set((data.explore || []).map((p) => p.type).filter(Boolean))].sort();
+  const eventCategoriesPresent = [...new Set((data.events || []).map((e) => e.category).filter(Boolean))];
 
   // Filtered lists
   const filteredHealth = healthFilter === "all" ? data.healthProviders : data.healthProviders.filter((h) => h.type === healthFilter);
@@ -1948,11 +2533,21 @@ function LocalView({ data }) {
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
+        <Pill active={sub === "events"} onClick={() => setSub("events")}>This Week</Pill>
         <Pill active={sub === "health"} onClick={() => setSub("health")}>Healthcare</Pill>
         <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
         <Pill active={sub === "apps"} onClick={() => setSub("apps")}>Apps</Pill>
         <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Explore BA</Pill>
       </div>
+
+      {sub === "events" && (
+        <EventsView
+          events={data.events || []}
+          activeFilter={eventsFilter}
+          onFilterChange={setEventsFilter}
+          categoriesPresent={eventCategoriesPresent}
+        />
+      )}
 
       {sub === "health" && (
         <div>
@@ -2362,12 +2957,264 @@ const TABS = [
   { key: "contacts", label: "Contacts", icon: icons.contacts, color: C.pepOrange },
 ];
 
+// ─── Gear icon for the header settings entry point ───
+function GearIcon({ size = 20, color = "#FFFFFF" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+    </svg>
+  );
+}
+
+// ─── Profile / settings modal ───
+// Full-screen overlay (within the 480px column) where a student sets
+// their first name, ticks the courses they're enrolled in, and toggles
+// "Show only my classes". Reads/writes the profile via the onChange
+// callback so the App owns the source of truth.
+function ProfileModal({ open, onClose, profile, onChange, classes }) {
+  if (!open) return null;
+
+  const sortedClasses = [...(classes || [])].sort((a, b) => a.code.localeCompare(b.code));
+  const enrolledSet = new Set(profile.enrolledClasses || []);
+
+  const setName = (v) => onChange({ ...profile, name: v });
+  const toggleClass = (code) => {
+    const next = new Set(enrolledSet);
+    if (next.has(code)) next.delete(code); else next.add(code);
+    onChange({ ...profile, enrolledClasses: Array.from(next) });
+  };
+  const toggleFilter = () => onChange({ ...profile, filterEnabled: !profile.filterEnabled });
+  const clearAll = () => onChange({
+    ...profile,
+    name: "",
+    enrolledClasses: [],
+    filterEnabled: false,
+    dismissedAnnouncements: [],
+  });
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(29, 37, 45, 0.55)",
+        zIndex: 200, display: "flex", justifyContent: "center", alignItems: "stretch",
+        padding: 0,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.parchment, width: "100%", maxWidth: 480,
+          margin: "0 auto", display: "flex", flexDirection: "column",
+          maxHeight: "100vh",
+        }}
+      >
+        {/* Modal header */}
+        <div style={{
+          padding: "16px 20px",
+          background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
+          color: C.white, display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: C.bapBlue, marginBottom: 2 }}>
+              Settings / Ajustes
+            </div>
+            <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 22, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.1 }}>
+              Your Profile
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
+              width: 36, height: 36, borderRadius: 18, cursor: "pointer",
+              fontSize: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >×</button>
+        </div>
+
+        {/* Modal body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px 24px" }}>
+          {/* Name */}
+          <div style={{ marginBottom: 22 }}>
+            <div style={{
+              fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+              letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+            }}>First name</div>
+            <input
+              type="text"
+              value={profile.name || ""}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. María"
+              maxLength={40}
+              style={{
+                width: "100%", boxSizing: "border-box",
+                padding: "10px 14px", borderRadius: 10,
+                border: `1px solid ${C.fog}`, background: C.white,
+                fontFamily: "'EB Garamond', serif", fontSize: 16, color: C.pepBlack,
+                outline: "none",
+              }}
+            />
+            <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.stone, marginTop: 6 }}>
+              Used in your daily greeting on the Today screen.
+            </div>
+          </div>
+
+          {/* My classes toggle */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            background: C.white, borderRadius: 12, border: `1px solid ${C.fog}`,
+            padding: "12px 14px", marginBottom: 14,
+          }}>
+            <div style={{ flex: 1, paddingRight: 12 }}>
+              <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>
+                Show only my classes
+              </div>
+              <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.stone, marginTop: 2 }}>
+                Filters Today and Schedule to the courses you tick below.
+              </div>
+            </div>
+            <button
+              onClick={toggleFilter}
+              aria-pressed={!!profile.filterEnabled}
+              aria-label="Toggle My classes only"
+              className="bap-press"
+              style={{
+                width: 48, height: 28, borderRadius: 14,
+                background: profile.filterEnabled ? C.ocean : C.fog,
+                border: "none", cursor: "pointer", position: "relative",
+                transition: "background 0.18s ease-out", flexShrink: 0,
+              }}
+            >
+              <span style={{
+                position: "absolute", top: 3, left: profile.filterEnabled ? 23 : 3,
+                width: 22, height: 22, borderRadius: "50%", background: C.white,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                transition: "left 0.18s ease-out",
+              }} />
+            </button>
+          </div>
+
+          {/* Class checklist */}
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+          }}>My courses</div>
+
+          {sortedClasses.length === 0 ? (
+            <div style={{
+              fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.stone,
+              fontStyle: "italic", padding: "14px 0",
+            }}>No courses loaded yet. Once the schedule syncs, you can tick yours here.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {sortedClasses.map((c) => {
+                const checked = enrolledSet.has(c.code);
+                return (
+                  <button
+                    key={c.code}
+                    onClick={() => toggleClass(c.code)}
+                    className="bap-press"
+                    style={{
+                      display: "flex", alignItems: "stretch", textAlign: "left",
+                      background: checked ? C.ice : C.white,
+                      border: `1px solid ${checked ? C.ocean : C.fog}`,
+                      borderRadius: 10, overflow: "hidden", cursor: "pointer",
+                      padding: 0, width: "100%",
+                    }}
+                  >
+                    <div style={{ width: 4, background: c.color, flexShrink: 0 }} />
+                    <div style={{ padding: "10px 14px", flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{
+                        width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                        border: `1.5px solid ${checked ? C.ocean : C.stone}`,
+                        background: checked ? C.ocean : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: C.white, fontSize: 14, fontWeight: 700, lineHeight: 1,
+                      }}>{checked ? "✓" : ""}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>
+                          {c.code}
+                        </div>
+                        <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain, marginTop: 1 }}>
+                          {c.title}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Reset */}
+          <button
+            onClick={clearAll}
+            style={{
+              marginTop: 22, display: "block", marginLeft: "auto",
+              background: "none", border: `1px solid ${C.fog}`, borderRadius: 8,
+              padding: "6px 14px", cursor: "pointer",
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone,
+            }}
+          >Reset profile</button>
+
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.stone,
+            marginTop: 18, lineHeight: 1.5, textAlign: "center",
+          }}>
+            Saved on this device only. Changes apply immediately.
+          </div>
+        </div>
+
+        {/* Modal footer */}
+        <div style={{
+          padding: "12px 16px 18px", background: C.white, borderTop: `1px solid ${C.fog}`,
+        }}>
+          <button
+            onClick={onClose}
+            className="bap-press"
+            style={{
+              width: "100%", padding: "12px 0", borderRadius: 10,
+              background: C.pepBlue, color: C.white, border: "none", cursor: "pointer",
+              fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: 0.5,
+            }}
+          >Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 // MAIN APP
 // ============================================================
 
 export default function App() {
   const [tab, setTab] = useState("today");
+
+  // Profile state. Lazy-init from localStorage so the very first
+  // render already reflects the student's choices (no flash of
+  // unfiltered content for someone who has the filter on). Profile
+  // lives at its own key (PROFILE_KEY), separate from the data cache,
+  // so it is unaffected by CACHE_VERSION bumps.
+  const [profile, setProfile] = useState(() => loadProfile());
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const updateProfile = useCallback((next) => {
+    setProfile(next);
+    saveProfile(next);
+  }, []);
+
+  const dismissAnnouncement = useCallback((hash) => {
+    setProfile((p) => {
+      if (p.dismissedAnnouncements.includes(hash)) return p;
+      const next = { ...p, dismissedAnnouncements: [...p.dismissedAnnouncements, hash] };
+      saveProfile(next);
+      return next;
+    });
+  }, []);
 
   // Bottom-nav pill positioning. The pill slides under whichever tab is
   // active; its color adopts the active tab's color identity. We measure
@@ -2528,6 +3375,20 @@ export default function App() {
       {/* Header */}
       <div style={{ padding: "16px 20px", background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`, color: C.white, position: "relative", overflow: "hidden" }}>
         <SouthernCrossDecoration />
+        <button
+          onClick={() => setProfileOpen(true)}
+          aria-label="Open settings"
+          className="bap-press"
+          style={{
+            position: "absolute", top: 12, right: 12, zIndex: 5,
+            width: 36, height: 36, borderRadius: 18,
+            background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 0,
+          }}
+        >
+          <GearIcon size={18} color={C.white} />
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <img src={LOGO_URI} alt="Buenos Aires Program" style={{
             width: 80, height: 80, borderRadius: "50%", flexShrink: 0,
@@ -2563,8 +3424,8 @@ export default function App() {
         ) : (
           <>
             {tab !== "today" && <SectionTitle tabKey={tab} />}
-            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} />}
-            {tab === "schedule" && <ScheduleView data={data} />}
+            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} onDismissAnnouncement={dismissAnnouncement} />}
+            {tab === "schedule" && <ScheduleView data={data} profile={profile} onOpenSettings={() => setProfileOpen(true)} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
             {tab === "faq" && <FaqView data={data} />}
@@ -2615,6 +3476,15 @@ export default function App() {
           }}
         />
       </div>
+
+      {/* Profile / settings modal */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        profile={profile}
+        onChange={updateProfile}
+        classes={data.classes}
+      />
     </div>
   );
 }
