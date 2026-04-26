@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Today tab: weather tile now shows current temp in Fahrenheit (primary) plus today's high/low in Fahrenheit on a small mono line below; Celsius dropped from display but kept internally for the bilingual dress hint. Dólar tile simplified to show Blue venta as the headline with MEP underneath in small mono; venta/compra split removed. fetchWeather extended to pull daily max/min from Open-Meteo; fetchDolarBlue renamed to fetchDolar and extended to pull MEP (bolsa) alongside Blue via Promise.allSettled, so a failed MEP call still shows Blue. Local tab pills reorganized into two fixed rows (This Week + Explore BA on top; Healthcare, Churches, Apps below) so all five fit on screen without horizontal scroll. No CACHE_VERSION bump because no sheet schema fields changed; the today cache uses a 30-minute TTL and refreshes itself.";
+const BUILD_VERSION = "2026-04-26 — Today tab: weather tile now shows current temp in Fahrenheit (primary) plus today's high/low in Fahrenheit on a small mono line below; Celsius dropped from display but kept internally for the bilingual dress hint. Dólar tile simplified to show Blue venta as the headline with MEP underneath in small mono; venta/compra split removed. fetchWeather extended to pull daily max/min from Open-Meteo; fetchDolarBlue renamed to fetchDolar and extended to pull MEP (bolsa) alongside Blue via Promise.allSettled, so a failed MEP call still shows Blue. Today-cache shape gained tempMax/tempMin/mep fields; old cached entries missing those fields render gracefully and self-refresh on the existing 30-minute TTL — no key bump, the refresh happens naturally within half an hour. Local tab pills reorganized into two fixed rows (This Week + Explore BA on top; Healthcare, Churches, Apps below) so all five fit on screen without horizontal scroll. AnnouncementBanner redesigned: dismiss × removed (announcements now auto-clear on end_date and the program office controls the lifecycle); new <MegaphoneIcon> for info / <AlertIcon> for urgent; bilingual DM Mono label (Aviso / Notice or Importante / Important); soft accent gradient stripe replaces the hard left border; italic Spanish 'Hasta el viernes' / 'Hasta el 4 de mayo' end-date gloss in EB Garamond when the announcement runs ≤21 days; primary 'Más info →' CTA pill replaces the old tiny arrow link. New formatAnnouncementThrough() helper. New CSS class .bap-pulse-dot-orange + matching @keyframes bap-pulse-orange so the urgent banner's pulsing halo is Pep Orange rather than the synced-status mint green. Profile field 'dismissedAnnouncements' kept in the schema for backwards compat with stored profiles but no longer read or written; hashAnnouncement() and the dismissAnnouncement App-level callback removed. No CACHE_VERSION bump because no sheet schema fields changed.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -356,18 +356,6 @@ function saveProfile(profile) {
   } catch (e) {
     // Quota exceeded or storage disabled; silently skip
   }
-}
-
-// Stable, lightweight hash for announcement dismissal tracking. Not
-// cryptographic; just enough to recognize "this exact message has
-// been dismissed before" across reloads. djb2 variant.
-function hashAnnouncement(message) {
-  const s = String(message || "");
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  }
-  return String(h);
 }
 
 // Returns true when the profile has classes selected AND the filter
@@ -889,6 +877,36 @@ function HandsHeartIcon({ size = 36, color = C.pepBlue }) {
   );
 }
 
+// Megaphone glyph — used as the leading mark on the standard
+// "Aviso / Notice" announcement banner. Designed to feel editorial
+// and warm rather than alert-coded.
+function MegaphoneIcon({ size = 16, color = C.bapBlue }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      {/* Cone */}
+      <path d="M14 26 L46 14 L46 50 L14 38 Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      {/* Handle on the back */}
+      <rect x="46" y="22" width="6" height="20" rx="2" fill={color} stroke={color} strokeWidth="2" />
+      {/* Sound waves radiating to the right */}
+      <path d="M56 24 Q60 32 56 40" stroke={color} strokeWidth="2" strokeLinecap="round" fill="none" />
+      {/* Drop strap from the bottom of the cone */}
+      <path d="M22 38 L22 52" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Alert triangle glyph — used as the leading mark on urgent
+// announcement banners. Pep Orange by default to pull the eye.
+function AlertIcon({ size = 16, color = C.pepOrange }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M32 8 L58 54 L6 54 Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      <line x1="32" y1="24" x2="32" y2="40" stroke={C.white} strokeWidth="3.5" strokeLinecap="round" />
+      <circle cx="32" cy="46" r="2.2" fill={C.white} />
+    </svg>
+  );
+}
+
 // Compact weather glyph for the Today quick-stats tile. Picks one of
 // six states from the Open-Meteo weather_code plus is_day. Kept small
 // (28–32 px) and palette-aligned so it sits beside the temp without
@@ -1224,7 +1242,7 @@ function getTodayItems(data, profile) {
 }
 
 // ─── Today View ───
-function TodayView({ data, onJumpToTab, profile, onDismissAnnouncement }) {
+function TodayView({ data, onJumpToTab, profile }) {
   // Clock tick. Updates every minute so the Próximo countdown stays
   // accurate and the greeting/gradient shifts as the day progresses.
   const [now, setNow] = useState(() => new Date());
@@ -1550,11 +1568,7 @@ function TodayView({ data, onJumpToTab, profile, onDismissAnnouncement }) {
         {weatherTile}
         {dolarTile}
       </div>
-      <AnnouncementBanner
-        announcements={data.announcements}
-        profile={profile}
-        onDismiss={onDismissAnnouncement}
-      />
+      <AnnouncementBanner announcements={data.announcements} />
       {activityCard}
       <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
       {tipCard}
@@ -1728,76 +1742,134 @@ function Card({ children, borderLeft, bg }) {
 }
 
 // ─── Announcement Banner ───
-function AnnouncementBanner({ announcements, profile, onDismiss }) {
-  const todayStr = getTodayStr();
-  const dismissedSet = new Set((profile && profile.dismissedAnnouncements) || []);
+// "Hasta el viernes" / "Hasta el 4 de mayo" — short, italic gloss
+// shown at the bottom of an active announcement so students know
+// when it'll auto-disappear. Returns null when the end date is more
+// than ~21 days out (in which case the date context just becomes
+// noise) or already past.
+function formatAnnouncementThrough(endDateStr) {
+  if (!endDateStr) return null;
+  const end = new Date(endDateStr + "T12:00:00");
+  if (isNaN(end.getTime())) return null;
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const daysOut = Math.round((end - today) / (1000 * 60 * 60 * 24));
 
-  // Filter to only active announcements (today is within date range)
-  // and not already dismissed (persistently, by message hash).
+  if (daysOut < 0) return null;
+  if (daysOut === 0) return "Solo hoy";
+  if (daysOut === 1) return "Hasta mañana";
+  if (daysOut <= 7) return `Hasta el ${SPANISH_WEEKDAYS[end.getDay()]}`;
+  if (daysOut <= 21) return `Hasta el ${end.getDate()} de ${SPANISH_MONTHS[end.getMonth()]}`;
+  return null;
+}
+
+function AnnouncementBanner({ announcements }) {
+  const todayStr = getTodayStr();
+
+  // Filter to only announcements active today (today is within
+  // the date range). Per 2026-04-26 redesign, announcements are
+  // not user-dismissible: they auto-clear once the end_date passes,
+  // so the program office controls the lifecycle in the sheet.
   const active = (announcements || []).filter((a) => {
     if (!a.start_date || !a.end_date) return false;
     if (todayStr < a.start_date || todayStr > a.end_date) return false;
-    return !dismissedSet.has(hashAnnouncement(a.message));
+    return true;
   });
 
   if (active.length === 0) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
       {active.map((a, i) => {
         const isUrgent = a.type === "urgent";
+        const accent = isUrgent ? C.pepOrange : C.bapBlue;
+        const bg = isUrgent ? C.parchment : C.ice;
+        const labelEs = isUrgent ? "Importante" : "Aviso";
+        const labelEn = isUrgent ? "Important" : "Notice";
+        const through = formatAnnouncementThrough(a.end_date);
+
         return (
           <div key={i} style={{
-            background: isUrgent ? C.parchment : C.ice,
-            borderLeft: `4px solid ${isUrgent ? C.pepOrange : C.ocean}`,
-            borderRadius: 10,
-            padding: "10px 14px",
+            position: "relative",
+            background: bg,
+            borderRadius: 12,
+            padding: "13px 14px 13px 18px",
+            overflow: "hidden",
+            boxShadow: isUrgent
+              ? "0 1px 3px rgba(227, 82, 5, 0.10)"
+              : "0 1px 3px rgba(0, 87, 184, 0.08)",
           }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <span style={{ fontSize: 18, lineHeight: "20px", flexShrink: 0 }}>
-                {a.icon || "📋"}
+            {/* Vertical accent stripe on the left edge — gradient gives
+                a softer feel than a hard border, and adds depth without
+                pulling visual weight from the message itself. */}
+            <div aria-hidden="true" style={{
+              position: "absolute", left: 0, top: 0, bottom: 0, width: 4,
+              background: `linear-gradient(180deg, ${accent} 0%, ${accent}AA 100%)`,
+            }} />
+
+            {/* Header row: icon + bilingual label. Urgent gets a small
+                pulsing dot pinned to the right to signal live priority. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+              {isUrgent
+                ? <AlertIcon size={16} color={accent} />
+                : <MegaphoneIcon size={16} color={accent} />}
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
+                textTransform: "uppercase", letterSpacing: 1.5, color: accent,
+              }}>
+                {labelEs} <span style={{ color: C.stone, margin: "0 2px" }}>/</span> {labelEn}
               </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: "'DM Mono', monospace",
-                  fontSize: 10,
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  color: isUrgent ? C.pepOrange : C.ocean,
-                  marginBottom: 3,
-                }}>
-                  {isUrgent ? "Action Required" : "Program Reminder"}
-                </div>
-                <div style={{
-                  fontFamily: "'Roboto', sans-serif",
-                  fontSize: 13,
-                  lineHeight: 1.45,
-                  color: C.pepBlack,
-                }}>
-                  {a.message}
-                </div>
+              {isUrgent && (
+                <span
+                  className="bap-pulse-dot-orange"
+                  aria-hidden="true"
+                  style={{ marginLeft: "auto" }}
+                />
+              )}
+            </div>
+
+            {/* Message body */}
+            <div style={{
+              fontFamily: "'Roboto', sans-serif", fontSize: 14,
+              lineHeight: 1.5, color: C.pepBlack,
+            }}>
+              {a.message}
+            </div>
+
+            {/* Footer: italic Spanish "through" gloss on the left,
+                optional CTA pill on the right. Wrapped so they stack
+                gracefully on narrow widths. */}
+            {(through || a.link) && (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                gap: 12, marginTop: 10, flexWrap: "wrap",
+              }}>
+                {through ? (
+                  <span style={{
+                    fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+                    fontSize: 13, color: C.mountain, lineHeight: 1.2,
+                  }}>{through}</span>
+                ) : <span />}
                 {a.link && (
-                  <a href={a.link} target="_blank" rel="noopener noreferrer" style={{
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                    fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500,
-                    color: isUrgent ? C.pepOrange : C.ocean,
-                    marginTop: 6, textDecoration: "none",
-                  }}>
-                    View details →
+                  <a
+                    href={a.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bap-press"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500,
+                      color: C.white, background: accent,
+                      padding: "5px 12px", borderRadius: 14,
+                      textDecoration: "none", textTransform: "uppercase", letterSpacing: 0.8,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Más info <span aria-hidden="true">→</span>
                   </a>
                 )}
               </div>
-              <button
-                onClick={() => { if (onDismiss) onDismiss(hashAnnouncement(a.message)); }}
-                style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  color: C.stone, fontSize: 18, lineHeight: 1, padding: "0 2px",
-                  flexShrink: 0, marginTop: -2,
-                }}
-                aria-label="Dismiss"
-              >×</button>
-            </div>
+            )}
           </div>
         );
       })}
@@ -3249,15 +3321,6 @@ export default function App() {
     saveProfile(next);
   }, []);
 
-  const dismissAnnouncement = useCallback((hash) => {
-    setProfile((p) => {
-      if (p.dismissedAnnouncements.includes(hash)) return p;
-      const next = { ...p, dismissedAnnouncements: [...p.dismissedAnnouncements, hash] };
-      saveProfile(next);
-      return next;
-    });
-  }, []);
-
   // Bottom-nav pill positioning. The pill slides under whichever tab is
   // active; its color adopts the active tab's color identity. We measure
   // each button via a ref-keyed map so re-positioning works on layout
@@ -3298,6 +3361,11 @@ export default function App() {
           70%  { box-shadow: 0 0 0 8px rgba(124, 252, 158, 0);   transform: scale(1.08); }
           100% { box-shadow: 0 0 0 0 rgba(124, 252, 158, 0);     transform: scale(1); }
         }
+        @keyframes bap-pulse-orange {
+          0%   { box-shadow: 0 0 0 0 rgba(227, 82, 5, 0.55); transform: scale(1); }
+          70%  { box-shadow: 0 0 0 8px rgba(227, 82, 5, 0);   transform: scale(1.08); }
+          100% { box-shadow: 0 0 0 0 rgba(227, 82, 5, 0);     transform: scale(1); }
+        }
         @keyframes bap-spin { to { transform: rotate(360deg); } }
         @keyframes bap-sun-spin { to { transform: rotate(360deg); } }
         @keyframes bap-steam {
@@ -3310,6 +3378,13 @@ export default function App() {
           background: #7CFC9E;
           box-shadow: 0 0 0 0 rgba(124, 252, 158, 0.6);
           animation: bap-pulse 1.8s ease-out infinite;
+          display: inline-block;
+        }
+        .bap-pulse-dot-orange {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: ${C.pepOrange};
+          box-shadow: 0 0 0 0 rgba(227, 82, 5, 0.6);
+          animation: bap-pulse-orange 1.8s ease-out infinite;
           display: inline-block;
         }
         .bap-spin { animation: bap-spin 0.9s linear infinite; }
@@ -3352,6 +3427,7 @@ export default function App() {
         .bap-nav-icon.lifted { transform: translateY(-3px); }
         @media (prefers-reduced-motion: reduce) {
           .bap-pulse-dot { animation: none; }
+          .bap-pulse-dot-orange { animation: none; }
           .bap-spin      { animation: none; border-top-color: ${C.fog}; }
           .bap-tip-text  { transition: none; }
           .bap-press     { transition: none; }
@@ -3466,7 +3542,7 @@ export default function App() {
         ) : (
           <>
             {tab !== "today" && <SectionTitle tabKey={tab} />}
-            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} onDismissAnnouncement={dismissAnnouncement} />}
+            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} />}
             {tab === "schedule" && <ScheduleView data={data} profile={profile} onOpenSettings={() => setProfileOpen(true)} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
