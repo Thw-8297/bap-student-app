@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Apps Script consolidated data endpoint (transport-only). New top-level fetchAllData() tries a single Apps Script Web App URL that returns all 15 tabs as one JSON blob; falls back gracefully to the original 15 parallel gviz CSV fetches if the script is unreachable, returns a non-200, returns non-JSON (e.g. a login page when the deploy permissions are wrong), or APPS_SCRIPT_URL is empty. The Apps Script caches its response for 1 hour via CacheService, so most student opens hit the script's in-memory cache rather than re-reading the spreadsheet. Normalization logic extracted into normalizeData(raw) and shared by both code paths, so the rendered output is identical regardless of which path served the data. Data shape is unchanged, so CACHE_VERSION stays at 5; existing student localStorage caches roll over to the faster path silently. New constant APPS_SCRIPT_URL. New helpers fetchAllDataConsolidated() and fetchAllDataPerTab(); the original fetchAllData() body became fetchAllDataPerTab() and the new top-level fetchAllData() handles routing and fallback. Expected impact: 5–10x faster fetch on slow connections (one round trip with pre-parsed JSON instead of 15 round trips and client-side PapaParse). Cache bust at the script layer: append ?bust=1 to the Apps Script URL when manually verifying a sheet edit.";
+const BUILD_VERSION = "2026-04-26 — Today tile polish. Tip card cycle slowed from 7s to 15s so students have time to actually read each tip. Weather alert collapsed from a two-row stacked block (Spanish primary + English italic underneath) into a single-line Spanish / English treatment matching the dress-hint pattern right above it (Roboto + slash separator + italic EB Garamond English), wraps naturally when the bilingual phrase is long, saves a row of vertical space when it isn't. Dólar tile gains an Oficial line below MEP, so students see the full Blue / MEP / Oficial picture at a glance for currency decisions; fetchDolar() now hits dolarapi.com /v1/dolares/oficial in parallel with Blue and MEP via Promise.allSettled, so an oficial outage doesn't break the tile. Dólar shape gains an oficial field; lives in the separate bap-today-cache (30 min TTL), so no CACHE_VERSION bump needed.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1559,17 +1559,19 @@ function computeWeatherAlert(weather) {
   return null;
 }
 
-// Pull Blue and MEP (bolsa) in parallel via Promise.allSettled so a
-// failed MEP call still leaves us showing Blue, and vice versa. We
-// only throw if the Blue call fails outright, since Blue is the
-// headline number and MEP is the secondary line.
+// Pull Blue, MEP (bolsa), and Oficial in parallel via
+// Promise.allSettled so a failed call on any single rate still leaves
+// us showing the others. We only throw if the Blue call fails
+// outright, since Blue is the headline number; MEP and Oficial are
+// secondary lines and degrade to an em-dash placeholder.
 async function fetchDolar() {
-  const [blueRes, mepRes] = await Promise.allSettled([
+  const [blueRes, mepRes, oficialRes] = await Promise.allSettled([
     fetch("https://dolarapi.com/v1/dolares/blue"),
     fetch("https://dolarapi.com/v1/dolares/bolsa"),
+    fetch("https://dolarapi.com/v1/dolares/oficial"),
   ]);
 
-  const out = { venta: null, compra: null, mep: null, ts: Date.now() };
+  const out = { venta: null, compra: null, mep: null, oficial: null, ts: Date.now() };
 
   if (blueRes.status === "fulfilled" && blueRes.value.ok) {
     const j = await blueRes.value.json();
@@ -1580,6 +1582,11 @@ async function fetchDolar() {
   if (mepRes.status === "fulfilled" && mepRes.value.ok) {
     const j = await mepRes.value.json();
     out.mep = typeof j.venta === "number" ? j.venta : null;
+  }
+
+  if (oficialRes.status === "fulfilled" && oficialRes.value.ok) {
+    const j = await oficialRes.value.json();
+    out.oficial = typeof j.venta === "number" ? j.venta : null;
   }
 
   if (out.venta === null) throw new Error("Dólar fetch failed");
@@ -1716,7 +1723,7 @@ function TodayView({ data, onJumpToTab, profile }) {
   const countdown = nextItem ? formatCountdown(nextItem.sortMin, nowMin) : null;
 
   // Tip rotator. Picks from the Tips sheet (or falls back to a small
-  // built-in set), rotating every 7 seconds with a soft fade.
+  // built-in set), rotating every 15 seconds with a soft fade.
   const tipList = (data.tips && data.tips.length > 0) ? data.tips : FALLBACK_TIPS;
   const [tipIdx, setTipIdx] = useState(() => Math.floor(Math.random() * tipList.length));
   const [tipFading, setTipFading] = useState(false);
@@ -1727,7 +1734,7 @@ function TodayView({ data, onJumpToTab, profile }) {
         setTipIdx((i) => (i + 1) % tipList.length);
         setTipFading(false);
       }, 320);
-    }, 7000);
+    }, 15000);
     return () => clearInterval(id);
   }, [tipList.length]);
   const tip = tipList[tipIdx] || tipList[0];
@@ -1804,17 +1811,20 @@ function TodayView({ data, onJumpToTab, profile }) {
             background: C.parchment,
             borderLeft: `2.5px solid ${C.pepOrange}`,
             borderRadius: 4,
-            padding: "5px 8px",
+            padding: "4px 8px",
             lineHeight: 1.3,
           }}>
             <div style={{
               fontFamily: "'Roboto', sans-serif", fontSize: 11.5, fontWeight: 500,
               color: C.pepBlack,
-            }}>{weatherAlert.es}</div>
-            <div style={{
-              fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-              fontSize: 11, color: C.mountain, marginTop: 1,
-            }}>{weatherAlert.en}</div>
+            }}>
+              {weatherAlert.es}
+              <span style={{ color: C.stone, margin: "0 4px" }}>/</span>
+              <span style={{
+                fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+                fontWeight: 400, color: C.mountain,
+              }}>{weatherAlert.en}</span>
+            </div>
           </div>
         )}
       </>
@@ -1846,6 +1856,12 @@ function TodayView({ data, onJumpToTab, profile }) {
           marginTop: 6, lineHeight: 1.3,
         }}>
           MEP {dolar.mep ? formatPesos(dolar.mep) : "—"}
+        </div>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain,
+          marginTop: 2, lineHeight: 1.3,
+        }}>
+          Oficial {dolar.oficial ? formatPesos(dolar.oficial) : "—"}
         </div>
       </>
     ) : (
