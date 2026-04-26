@@ -4,12 +4,21 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Birthday card on Today. New optional Birthdays sheet tab (name, date, role) drives a celebratory card that appears on any day matching one or more rows. Card sits between the announcement banner and the holiday card. Bilingual treatment: Spanish title in italic EB Garamond primary, English in smaller serif italic underneath. Three layout tiers based on count: 1 person gets a personalized title (¡Feliz cumple, María!), 2 people get joined names with proper Spanish/English conjunctions (María y Carlos / María and Carlos), 3+ people get a generic '¡Feliz cumple!' header with names listed beneath in a comma-joined line. New <CupcakeIcon> SVG glyph at 44 px: BAP Blue fluted wrapper, Sky Blue frosting with sprinkles, parchment candle with a Pep Orange flame and inner glow. New helpers parseBirthdayMD() (accepts MM-DD, M-D, YYYY-MM-DD; year stripped), getTodayMD(), findTodayBirthdays(), joinSpanish(), joinEnglish(). The app NEVER displays or computes age — year of birth is intentionally discarded during parsing. role column captured but unused in v1; reserved for future filtering. CACHE_VERSION bumped from 4 to 5 because the data shape gained a birthdays array; old caches are invalidated automatically.";
+const BUILD_VERSION = "2026-04-26 — Apps Script consolidated data endpoint (transport-only). New top-level fetchAllData() tries a single Apps Script Web App URL that returns all 15 tabs as one JSON blob; falls back gracefully to the original 15 parallel gviz CSV fetches if the script is unreachable, returns a non-200, returns non-JSON (e.g. a login page when the deploy permissions are wrong), or APPS_SCRIPT_URL is empty. The Apps Script caches its response for 1 hour via CacheService, so most student opens hit the script's in-memory cache rather than re-reading the spreadsheet. Normalization logic extracted into normalizeData(raw) and shared by both code paths, so the rendered output is identical regardless of which path served the data. Data shape is unchanged, so CACHE_VERSION stays at 5; existing student localStorage caches roll over to the faster path silently. New constant APPS_SCRIPT_URL. New helpers fetchAllDataConsolidated() and fetchAllDataPerTab(); the original fetchAllData() body became fetchAllDataPerTab() and the new top-level fetchAllData() handles routing and fallback. Expected impact: 5–10x faster fetch on slow connections (one round trip with pre-parsed JSON instead of 15 round trips and client-side PapaParse). Cache bust at the script layer: append ?bust=1 to the Apps Script URL when manually verifying a sheet edit.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
 // ============================================================
 const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";
+
+// Optional Apps Script Web App that returns all sheet tabs as one
+// JSON blob. When set, the app prefers this over 15 parallel gviz
+// CSV fetches; on any failure (network error, non-200, non-JSON
+// response, etc.) it falls back to the per-tab path automatically.
+// Deploy via Extensions > Apps Script in the spreadsheet, with
+// "Execute as: Me" and "Who has access: Anyone". Leave empty
+// string to force the legacy per-tab path.
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZUxnUtb39W_LtY_DPdSp9RvUx_pXBqCtx7fnB7O9lqEeSMD5hrbqkQTKa72YdB_E/exec";
 
 // ============================================================
 // DEFAULT DATA — Used when no Google Sheet is connected
@@ -206,7 +215,184 @@ function joinEnglish(items) {
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
-async function fetchAllData() {
+// Normalize raw tab arrays into the shape the rest of the app expects.
+// Shared by both fetch paths (consolidated Apps Script and per-tab gviz),
+// so the rendered output is identical regardless of how the data arrived.
+// Input keys match the sheet tab names exactly, mirroring what the Apps
+// Script endpoint returns.
+function normalizeData(raw) {
+  const Settings = raw.Settings || [];
+  const Classes = raw.Classes || [];
+  const Calendar = raw.Calendar || [];
+  const Health = raw.Health || [];
+  const Churches = raw.Churches || [];
+  const FAQ = raw.FAQ || [];
+  const Contacts = raw.Contacts || [];
+  const Explore = raw.Explore || [];
+  const Resources = raw.Resources || [];
+  const Announcements = raw.Announcements || [];
+  const Apps = raw.Apps || [];
+  const Tips = raw.Tips || [];
+  const Events = raw.Events || [];
+  const Holidays = raw.Holidays || [];
+  const Birthdays = raw.Birthdays || [];
+
+  const settings = {};
+  Settings.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
+
+  return {
+    semester: settings.semester || "Summer 2026",
+    classes: Classes.filter(r => r.code).map((r) => ({
+      code: r.code.trim(),
+      title: r.title.trim(),
+      professor: r.professor ? r.professor.trim() : "",
+      honorific: r.honorific ? r.honorific.trim() : "",
+      firstname: r.firstname ? r.firstname.trim() : "",
+      days: parseDays(r.days),
+      time: r.time.trim(),
+      location: r.location.trim(),
+      color: r.color ? r.color.trim() : "#64B5F6",
+      email: r.email ? r.email.trim() : "",
+    })),
+    calendarEvents: Calendar.filter(r => r.date).map((r) => ({
+      date: r.date.trim(),
+      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
+      title: r.title.trim(),
+      type: r.type ? r.type.trim() : "academic",
+      description: r.description ? r.description.trim() : "",
+      start_time: r.start_time ? r.start_time.trim() : "",
+      end_time: r.end_time ? r.end_time.trim() : "",
+      visibility: r.visibility ? r.visibility.trim().toLowerCase() : "both",
+    })),
+    healthProviders: Health.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      type: r.type ? r.type.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      location_note: r.location_note ? r.location_note.trim() : "",
+      phone: r.phone ? r.phone.trim() : "",
+      notes: r.notes ? r.notes.trim() : "",
+      link: r.link ? r.link.trim() : "",
+      insurance: r.insurance ? r.insurance.trim() : "",
+      category: r.category ? r.category.trim().toLowerCase() : "",
+    })),
+    churches: Churches.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      denomination: r.denomination ? r.denomination.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      location_note: r.location_note ? r.location_note.trim() : "",
+      service: r.service ? r.service.trim() : "",
+      notes: r.notes ? r.notes.trim() : "",
+      link: r.link ? r.link.trim() : "",
+    })),
+    faq: FAQ.filter(r => r.title).map((r) => ({
+      title: r.title.trim(),
+      content: r.content ? r.content.trim() : "",
+      link: r.link ? r.link.trim() : "",
+    })),
+    contacts: Contacts.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      role: r.role ? r.role.trim() : "",
+      phone: r.phone ? r.phone.trim() : "",
+      whatsapp: r.whatsapp ? r.whatsapp.trim() : "",
+      email: r.email ? r.email.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      maps: r.maps ? r.maps.trim() : "",
+      type: r.type ? r.type.trim() : "staff",
+    })),
+    explore: Explore.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      type: r.type ? r.type.trim() : "",
+      description: r.description ? r.description.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      location_note: r.location_note ? r.location_note.trim() : "",
+      hours: r.hours ? r.hours.trim() : "",
+      link: r.link ? r.link.trim() : "",
+    })),
+    resources: Resources.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      detail: r.detail ? r.detail.trim() : "",
+      phone: r.phone ? r.phone.trim() : "",
+      url: r.url ? r.url.trim() : "",
+    })),
+    announcements: Announcements.filter(r => r.message).map((r) => ({
+      message: r.message.trim(),
+      type: r.type ? r.type.trim().toLowerCase() : "info",
+      start_date: r.start_date ? r.start_date.trim() : "",
+      end_date: r.end_date ? r.end_date.trim() : "",
+      icon: r.icon ? r.icon.trim() : "📋",
+      link: r.link ? r.link.trim() : "",
+    })),
+    apps: Apps.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      category: r.category ? r.category.trim() : "",
+      description: r.description ? r.description.trim() : "",
+      ios_url: r.ios_url ? r.ios_url.trim() : "",
+      android_url: r.android_url ? r.android_url.trim() : "",
+      web_url: r.web_url ? r.web_url.trim() : "",
+      priority: r.priority ? r.priority.trim().toLowerCase() : "",
+    })),
+    tips: Tips.filter(r => r.text).map((r) => ({
+      text: r.text.trim(),
+      category: r.category ? r.category.trim().toLowerCase() : "",
+    })),
+    events: Events.filter(r => r.title && r.start_date).map((r) => ({
+      title: r.title.trim(),
+      category: r.category ? r.category.trim().toLowerCase() : "other",
+      description: r.description ? r.description.trim() : "",
+      start_date: r.start_date.trim().slice(0, 10),
+      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
+      time: r.time ? r.time.trim() : "",
+      venue: r.venue ? r.venue.trim() : "",
+      neighborhood: r.neighborhood ? r.neighborhood.trim() : "",
+      address: r.address ? r.address.trim() : "",
+      link: r.link ? r.link.trim() : "",
+      cost: r.cost ? r.cost.trim() : "",
+    })),
+    // Holidays sheet rows. cancels_classes is parsed as a boolean from
+    // common spreadsheet truthy strings ("TRUE", "true", "1", "yes",
+    // "x", "✓"). Anything else is false. observance_type is free-form
+    // text but we lowercase it for downstream comparison.
+    holidays: Holidays.filter(r => r.date && (r.name_es || r.name_en)).map((r) => ({
+      date: r.date.trim().slice(0, 10),
+      name_es: r.name_es ? r.name_es.trim() : "",
+      name_en: r.name_en ? r.name_en.trim() : "",
+      cancels_classes: parseBoolean(r.cancels_classes),
+      observance_type: r.observance_type ? r.observance_type.trim().toLowerCase() : "",
+      description_es: r.description_es ? r.description_es.trim() : "",
+      description_en: r.description_en ? r.description_en.trim() : "",
+    })),
+    // Birthday rows. Date is normalized to MM-DD; rows that fail to
+    // parse are dropped silently. The role column is preserved but
+    // unused by the current UI.
+    birthdays: Birthdays.filter(r => r.name).map((r) => ({
+      name: r.name.trim(),
+      md: parseBirthdayMD(r.date),
+      role: r.role ? r.role.trim().toLowerCase() : "",
+    })).filter((b) => b.md),
+  };
+}
+
+// Consolidated path: one round trip to the Apps Script Web App, which
+// returns all 15 tabs as a single JSON blob. The script caches its own
+// response for 1 hour via CacheService, so most hits don't re-read the
+// spreadsheet at all. Throws on any failure so the router can fall back.
+async function fetchAllDataConsolidated() {
+  if (!APPS_SCRIPT_URL) throw new Error("APPS_SCRIPT_URL not configured");
+  const res = await fetch(APPS_SCRIPT_URL);
+  if (!res.ok) throw new Error(`Apps Script endpoint returned ${res.status}`);
+  // Guard against the Apps Script returning HTML instead of JSON (e.g.
+  // a Google login page when the deploy was set to a restricted access
+  // level by mistake). res.json() throws on non-JSON, which the router
+  // catches and falls back from.
+  const tabs = await res.json();
+  return normalizeData(tabs);
+}
+
+// Legacy path: 15 parallel gviz CSV fetches, one per tab, parsed with
+// PapaParse on the client. Slower than the consolidated path but has
+// no script-deploy dependency, so it's the safety net if the Apps
+// Script ever breaks.
+async function fetchAllDataPerTab() {
   const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, faqRaw, contactsRaw, exploreRaw] =
     await Promise.all([
       fetchTab("Settings"),
@@ -236,157 +422,52 @@ async function fetchAllData() {
   try { tipsRaw = await fetchTab("Tips"); } catch (e) { /* tab not created yet */ }
 
   // Events tab is optional — populates the "This Week" sub-tab in Local
-  // and the "Esta semana" tile on Today. Empty/missing tab is fine; the
-  // app simply hides the sub-tab content area and Today tile.
+  // and the "Esta semana" tile on Today.
   let eventsRaw = [];
   try { eventsRaw = await fetchTab("Events"); } catch (e) { /* tab not created yet */ }
 
   // Holidays tab is optional — when present, takes over class-cancellation
-  // logic (and the Today holiday card) from the calendar's holiday-typed
-  // events. Lets the program office distinguish feriados that cancel
-  // classes from cultural observances that don't, and provide bilingual
-  // descriptions richer than what the calendar's description field allows.
+  // logic from the calendar's holiday-typed events.
   let holidaysRaw = [];
   try { holidaysRaw = await fetchTab("Holidays"); } catch (e) { /* tab not created yet */ }
 
   // Birthdays tab is optional — populates the Today birthday card.
-  // Year is stripped during parsing; the app never displays age.
   let birthdaysRaw = [];
   try { birthdaysRaw = await fetchTab("Birthdays"); } catch (e) { /* tab not created yet */ }
 
-  const settings = {};
-  settingsRaw.forEach((r) => { if (r.Key && r.Value) settings[r.Key.trim()] = r.Value.trim(); });
+  return normalizeData({
+    Settings: settingsRaw,
+    Classes: classesRaw,
+    Calendar: calendarRaw,
+    Health: healthRaw,
+    Churches: churchesRaw,
+    FAQ: faqRaw,
+    Contacts: contactsRaw,
+    Explore: exploreRaw,
+    Resources: resourcesRaw,
+    Announcements: announcementsRaw,
+    Apps: appsRaw,
+    Tips: tipsRaw,
+    Events: eventsRaw,
+    Holidays: holidaysRaw,
+    Birthdays: birthdaysRaw,
+  });
+}
 
-  return {
-    semester: settings.semester || "Summer 2026",
-    classes: classesRaw.filter(r => r.code).map((r) => ({
-      code: r.code.trim(),
-      title: r.title.trim(),
-      professor: r.professor ? r.professor.trim() : "",
-      honorific: r.honorific ? r.honorific.trim() : "",
-      firstname: r.firstname ? r.firstname.trim() : "",
-      days: parseDays(r.days),
-      time: r.time.trim(),
-      location: r.location.trim(),
-      color: r.color ? r.color.trim() : "#64B5F6",
-      email: r.email ? r.email.trim() : "",
-    })),
-    calendarEvents: calendarRaw.filter(r => r.date).map((r) => ({
-      date: r.date.trim(),
-      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
-      title: r.title.trim(),
-      type: r.type ? r.type.trim() : "academic",
-      description: r.description ? r.description.trim() : "",
-      start_time: r.start_time ? r.start_time.trim() : "",
-      end_time: r.end_time ? r.end_time.trim() : "",
-      visibility: r.visibility ? r.visibility.trim().toLowerCase() : "both",
-    })),
-    healthProviders: healthRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      type: r.type ? r.type.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      location_note: r.location_note ? r.location_note.trim() : "",
-      phone: r.phone ? r.phone.trim() : "",
-      notes: r.notes ? r.notes.trim() : "",
-      link: r.link ? r.link.trim() : "",
-      insurance: r.insurance ? r.insurance.trim() : "",
-      category: r.category ? r.category.trim().toLowerCase() : "",
-    })),
-    churches: churchesRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      denomination: r.denomination ? r.denomination.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      location_note: r.location_note ? r.location_note.trim() : "",
-      service: r.service ? r.service.trim() : "",
-      notes: r.notes ? r.notes.trim() : "",
-      link: r.link ? r.link.trim() : "",
-    })),
-    faq: faqRaw.filter(r => r.title).map((r) => ({
-      title: r.title.trim(),
-      content: r.content ? r.content.trim() : "",
-      link: r.link ? r.link.trim() : "",
-    })),
-    contacts: contactsRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      role: r.role ? r.role.trim() : "",
-      phone: r.phone ? r.phone.trim() : "",
-      whatsapp: r.whatsapp ? r.whatsapp.trim() : "",
-      email: r.email ? r.email.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      maps: r.maps ? r.maps.trim() : "",
-      type: r.type ? r.type.trim() : "staff",
-    })),
-    explore: exploreRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      type: r.type ? r.type.trim() : "",
-      description: r.description ? r.description.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      location_note: r.location_note ? r.location_note.trim() : "",
-      hours: r.hours ? r.hours.trim() : "",
-      link: r.link ? r.link.trim() : "",
-    })),
-    resources: resourcesRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      detail: r.detail ? r.detail.trim() : "",
-      phone: r.phone ? r.phone.trim() : "",
-      url: r.url ? r.url.trim() : "",
-    })),
-    announcements: announcementsRaw.filter(r => r.message).map((r) => ({
-      message: r.message.trim(),
-      type: r.type ? r.type.trim().toLowerCase() : "info",
-      start_date: r.start_date ? r.start_date.trim() : "",
-      end_date: r.end_date ? r.end_date.trim() : "",
-      icon: r.icon ? r.icon.trim() : "📋",
-      link: r.link ? r.link.trim() : "",
-    })),
-    apps: appsRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      category: r.category ? r.category.trim() : "",
-      description: r.description ? r.description.trim() : "",
-      ios_url: r.ios_url ? r.ios_url.trim() : "",
-      android_url: r.android_url ? r.android_url.trim() : "",
-      web_url: r.web_url ? r.web_url.trim() : "",
-      priority: r.priority ? r.priority.trim().toLowerCase() : "",
-    })),
-    tips: tipsRaw.filter(r => r.text).map((r) => ({
-      text: r.text.trim(),
-      category: r.category ? r.category.trim().toLowerCase() : "",
-    })),
-    events: eventsRaw.filter(r => r.title && r.start_date).map((r) => ({
-      title: r.title.trim(),
-      category: r.category ? r.category.trim().toLowerCase() : "other",
-      description: r.description ? r.description.trim() : "",
-      start_date: r.start_date.trim().slice(0, 10),
-      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
-      time: r.time ? r.time.trim() : "",
-      venue: r.venue ? r.venue.trim() : "",
-      neighborhood: r.neighborhood ? r.neighborhood.trim() : "",
-      address: r.address ? r.address.trim() : "",
-      link: r.link ? r.link.trim() : "",
-      cost: r.cost ? r.cost.trim() : "",
-    })),
-    // Holidays sheet rows. cancels_classes is parsed as a boolean from
-    // common spreadsheet truthy strings ("TRUE", "true", "1", "yes",
-    // "x", "✓"). Anything else is false. observance_type is free-form
-    // text but we lowercase it for downstream comparison.
-    holidays: holidaysRaw.filter(r => r.date && (r.name_es || r.name_en)).map((r) => ({
-      date: r.date.trim().slice(0, 10),
-      name_es: r.name_es ? r.name_es.trim() : "",
-      name_en: r.name_en ? r.name_en.trim() : "",
-      cancels_classes: parseBoolean(r.cancels_classes),
-      observance_type: r.observance_type ? r.observance_type.trim().toLowerCase() : "",
-      description_es: r.description_es ? r.description_es.trim() : "",
-      description_en: r.description_en ? r.description_en.trim() : "",
-    })),
-    // Birthday rows. Date is normalized to MM-DD; rows that fail to
-    // parse are dropped silently. The role column is preserved but
-    // unused by the current UI.
-    birthdays: birthdaysRaw.filter(r => r.name).map((r) => ({
-      name: r.name.trim(),
-      md: parseBirthdayMD(r.date),
-      role: r.role ? r.role.trim().toLowerCase() : "",
-    })).filter((b) => b.md),
-  };
+// Top-level fetcher used by the React app. Tries the consolidated
+// Apps Script endpoint first when configured; on any failure (network
+// error, non-200, non-JSON response), falls back transparently to the
+// per-tab gviz path. This keeps the app robust against script outages
+// without students ever seeing a difference.
+async function fetchAllData() {
+  if (APPS_SCRIPT_URL) {
+    try {
+      return await fetchAllDataConsolidated();
+    } catch (e) {
+      console.warn("[BAP] Consolidated endpoint failed, falling back to per-tab gviz fetches:", e && e.message ? e.message : e);
+    }
+  }
+  return fetchAllDataPerTab();
 }
 
 // ============================================================
