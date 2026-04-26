@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Today tile polish. Tip card cycle slowed from 7s to 15s so students have time to actually read each tip. Weather alert collapsed from a two-row stacked block (Spanish primary + English italic underneath) into a single-line Spanish / English treatment matching the dress-hint pattern right above it (Roboto + slash separator + italic EB Garamond English), wraps naturally when the bilingual phrase is long, saves a row of vertical space when it isn't. Dólar tile gains an Oficial line below MEP, so students see the full Blue / MEP / Oficial picture at a glance for currency decisions; fetchDolar() now hits dolarapi.com /v1/dolares/oficial in parallel with Blue and MEP via Promise.allSettled, so an oficial outage doesn't break the tile. Dólar shape gains an oficial field; lives in the separate bap-today-cache (30 min TTL), so no CACHE_VERSION bump needed.";
+const BUILD_VERSION = "2026-04-26 — Today tile polish + Birthday card Spanish-only. Tip card cycle slowed from 7s to 15s. Weather alert collapsed from a two-row stacked block into a single-line Spanish / English treatment matching the dress-hint pattern right above it. Dólar tile gains an Oficial line below MEP; fetchDolar() now hits Blue, MEP, and Oficial in parallel via Promise.allSettled, return shape gains an oficial field, lives in the separate bap-today-cache (30 min TTL) so no CACHE_VERSION bump needed. Birthday card stripped of its English subtitle — Spanish stands alone (the names themselves carry the bicultural feeling, and the Spanish reads warmer without the English echo underneath). joinEnglish helper removed since the birthday card was its only caller; joinSpanish comment updated to drop the now-misleading 'both variants are exposed' note. BirthdayCard comment block updated.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -198,21 +198,13 @@ function findTodayBirthdays(birthdays) {
   return birthdays.filter((b) => b.md === today);
 }
 
-// Spanish-style list join: "A, B, C y D". Different from English
-// where the convention is "A, B, C, and D" (Oxford comma). Both
-// variants are exposed so the bilingual title can use the right one
-// per language.
+// Spanish-style list join: "A, B, C y D". Used for the Today birthday
+// card title when multiple people share a birthday.
 function joinSpanish(items) {
   if (!items || items.length === 0) return "";
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} y ${items[1]}`;
   return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
-}
-function joinEnglish(items) {
-  if (!items || items.length === 0) return "";
-  if (items.length === 1) return items[0];
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 // Normalize raw tab arrays into the shape the rest of the app expects.
@@ -2407,28 +2399,27 @@ function AnnouncementBanner({ announcements }) {
 // and the holiday card on any day where one or more rows in
 // data.birthdays match today's MM-DD. Three layout tiers:
 //   - 1 person:  personalized title with their name in the headline
-//   - 2 people:  bilingual title with both names joined ("María y Carlos")
+//   - 2 people:  Spanish title with both names joined ("María y Carlos")
 //   - 3+ people: generic "¡Feliz cumple!" header with names listed
 //                beneath in a single comma-joined line
-// Year of birth (if present in the source data) is intentionally
-// stripped during parsing — the app never displays or computes age.
+// Spanish-only by design — the names themselves carry the bicultural
+// feeling, and the Spanish reads warmer without an English echo
+// underneath. Year of birth (if present in the source data) is
+// intentionally stripped during parsing — the app never displays or
+// computes age.
 function BirthdayCard({ birthdays }) {
   const today = findTodayBirthdays(birthdays);
   if (today.length === 0) return null;
   const names = today.map((b) => b.name);
 
-  let titleEs;
-  let titleEn;
+  let title;
   let listLine = null;
   if (names.length === 1) {
-    titleEs = `¡Feliz cumple, ${names[0]}!`;
-    titleEn = `Happy birthday, ${names[0]}`;
+    title = `¡Feliz cumple, ${names[0]}!`;
   } else if (names.length === 2) {
-    titleEs = `¡Feliz cumple a ${joinSpanish(names)}!`;
-    titleEn = `Happy birthday, ${joinEnglish(names)}`;
+    title = `¡Feliz cumple a ${joinSpanish(names)}!`;
   } else {
-    titleEs = "¡Feliz cumple!";
-    titleEn = "Happy birthday";
+    title = "¡Feliz cumple!";
     listLine = names.join(", ");
   }
 
@@ -2450,11 +2441,7 @@ function BirthdayCard({ birthdays }) {
         <div style={{
           fontFamily: "'EB Garamond', serif", fontStyle: "italic",
           fontSize: 18, fontWeight: 700, color: C.pepBlack, lineHeight: 1.2,
-        }}>{titleEs}</div>
-        <div style={{
-          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-          fontSize: 14, color: C.mountain, marginTop: 2, lineHeight: 1.25,
-        }}>{titleEn}</div>
+        }}>{title}</div>
         {listLine && (
           <div style={{
             fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
