@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-25 — Service category added to Events. Tenth category 'service' (Spanish: 'Servicio') captures opportunities to volunteer, do service learning, and give back to the community. New <HandsHeartIcon> glyph (cupped hands cradling a heart) in BAP Blue (#64B5F6, previously unused in events). EVENT_CATEGORIES extended; sample service event added to DEFAULT_DATA. No CACHE_VERSION bump because the change is purely additive in value space (the events shape is unchanged).";
+const BUILD_VERSION = "2026-04-26 — Today tab: weather tile now shows current temp in Fahrenheit (primary) plus today's high/low in Fahrenheit on a small mono line below; Celsius dropped from display but kept internally for the bilingual dress hint. Dólar tile simplified to show Blue venta as the headline with MEP underneath in small mono; venta/compra split removed. fetchWeather extended to pull daily max/min from Open-Meteo; fetchDolarBlue renamed to fetchDolar and extended to pull MEP (bolsa) alongside Blue via Promise.allSettled, so a failed MEP call still shows Blue. Local tab pills reorganized into two fixed rows (This Week + Explore BA on top; Healthcare, Churches, Apps below) so all five fit on screen without horizontal scroll. No CACHE_VERSION bump because no sheet schema fields changed; the today cache uses a 30-minute TTL and refreshes itself.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1127,28 +1127,56 @@ const BA_LAT = -34.6037;
 const BA_LON = -58.3816;
 
 async function fetchWeather() {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${BA_LAT}&longitude=${BA_LON}&current=temperature_2m,weather_code,is_day&timezone=America/Argentina/Buenos_Aires`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${BA_LAT}&longitude=${BA_LON}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=America/Argentina/Buenos_Aires`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather fetch failed");
   const j = await res.json();
   const c = j.current || {};
+  const d = j.daily || {};
+  const firstNum = (arr) => (Array.isArray(arr) && typeof arr[0] === "number" ? arr[0] : null);
   return {
     temp: typeof c.temperature_2m === "number" ? c.temperature_2m : null,
     code: typeof c.weather_code === "number" ? c.weather_code : 0,
     isDay: c.is_day === 1 || c.is_day === true,
+    tempMax: firstNum(d.temperature_2m_max),
+    tempMin: firstNum(d.temperature_2m_min),
     ts: Date.now(),
   };
 }
 
-async function fetchDolarBlue() {
-  const res = await fetch("https://dolarapi.com/v1/dolares/blue");
-  if (!res.ok) throw new Error("Dólar fetch failed");
-  const j = await res.json();
-  return {
-    venta: typeof j.venta === "number" ? j.venta : null,
-    compra: typeof j.compra === "number" ? j.compra : null,
-    ts: Date.now(),
-  };
+// Celsius → Fahrenheit, rounded. Open-Meteo returns Celsius by default;
+// we keep the underlying values in Celsius so the bilingual dress hint
+// thresholds keep working, and convert only at display time.
+function cToF(c) {
+  if (typeof c !== "number") return null;
+  return Math.round((c * 9) / 5 + 32);
+}
+
+// Pull Blue and MEP (bolsa) in parallel via Promise.allSettled so a
+// failed MEP call still leaves us showing Blue, and vice versa. We
+// only throw if the Blue call fails outright, since Blue is the
+// headline number and MEP is the secondary line.
+async function fetchDolar() {
+  const [blueRes, mepRes] = await Promise.allSettled([
+    fetch("https://dolarapi.com/v1/dolares/blue"),
+    fetch("https://dolarapi.com/v1/dolares/bolsa"),
+  ]);
+
+  const out = { venta: null, compra: null, mep: null, ts: Date.now() };
+
+  if (blueRes.status === "fulfilled" && blueRes.value.ok) {
+    const j = await blueRes.value.json();
+    out.venta = typeof j.venta === "number" ? j.venta : null;
+    out.compra = typeof j.compra === "number" ? j.compra : null;
+  }
+
+  if (mepRes.status === "fulfilled" && mepRes.value.ok) {
+    const j = await mepRes.value.json();
+    out.mep = typeof j.venta === "number" ? j.venta : null;
+  }
+
+  if (out.venta === null) throw new Error("Dólar fetch failed");
+  return out;
 }
 
 // Compute today's items: classes scheduled for today's day-of-week
@@ -1228,7 +1256,7 @@ function TodayView({ data, onJumpToTab, profile, onDismissAnnouncement }) {
         .catch(() => { /* keep cached or null */ });
     }
     if (!fresh(c.dolar)) {
-      fetchDolarBlue()
+      fetchDolar()
         .then((d) => {
           setDolar(d);
           nextCache = { ...nextCache, dolar: d };
@@ -1314,8 +1342,18 @@ function TodayView({ data, onJumpToTab, profile, onDismissAnnouncement }) {
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 700,
             color: C.pepBlue, lineHeight: 1,
-          }}>{weather.temp !== null ? Math.round(weather.temp) + "°" : "—"}</div>
+          }}>{weather.temp !== null ? cToF(weather.temp) + "°" : "—"}</div>
         </div>
+        {(typeof weather.tempMax === "number" || typeof weather.tempMin === "number") && (
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain,
+            marginTop: 6, lineHeight: 1.3,
+          }}>
+            {typeof weather.tempMax === "number" ? `↑ ${cToF(weather.tempMax)}°` : ""}
+            {typeof weather.tempMax === "number" && typeof weather.tempMin === "number" ? "  " : ""}
+            {typeof weather.tempMin === "number" ? `↓ ${cToF(weather.tempMin)}°` : ""}
+          </div>
+        )}
         <div style={{
           fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.mountain,
           marginTop: 6, lineHeight: 1.3,
@@ -1345,10 +1383,10 @@ function TodayView({ data, onJumpToTab, profile, onDismissAnnouncement }) {
           color: C.pepBlue, lineHeight: 1,
         }}>{formatPesos(dolar.venta)}</div>
         <div style={{
-          fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.mountain,
+          fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain,
           marginTop: 6, lineHeight: 1.3,
         }}>
-          venta · compra {dolar.compra ? formatPesos(dolar.compra) : "—"}
+          MEP {dolar.mep ? formatPesos(dolar.mep) : "—"}
         </div>
       </>
     ) : (
@@ -2532,12 +2570,16 @@ function LocalView({ data }) {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 2 }}>
-        <Pill active={sub === "events"} onClick={() => setSub("events")}>This Week</Pill>
-        <Pill active={sub === "health"} onClick={() => setSub("health")}>Healthcare</Pill>
-        <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
-        <Pill active={sub === "apps"} onClick={() => setSub("apps")}>Apps</Pill>
-        <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Explore BA</Pill>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <Pill active={sub === "events"} onClick={() => setSub("events")}>This Week</Pill>
+          <Pill active={sub === "explore"} onClick={() => setSub("explore")}>Explore BA</Pill>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Pill active={sub === "health"} onClick={() => setSub("health")}>Healthcare</Pill>
+          <Pill active={sub === "churches"} onClick={() => setSub("churches")}>Churches</Pill>
+          <Pill active={sub === "apps"} onClick={() => setSub("apps")}>Apps</Pill>
+        </div>
       </div>
 
       {sub === "events" && (
