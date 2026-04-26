@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Today tab: weather tile now shows current temp in Fahrenheit (primary) plus today's high/low in Fahrenheit on a small mono line below; Celsius dropped from display but kept internally for the bilingual dress hint. Dólar tile simplified to show Blue venta as the headline with MEP underneath in small mono; venta/compra split removed. fetchWeather extended to pull daily max/min from Open-Meteo; fetchDolarBlue renamed to fetchDolar and extended to pull MEP (bolsa) alongside Blue via Promise.allSettled, so a failed MEP call still shows Blue. Today-cache shape gained tempMax/tempMin/mep fields; old cached entries missing those fields render gracefully and self-refresh on the existing 30-minute TTL — no key bump, the refresh happens naturally within half an hour. Local tab pills reorganized into two fixed rows (This Week + Explore BA on top; Healthcare, Churches, Apps below) so all five fit on screen without horizontal scroll. AnnouncementBanner redesigned: dismiss × removed (announcements now auto-clear on end_date and the program office controls the lifecycle); new <MegaphoneIcon> for info / <AlertIcon> for urgent; bilingual DM Mono label (Aviso / Notice or Importante / Important); soft accent gradient stripe replaces the hard left border; italic Spanish 'Hasta el viernes' / 'Hasta el 4 de mayo' end-date gloss in EB Garamond when the announcement runs ≤21 days; primary 'Más info →' CTA pill replaces the old tiny arrow link. New formatAnnouncementThrough() helper. New CSS class .bap-pulse-dot-orange + matching @keyframes bap-pulse-orange so the urgent banner's pulsing halo is Pep Orange rather than the synced-status mint green. Profile field 'dismissedAnnouncements' kept in the schema for backwards compat with stored profiles but no longer read or written; hashAnnouncement() and the dismissAnnouncement App-level callback removed. No CACHE_VERSION bump because no sheet schema fields changed.";
+const BUILD_VERSION = "2026-04-26 — Weekly Overview cleanup: removed the '↓ TODAY' scroll-to-today pill from the top of the week view, since the dedicated Today tab (the leftmost tab and the default on app open) is now the canonical entry point for today-of-day context. The visual highlighting of today's day card stays intact (Ice-tinted background, BAP Blue border, Pep Blue date circle, and inline 'TODAY' badge next to the weekday name) — that's orientation, not navigation. The matching todayRef, todayInView, and scrollToToday helpers were dropped along with the button. The TODAY pill in Schedule → Class Schedule (which scrolls to today's row within the Mon–Fri grid of classes) is intentionally untouched; that's a different navigation affordance for a class-only view.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1880,7 +1880,6 @@ function AnnouncementBanner({ announcements }) {
 // ─── Weekly Overview ───
 function WeeklyOverviewView({ data }) {
   const [weekOffset, setWeekOffset] = useState(0);
-  const todayRef = useRef(null);
 
   const today = new Date();
   today.setHours(12, 0, 0, 0);
@@ -1898,14 +1897,6 @@ function WeeklyOverviewView({ data }) {
 
   const weekStartStr = toDateStr(weekDates[0]);
   const weekEndStr = toDateStr(weekDates[6]);
-
-  const todayInView = weekOffset === 0;
-
-  const scrollToToday = () => {
-    if (todayRef.current) {
-      todayRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
 
   // Filter events that overlap this week (handles multi-day events)
   const weekEvents = data.calendarEvents.filter((e) => {
@@ -1963,16 +1954,6 @@ function WeeklyOverviewView({ data }) {
           fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean, fontWeight: 500,
         }}>← Back to This Week</button>
       )}
-      {todayInView && (
-        <button onClick={scrollToToday} style={{
-          display: "flex", alignItems: "center", gap: 6, margin: "0 auto 14px",
-          background: C.ocean, color: C.white, border: "none", borderRadius: 20,
-          padding: "6px 18px", cursor: "pointer", fontFamily: "'DM Mono', monospace",
-          fontSize: 12, fontWeight: 500, letterSpacing: 0.5,
-        }}>
-          ↓ TODAY
-        </button>
-      )}
 
       {/* Days */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1983,7 +1964,7 @@ function WeeklyOverviewView({ data }) {
           const hasContent = dayEvents.length > 0;
 
           return (
-            <div key={ds} ref={isToday ? todayRef : undefined} style={{
+            <div key={ds} style={{
               background: isToday ? "#F0F7FF" : C.white,
               borderRadius: 12, padding: "12px 14px",
               border: isToday ? `2px solid ${C.bapBlue}` : `1px solid ${C.fog}`,
