@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-26 — Service worker shipped via vite-plugin-pwa for true offline mode. The app shell (JS bundle, fonts, icons, HTML) now precaches on first install via Workbox; combined with the existing localStorage data cache, the app launches with zero network on subsequent opens. Works on the subte, in low-signal neighborhoods, on flights, on a US data plan that's metering carefully. Configured with registerType:autoUpdate and clientsClaim+skipWaiting so freshly deployed builds activate seamlessly on the next open with no in-app update prompt. injectRegister:auto means the SW registration is wired into index.html by the plugin, so main.jsx and App.jsx need no SW-specific code; the only App.jsx change is this BUILD_VERSION bump. manifest:false in the plugin config so the existing public/manifest.json stays the single source of truth for home-screen install behavior. Two Workbox runtime caching rules cover Google Fonts: StaleWhileRevalidate for fonts.googleapis.com stylesheets, CacheFirst for fonts.gstatic.com WOFF2 files, both with one-year expirations. Apps Script, Open-Meteo, and dolarapi endpoints intentionally NOT cached at the SW layer; they already have well-tuned localStorage caches and a second SW layer would just create surprising staleness. New devDependency: vite-plugin-pwa. CACHE_VERSION stays at 5 because no data shape changes.";
+const BUILD_VERSION = "2026-04-27 — Today gained pull-to-refresh, plus tappable tiles opening two new bottom-sheet detail views. Pull-to-refresh on Today triggers a force-refresh of all three live data sources in parallel: weather (bypassing the 30-min TODAY_CACHE_TTL), dólar (same), and the consolidated sheet data (bypassing the Apps Script's 1-hour CacheService entry via a new ?bust=1 param threaded through fetchAllData → fetchAllDataConsolidated). The Director can now pull down on Today after editing the sheet and see the change immediately, instead of having to hit the Apps Script URL with ?bust=1 in a separate tab. Gesture wiring: TodayView root div carries onTouchStart/Move/End/Cancel, walks up to the closest scrollable ancestor on first touch, only activates when scrollTop===0, applies 0.55 resistance to the raw delta, caps visual pull at 110 px, fires on release past 70 px. Indicator is a 28 px circular spinner (Fog ring with a Pep Blue top segment, reusing the existing bap-spin keyframe and the brand-aligned loading-screen ring style); it ramps in opacity as the user pulls, switches its top-segment color to Pep Blue past the trigger threshold, and spins during the actual refresh. Content translates down with the pull and snaps back on release via a 280 ms cubic-bezier transition. overscroll-behavior-y: contain added to the App-level content scroll container so the browser's own pull-to-refresh doesn't fight ours. PTR is suppressed when either bottom sheet (Weather or Dólar) is open. New App-level callback refreshAllData() passed down to TodayView as onRefreshData; it sets status to 'refreshing' so the header pill matches the in-progress state, awaits a single fetchAllData({ bust: true }), and lands the result the same way the mount fetcher does. **Tappable tiles (also new):** Weather tile opens <WeatherSheet> with a 12-hour hourly strip and a 7-day daily list; rain probability shown when ≥25 % and max wind gust shown when ≥30 km/h, otherwise hidden. Dólar tile opens <DolarSheet>, a bidirectional currency calculator (default ARS → USD) with quick-pick chips, primary result at Blue compra, and an all-rates comparison strip. Dólar tile headline switched from venta to compra. fetchWeather extended: forecast_days 3 → 7, daily block now also requests weather_code, precipitation_probability_max, wind_gusts_10m_max; return shape gained a daily sub-object. New shared <BottomSheet> component, new helpers getWeatherLabel/formatHourLabel/getShortDayLabel/formatUsd. statTile accepts an optional onClick. Roadmap entry 'Pull-to-refresh on Today' retired. CACHE_VERSION stays at 5 because no sheet-data shape changed.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -368,9 +368,15 @@ function normalizeData(raw) {
 // returns all 15 tabs as a single JSON blob. The script caches its own
 // response for 1 hour via CacheService, so most hits don't re-read the
 // spreadsheet at all. Throws on any failure so the router can fall back.
-async function fetchAllDataConsolidated() {
+//
+// When `bust` is true, we append `?bust=1` to the URL so the Apps
+// Script's CacheService entry is bypassed and the script re-reads the
+// spreadsheet. Used by the pull-to-refresh gesture on Today; without
+// the bust, a freshly edited sheet can take up to an hour to appear.
+async function fetchAllDataConsolidated({ bust = false } = {}) {
   if (!APPS_SCRIPT_URL) throw new Error("APPS_SCRIPT_URL not configured");
-  const res = await fetch(APPS_SCRIPT_URL);
+  const url = bust ? `${APPS_SCRIPT_URL}?bust=1` : APPS_SCRIPT_URL;
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Apps Script endpoint returned ${res.status}`);
   // Guard against the Apps Script returning HTML instead of JSON (e.g.
   // a Google login page when the deploy was set to a restricted access
@@ -450,11 +456,14 @@ async function fetchAllDataPerTab() {
 // Apps Script endpoint first when configured; on any failure (network
 // error, non-200, non-JSON response), falls back transparently to the
 // per-tab gviz path. This keeps the app robust against script outages
-// without students ever seeing a difference.
-async function fetchAllData() {
+// without students ever seeing a difference. When `bust` is true, the
+// consolidated path appends `?bust=1` to bypass the Apps Script's
+// CacheService; the per-tab gviz path always hits the sheet directly
+// so no bust flag is needed there.
+async function fetchAllData({ bust = false } = {}) {
   if (APPS_SCRIPT_URL) {
     try {
-      return await fetchAllDataConsolidated();
+      return await fetchAllDataConsolidated({ bust });
     } catch (e) {
       console.warn("[BAP] Consolidated endpoint failed, falling back to per-tab gviz fetches:", e && e.message ? e.message : e);
     }
@@ -1411,15 +1420,18 @@ const BA_LAT = -34.6037;
 const BA_LON = -58.3816;
 
 async function fetchWeather() {
-  // Pull current conditions, today's high/low, and a 48-hour hourly
-  // slice covering precipitation, precipitation probability, wind
-  // gusts, weather code, and apparent temp. The hourly slice powers
-  // the impending-weather alert rendered under the high/low line.
+  // Pull current conditions, a 7-day daily forecast, and a 48-hour
+  // hourly slice. The hourly slice powers two things: the impending-
+  // weather alert under the Today tile and the next-12-hours strip in
+  // the WeatherSheet modal. The daily block powers the 7-day list in
+  // the same modal; it includes weather_code, precipitation_probability_max,
+  // and wind_gusts_10m_max so the modal can show condition icons and
+  // surface notable rain or wind per day.
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${BA_LAT}&longitude=${BA_LON}` +
     `&current=temperature_2m,weather_code,is_day,wind_speed_10m` +
-    `&daily=temperature_2m_max,temperature_2m_min` +
+    `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,wind_gusts_10m_max` +
     `&hourly=temperature_2m,weather_code,precipitation,precipitation_probability,wind_gusts_10m` +
-    `&forecast_days=3&timezone=America/Argentina/Buenos_Aires`;
+    `&forecast_days=7&timezone=America/Argentina/Buenos_Aires`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather fetch failed");
   const j = await res.json();
@@ -1435,6 +1447,7 @@ async function fetchWeather() {
   let startIdx = times.findIndex((t) => typeof t === "string" && t.slice(0, 13) >= nowIso);
   if (startIdx < 0) startIdx = 0;
   const sliceN = (arr) => Array.isArray(arr) ? arr.slice(startIdx, startIdx + 48) : [];
+  const arr = (a) => (Array.isArray(a) ? a : []);
   return {
     temp: typeof c.temperature_2m === "number" ? c.temperature_2m : null,
     code: typeof c.weather_code === "number" ? c.weather_code : 0,
@@ -1448,6 +1461,14 @@ async function fetchWeather() {
       precip: sliceN(h.precipitation),
       precipProb: sliceN(h.precipitation_probability),
       windGust: sliceN(h.wind_gusts_10m),
+    },
+    daily: {
+      time: arr(d.time),
+      tempMax: arr(d.temperature_2m_max),
+      tempMin: arr(d.temperature_2m_min),
+      code: arr(d.weather_code),
+      precipProbMax: arr(d.precipitation_probability_max),
+      windGustMax: arr(d.wind_gusts_10m_max),
     },
     ts: Date.now(),
   };
@@ -1660,8 +1681,683 @@ function getTodayItems(data, profile) {
   return { items, holiday };
 }
 
+// ─── Today detail-sheet helpers ───
+//
+// Small pure helpers used by <WeatherSheet> and <DolarSheet>. Kept up
+// here (rather than inside the components) so they're easy to test in
+// isolation and reused by both the hourly strip and the 7-day list.
+
+// Map a WMO weather code to a short bilingual condition label. Used
+// for the descriptor text in the 7-day list. Mirrors the state
+// grouping used by <WeatherIcon> so icon and label always agree.
+function getWeatherLabel(code) {
+  if (code === 0) return { es: "Despejado", en: "Clear" };
+  if (code === 1) return { es: "Mayormente despejado", en: "Mostly clear" };
+  if (code === 2) return { es: "Parcialmente nublado", en: "Partly cloudy" };
+  if (code === 3) return { es: "Nublado", en: "Overcast" };
+  if (code === 45 || code === 48) return { es: "Niebla", en: "Fog" };
+  if (code >= 51 && code <= 55) return { es: "Llovizna", en: "Drizzle" };
+  if (code >= 61 && code <= 65) return { es: "Lluvia", en: "Rain" };
+  if (code >= 80 && code <= 82) return { es: "Chubascos", en: "Showers" };
+  if (code >= 71 && code <= 77) return { es: "Nieve", en: "Snow" };
+  if (code >= 95 && code <= 99) return { es: "Tormenta", en: "Thunderstorm" };
+  return { es: "—", en: "—" };
+}
+
+// Format an Open-Meteo ISO local time string ("2026-04-27T14:00") as
+// a compact hour label for the hourly strip. "Ahora" for the first
+// item, otherwise "14h" / "9h". Argentine 24-hour convention.
+function formatHourLabel(iso, isFirst) {
+  if (isFirst) return "Ahora";
+  if (typeof iso !== "string") return "";
+  const m = iso.match(/T(\d{2}):/);
+  if (!m) return "";
+  return parseInt(m[1], 10) + "h";
+}
+
+// Compact bilingual weekday label from an Open-Meteo daily date string
+// ("2026-04-27"). Returns "Hoy / Today" for today, otherwise the
+// Spanish weekday capitalized. English gloss is left to the caller
+// since some places want it inline and others don't.
+function getShortDayLabel(iso, today) {
+  if (typeof iso !== "string") return { es: "", en: "" };
+  const d = new Date(iso + "T12:00:00");
+  const todayStr = today instanceof Date
+    ? `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+    : null;
+  if (todayStr && iso.slice(0, 10) === todayStr) {
+    return { es: "Hoy", en: "Today" };
+  }
+  const wd = SPANISH_WEEKDAYS[d.getDay()];
+  const wdCap = wd.charAt(0).toUpperCase() + wd.slice(1);
+  return { es: wdCap, en: WEEK_DAYS_FULL[d.getDay()] };
+}
+
+// USD formatter with cents for amounts under $100 and rounded
+// thousands-separated whole dollars otherwise. Mirrors how a student
+// would actually read the converted value in their head.
+function formatUsd(n) {
+  if (typeof n !== "number" || !isFinite(n)) return "—";
+  if (n === 0) return "$0";
+  if (Math.abs(n) < 100) return "$" + n.toFixed(2);
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+
+// ─── BottomSheet ───
+//
+// Generic slide-up modal used by <WeatherSheet> and <DolarSheet>.
+// Built to feel native on a phone: backdrop fades in, sheet slides
+// up from the bottom on a 280 ms ease, drag-handle sits above a
+// brand-aligned header (English headline + Spanish gloss), body
+// scrolls internally. Backdrop tap closes; a dedicated × button in
+// the header closes too. Intentionally kept distinct from the
+// existing <ProfileModal> (which is full-screen and styled like a
+// settings page); this is a lighter, content-detail sheet.
+function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
+  // Mount/unmount with a short animation window so the slide-down
+  // exit is visible. `show` controls presence in the DOM; `animateIn`
+  // controls the transform/backdrop opacity.
+  const [show, setShow] = useState(open);
+  const [animateIn, setAnimateIn] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setShow(true);
+      const id = requestAnimationFrame(() => setAnimateIn(true));
+      return () => cancelAnimationFrame(id);
+    } else {
+      setAnimateIn(false);
+      const t = setTimeout(() => setShow(false), 260);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
+  // Lock background scroll while the sheet is open so iOS doesn't
+  // bounce the page behind the backdrop when you scroll the body.
+  useEffect(() => {
+    if (!show) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [show]);
+
+  if (!show) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed", inset: 0,
+        background: animateIn ? "rgba(29, 37, 45, 0.55)" : "rgba(29, 37, 45, 0)",
+        zIndex: 200,
+        transition: "background 0.26s ease-out",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.parchment, width: "100%", maxWidth: 480,
+          borderRadius: "20px 20px 0 0",
+          maxHeight: "92vh", display: "flex", flexDirection: "column",
+          transform: animateIn ? "translateY(0)" : "translateY(100%)",
+          transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+          boxShadow: "0 -8px 28px rgba(0, 32, 91, 0.20)",
+          overflow: "hidden",
+        }}
+      >
+        {/* Drag handle (decorative; tap-to-close still works via the × button or backdrop) */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 2px", flexShrink: 0 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: C.fog }} />
+        </div>
+        {/* Header */}
+        <div style={{
+          padding: "8px 18px 14px",
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 12, flexShrink: 0,
+          borderBottom: `1px solid ${C.fog}`,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontFamily: "'EB Garamond', serif", fontSize: 24, fontWeight: 700,
+              color: C.pepBlue, letterSpacing: -0.4, lineHeight: 1.05,
+            }}>{titleEn}</div>
+            <div style={{
+              fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+              letterSpacing: 1.8, color: C.ocean, marginTop: 4,
+            }}>{titleEs}</div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="bap-press"
+            style={{
+              background: C.ice, border: `1px solid ${C.fog}`, color: C.mountain,
+              width: 34, height: 34, borderRadius: 17, cursor: "pointer",
+              fontSize: 20, lineHeight: 1, padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >×</button>
+        </div>
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "14px 16px 28px" }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── WeatherSheet ───
+//
+// Detail view that opens when the student taps the Today weather tile.
+// Two stacked sections: a horizontal "next 12 hours" strip across the
+// top, and a 7-day daily list below. Both sourced from the same
+// weather object that already drives the Today tile (no additional
+// fetch). Wind and rain probability are surfaced per-day only when
+// they cross gentle thresholds (≥30 km/h gusts; ≥25% rain prob) so
+// quiet days stay clean. Dress hint is intentionally omitted here;
+// it lives only on the Today tile per the brief.
+function WeatherSheet({ open, onClose, weather }) {
+  const today = new Date();
+
+  // Next 12 hours from the existing 48-hour hourly slice.
+  const hours = (weather && weather.hourly && weather.hourly.time) || [];
+  const hourCount = Math.min(12, hours.length);
+  const hourRows = [];
+  for (let i = 0; i < hourCount; i++) {
+    const iso = hours[i];
+    const code = weather.hourly.code?.[i] ?? 0;
+    const temp = weather.hourly.temp?.[i];
+    const prob = weather.hourly.precipProb?.[i];
+    // Derive day/night from the hour-of-day in the ISO string. 6-19
+    // is day, otherwise night. Matches getGreetingGradient roughly
+    // and is fine for a small icon switch.
+    const m = typeof iso === "string" ? iso.match(/T(\d{2}):/) : null;
+    const hr = m ? parseInt(m[1], 10) : 12;
+    const isDay = hr >= 6 && hr < 19;
+    hourRows.push({
+      label: formatHourLabel(iso, i === 0),
+      code,
+      isDay,
+      tempF: typeof temp === "number" ? cToF(temp) : null,
+      prob: typeof prob === "number" ? prob : null,
+    });
+  }
+
+  // 7-day list from the new daily block. Length should be 7 but we
+  // defensively cap it at whatever the API actually returned.
+  const daily = (weather && weather.daily) || null;
+  const dayCount = daily ? Math.min(7, (daily.time || []).length) : 0;
+  const dayRows = [];
+  for (let i = 0; i < dayCount; i++) {
+    const iso = daily.time[i];
+    const code = daily.code?.[i] ?? 0;
+    const tMax = daily.tempMax?.[i];
+    const tMin = daily.tempMin?.[i];
+    const probMax = daily.precipProbMax?.[i];
+    const gustMax = daily.windGustMax?.[i];
+    const label = getShortDayLabel(iso, today);
+    dayRows.push({
+      key: iso,
+      labelEs: label.es,
+      labelEn: label.en,
+      code,
+      condition: getWeatherLabel(code),
+      tempMaxF: typeof tMax === "number" ? cToF(tMax) : null,
+      tempMinF: typeof tMin === "number" ? cToF(tMin) : null,
+      // Show rain prob only when meaningful (>= 25%), per the brief
+      probMax: typeof probMax === "number" && probMax >= 25 ? Math.round(probMax) : null,
+      // Show wind only when notably gusty (>= 30 km/h)
+      gustMax: typeof gustMax === "number" && gustMax >= 30 ? Math.round(gustMax) : null,
+    });
+  }
+
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      titleEs="Pronóstico"
+      titleEn="Weather"
+    >
+      {/* Hourly strip */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 10,
+        }}>Próximas 12 horas <span style={{ color: C.stone }}>·</span> <span style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic", textTransform: "none",
+          letterSpacing: 0, color: C.mountain, fontSize: 12,
+        }}>Next 12 hours</span></div>
+        {hourRows.length === 0 ? (
+          <div style={{
+            background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+            padding: "16px", color: C.stone, fontSize: 12,
+            fontFamily: "'Roboto', sans-serif",
+          }}>—</div>
+        ) : (
+          <div style={{
+            display: "flex", gap: 8, overflowX: "auto", WebkitOverflowScrolling: "touch",
+            paddingBottom: 4, marginLeft: -2, marginRight: -2,
+            scrollbarWidth: "thin",
+          }}>
+            {hourRows.map((h, i) => (
+              <div
+                key={i}
+                style={{
+                  flex: "0 0 auto", minWidth: 64,
+                  background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+                  padding: "10px 6px 8px",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                }}
+              >
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.ocean,
+                  textTransform: "uppercase", letterSpacing: 1,
+                }}>{h.label}</div>
+                <WeatherIcon code={h.code} isDay={h.isDay} size={28} />
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 14, fontWeight: 700,
+                  color: C.pepBlue, lineHeight: 1,
+                }}>{h.tempF !== null ? h.tempF + "°" : "—"}</div>
+                {/* Per the brief: only show probability when there is one (≥40% in the strip) */}
+                {typeof h.prob === "number" && h.prob >= 40 ? (
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: 9.5, color: C.ocean,
+                    lineHeight: 1,
+                  }}>{Math.round(h.prob)}%</div>
+                ) : (
+                  <div style={{ height: 10 }} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 7-day list */}
+      <div>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 10,
+        }}>Próximos 7 días <span style={{ color: C.stone }}>·</span> <span style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic", textTransform: "none",
+          letterSpacing: 0, color: C.mountain, fontSize: 12,
+        }}>Next 7 days</span></div>
+        {dayRows.length === 0 ? (
+          <div style={{
+            background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+            padding: "16px", color: C.stone, fontSize: 12,
+            fontFamily: "'Roboto', sans-serif",
+          }}>Cargando pronóstico extendido…</div>
+        ) : (
+          <div style={{
+            background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+            overflow: "hidden",
+          }}>
+            {dayRows.map((d, i) => {
+              const sameLabel = d.labelEs === d.labelEn;
+              return (
+                <div
+                  key={d.key}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 14px",
+                    borderTop: i === 0 ? "none" : `1px solid ${C.fog}`,
+                  }}
+                >
+                  {/* Day label */}
+                  <div style={{ width: 76, flexShrink: 0 }}>
+                    <div style={{
+                      fontFamily: "'Roboto', sans-serif", fontSize: 13.5, fontWeight: 600,
+                      color: C.pepBlack, lineHeight: 1.15,
+                    }}>{d.labelEs}</div>
+                    {!sameLabel && (
+                      <div style={{
+                        fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+                        fontSize: 11.5, color: C.mountain, marginTop: 1, lineHeight: 1.15,
+                      }}>{d.labelEn}</div>
+                    )}
+                  </div>
+                  {/* Icon */}
+                  <div style={{ flexShrink: 0 }}>
+                    <WeatherIcon code={d.code} isDay={true} size={32} />
+                  </div>
+                  {/* Condition + optional rain/wind */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: "'Roboto', sans-serif", fontSize: 12.5,
+                      color: C.pepBlack, lineHeight: 1.2,
+                    }}>{d.condition.es}</div>
+                    {(d.probMax !== null || d.gustMax !== null) && (
+                      <div style={{
+                        fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                        color: C.ocean, marginTop: 3, lineHeight: 1.2,
+                        display: "flex", gap: 8, flexWrap: "wrap",
+                      }}>
+                        {d.probMax !== null && (
+                          <span>☂ {d.probMax}%</span>
+                        )}
+                        {d.gustMax !== null && (
+                          <span>≈ {d.gustMax} km/h</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* High/low */}
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: 13,
+                    color: C.pepBlue, fontWeight: 700, whiteSpace: "nowrap",
+                    textAlign: "right", flexShrink: 0,
+                  }}>
+                    {d.tempMaxF !== null ? d.tempMaxF + "°" : "—"}
+                    <span style={{ color: C.stone, fontWeight: 400, margin: "0 4px" }}>/</span>
+                    <span style={{ color: C.mountain, fontWeight: 400 }}>
+                      {d.tempMinF !== null ? d.tempMinF + "°" : "—"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 11.5,
+          color: C.stone, marginTop: 10, lineHeight: 1.4, textAlign: "center",
+        }}>
+          Datos de Open-Meteo <span style={{ color: C.fog }}>·</span> Open-Meteo
+        </div>
+      </div>
+    </BottomSheet>
+  );
+}
+
+// ─── DolarSheet ───
+//
+// Currency calculator that opens when the student taps the dólar tile.
+// Bidirectional input (default ARS → USD), quick-pick chips appropriate
+// to the current direction, and a comparison strip that converts the
+// same amount at all four rates: Blue compra (highlighted as primary),
+// Blue venta, MEP, and Oficial. A small footnote calls out the spread
+// so students understand why the cueva quote and the calculator quote
+// can differ slightly.
+function DolarSheet({ open, onClose, dolar }) {
+  const [direction, setDirection] = useState("ars-to-usd"); // or "usd-to-ars"
+  const [amount, setAmount] = useState("");
+
+  const compra = (dolar && typeof dolar.compra === "number") ? dolar.compra : null;
+  const venta = (dolar && typeof dolar.venta === "number") ? dolar.venta : null;
+  const mep = (dolar && typeof dolar.mep === "number") ? dolar.mep : null;
+  const oficial = (dolar && typeof dolar.oficial === "number") ? dolar.oficial : null;
+
+  // Reset the input when the user flips direction so a "1000" doesn't
+  // accidentally read as 1000 USD after a flip from ARS.
+  const setDir = (next) => {
+    if (next !== direction) {
+      setDirection(next);
+      setAmount("");
+    }
+  };
+
+  // Sanitize input: digits and at most one decimal separator. We
+  // accept both "." and "," (Argentine decimal convention) and
+  // normalize to a dot internally.
+  const onAmountChange = (raw) => {
+    let s = String(raw).replace(/[^\d.,]/g, "");
+    // Collapse repeated separators to the last one
+    s = s.replace(/,/g, ".");
+    const firstDot = s.indexOf(".");
+    if (firstDot !== -1) {
+      s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
+    }
+    setAmount(s);
+  };
+
+  const num = parseFloat(amount);
+  const value = isFinite(num) && num > 0 ? num : 0;
+
+  // Convert `value` (in the source currency) to the destination using
+  // a given rate. ARS→USD: USD = ARS / rate. USD→ARS: ARS = USD × rate.
+  function convertWith(rate) {
+    if (!rate || rate <= 0) return null;
+    if (direction === "ars-to-usd") return value / rate;
+    return value * rate;
+  }
+
+  const primaryResult = convertWith(compra);
+
+  // Quick chips. ARS amounts are common menu/Uber prices; USD amounts
+  // are common cueva conversion sizes.
+  const chipsArs = [1000, 5000, 10000, 50000];
+  const chipsUsd = [5, 20, 50, 100];
+  const chips = direction === "ars-to-usd" ? chipsArs : chipsUsd;
+  const chipFmt = direction === "ars-to-usd"
+    ? (n) => "$" + n.toLocaleString("es-AR")
+    : (n) => "US$ " + n;
+
+  // Format a converted result in the destination currency.
+  function fmtResult(n) {
+    if (n == null) return "—";
+    return direction === "ars-to-usd" ? formatUsd(n) : formatPesos(n);
+  }
+
+  // Comparison strip data. We always compare the same input across
+  // all four rates so students can see the spread at a glance.
+  const compareRows = [
+    { key: "compra", labelEs: "Blue compra", labelEn: "Blue (buy from you)", rate: compra, primary: true },
+    { key: "venta", labelEs: "Blue venta", labelEn: "Blue (sell to you)", rate: venta, primary: false },
+    { key: "mep", labelEs: "MEP", labelEn: "MEP (bolsa)", rate: mep, primary: false },
+    { key: "oficial", labelEs: "Oficial", labelEn: "Official", rate: oficial, primary: false },
+  ];
+
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      titleEs="Calculadora"
+      titleEn="Currency"
+    >
+      {/* Direction toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[
+          { key: "ars-to-usd", labelEs: "Pesos → Dólares", labelEn: "ARS → USD" },
+          { key: "usd-to-ars", labelEs: "Dólares → Pesos", labelEn: "USD → ARS" },
+        ].map((opt) => {
+          const active = direction === opt.key;
+          return (
+            <button
+              key={opt.key}
+              onClick={() => setDir(opt.key)}
+              className="bap-press"
+              style={{
+                flex: 1,
+                background: active ? C.pepBlue : C.white,
+                color: active ? C.white : C.mountain,
+                border: `1px solid ${active ? C.pepBlue : C.fog}`,
+                borderRadius: 10, padding: "10px 8px", cursor: "pointer",
+                fontFamily: "'Roboto', sans-serif", fontSize: 12,
+                fontWeight: active ? 600 : 500,
+                lineHeight: 1.15,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+              }}
+            >
+              <span>{opt.labelEs}</span>
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 9.5,
+                opacity: 0.85, letterSpacing: 0.8,
+              }}>{opt.labelEn}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Input + primary result */}
+      <div style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
+        padding: "16px 16px 14px", marginBottom: 14,
+      }}>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 6,
+        }}>
+          {direction === "ars-to-usd" ? "Tenés en pesos" : "Tenés en dólares"}
+          <span style={{ color: C.stone, margin: "0 4px" }}>·</span>
+          <span style={{
+            fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+            textTransform: "none", letterSpacing: 0, color: C.mountain,
+          }}>{direction === "ars-to-usd" ? "You have, in pesos" : "You have, in dollars"}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 700,
+            color: C.stone, lineHeight: 1,
+          }}>{direction === "ars-to-usd" ? "$" : "US$"}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => onAmountChange(e.target.value)}
+            placeholder="0"
+            aria-label={direction === "ars-to-usd" ? "Amount in Argentine pesos" : "Amount in U.S. dollars"}
+            style={{
+              flex: 1, minWidth: 0,
+              fontFamily: "'DM Mono', monospace", fontSize: 26, fontWeight: 700,
+              color: C.pepBlue,
+              background: "transparent", border: "none", outline: "none",
+              padding: "2px 0",
+            }}
+          />
+        </div>
+
+        {/* Quick chips */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+          {chips.map((c) => (
+            <button
+              key={c}
+              onClick={() => setAmount(String(c))}
+              className="bap-press"
+              style={{
+                background: C.ice, color: C.ocean,
+                border: `1px solid ${C.fog}`, borderRadius: 16,
+                padding: "5px 12px", cursor: "pointer",
+                fontFamily: "'DM Mono', monospace", fontSize: 11,
+                letterSpacing: 0.4,
+              }}
+            >{chipFmt(c)}</button>
+          ))}
+        </div>
+
+        {/* Primary result */}
+        <div style={{
+          marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.fog}`,
+        }}>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
+          }}>
+            {direction === "ars-to-usd" ? "Equivale a" : "Equivale a"}
+            <span style={{ color: C.stone, margin: "0 4px" }}>·</span>
+            <span style={{
+              fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+              textTransform: "none", letterSpacing: 0, color: C.mountain,
+            }}>at Blue compra</span>
+          </div>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700,
+            color: C.pepBlue, lineHeight: 1,
+          }}>
+            {value > 0 ? fmtResult(primaryResult) : (direction === "ars-to-usd" ? "US$ —" : "$ —")}
+          </div>
+        </div>
+      </div>
+
+      {/* All-rates comparison */}
+      <div style={{ marginBottom: 8 }}>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+          letterSpacing: 1.5, color: C.ocean, marginBottom: 8,
+        }}>Comparación <span style={{ color: C.stone }}>·</span> <span style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic", textTransform: "none",
+          letterSpacing: 0, color: C.mountain, fontSize: 12,
+        }}>All rates</span></div>
+        <div style={{
+          background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+          overflow: "hidden",
+        }}>
+          {compareRows.map((row, i) => {
+            const result = row.rate ? convertWith(row.rate) : null;
+            const sameLabel = row.labelEs === row.labelEn;
+            return (
+              <div
+                key={row.key}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  gap: 10, padding: "10px 14px",
+                  borderTop: i === 0 ? "none" : `1px solid ${C.fog}`,
+                  background: row.primary ? C.ice : C.white,
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontFamily: "'Roboto', sans-serif", fontSize: 13,
+                    fontWeight: row.primary ? 700 : 500, color: C.pepBlack,
+                    lineHeight: 1.15,
+                  }}>{row.labelEs}</div>
+                  {!sameLabel && (
+                    <div style={{
+                      fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+                      fontSize: 11, color: C.mountain, marginTop: 1, lineHeight: 1.15,
+                    }}>{row.labelEn}</div>
+                  )}
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                    color: C.stone, marginTop: 3,
+                  }}>
+                    {row.rate ? `1 US$ = ${formatPesos(row.rate)}` : "—"}
+                  </div>
+                </div>
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 14, fontWeight: 700,
+                  color: row.primary ? C.pepBlue : C.mountain,
+                  whiteSpace: "nowrap",
+                }}>
+                  {value > 0 && row.rate ? fmtResult(result) : "—"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Footnote on the spread */}
+      <div style={{
+        marginTop: 12,
+        background: C.parchment, border: `1px solid ${C.fog}`, borderRadius: 10,
+        padding: "10px 12px",
+      }}>
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.pepBlack,
+          lineHeight: 1.4,
+        }}>
+          La calculadora usa el <strong>Blue compra</strong>: lo que la cueva te paga por cada dólar.
+          Si comprás dólares (no los vendés), pagás el <strong>venta</strong>, que es un poco más alto.
+        </div>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 11, color: C.mountain, marginTop: 4, lineHeight: 1.4,
+        }}>
+          The calculator uses Blue compra, the rate a cueva pays you per dollar. If you're buying dollars instead of selling them, you pay venta, which is slightly higher.
+        </div>
+      </div>
+    </BottomSheet>
+  );
+}
+
 // ─── Today View ───
-function TodayView({ data, onJumpToTab, profile }) {
+function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   // Clock tick. Updates every minute so the Próximo countdown stays
   // accurate and the greeting/gradient shifts as the day progresses.
   const [now, setNow] = useState(() => new Date());
@@ -1677,13 +2373,144 @@ function TodayView({ data, onJumpToTab, profile }) {
   const [weather, setWeather] = useState(cached.weather || null);
   const [dolar, setDolar] = useState(cached.dolar || null);
 
+  // Sheet open state for the two Today tile detail views. Closed by
+  // default; toggled by tapping the respective tile.
+  const [weatherSheetOpen, setWeatherSheetOpen] = useState(false);
+  const [dolarSheetOpen, setDolarSheetOpen] = useState(false);
+
+  // ── Pull-to-refresh ──
+  // Mobile gesture: pull down from the top of Today to force-refresh
+  // weather, dólar, AND the sheet data. The sheet refresh goes
+  // through onRefreshData (App-level) which appends ?bust=1 to the
+  // Apps Script URL so the script-side 1-hour cache is bypassed too.
+  // PTR_THRESHOLD: pull distance (px) to trigger a refresh on release.
+  // PTR_MAX: visual cap on translation so the indicator doesn't drift
+  // off the top of the viewport. PTR_RESISTANCE: applied to the raw
+  // touch delta so the pull feels weighted, like every iOS app.
+  const PTR_THRESHOLD = 70;
+  const PTR_MAX = 110;
+  const PTR_RESISTANCE = 0.55;
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const ptrTouchStartY = useRef(null);
+  const ptrScrollableRef = useRef(null);
+  const ptrActive = useRef(false);
+
+  // Walk up the DOM from a starting element to find the closest
+  // vertically-scrollable ancestor. Used at touchstart so we know
+  // which container's scrollTop to check before allowing a pull.
+  // Falls back to documentElement if nothing else qualifies.
+  const findScrollableAncestor = (el) => {
+    let n = el;
+    while (n && n !== document.body) {
+      const s = window.getComputedStyle(n);
+      if ((s.overflowY === "auto" || s.overflowY === "scroll") && n.scrollHeight > n.clientHeight) {
+        return n;
+      }
+      n = n.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+
+  // Trigger a refresh of all live + cached data. Force-fetches weather
+  // and dólar (bypassing the 30-min TTL), and calls onRefreshData
+  // which re-fetches the sheet data with ?bust=1. All three run in
+  // parallel; the indicator stays visible until the slowest finishes.
+  const triggerRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    const cur = loadTodayCache();
+    let nextCache = { ...cur };
+    const weatherPromise = fetchWeather()
+      .then((w) => {
+        setWeather(w);
+        nextCache = { ...nextCache, weather: w };
+        saveTodayCache(nextCache);
+      })
+      .catch(() => { /* keep prior */ });
+    const dolarPromise = fetchDolar()
+      .then((d) => {
+        setDolar(d);
+        nextCache = { ...nextCache, dolar: d };
+        saveTodayCache(nextCache);
+      })
+      .catch(() => { /* keep prior */ });
+    const sheetPromise = onRefreshData ? onRefreshData() : Promise.resolve();
+    await Promise.allSettled([weatherPromise, dolarPromise, sheetPromise]);
+    setIsRefreshing(false);
+    setPullDistance(0);
+  }, [isRefreshing, onRefreshData]);
+
+  // Touch handlers for the pull gesture. Only activates when the
+  // scrollable ancestor is at the top (scrollTop === 0); otherwise
+  // the touch is treated as a normal scroll. preventDefault is
+  // intentionally NOT called (React's passive listener default would
+  // make it throw); overscrollBehaviorY: "contain" on the content
+  // container keeps the browser's own pull-to-refresh out of the way.
+  const onPtrTouchStart = (e) => {
+    if (isRefreshing) return;
+    if (weatherSheetOpen || dolarSheetOpen) return;
+    if (!e.touches || e.touches.length !== 1) return;
+    const scrollable = findScrollableAncestor(e.currentTarget);
+    ptrScrollableRef.current = scrollable;
+    if (scrollable && scrollable.scrollTop > 0) return;
+    ptrTouchStartY.current = e.touches[0].clientY;
+    ptrActive.current = true;
+  };
+
+  const onPtrTouchMove = (e) => {
+    if (!ptrActive.current || isRefreshing) return;
+    if (!e.touches || e.touches.length !== 1) return;
+    // Bail if the user has scrolled the container in the meantime
+    // (e.g. they swiped up first, then back down). The pull only
+    // counts when we're truly anchored at the top.
+    const scrollable = ptrScrollableRef.current;
+    if (scrollable && scrollable.scrollTop > 0) {
+      ptrActive.current = false;
+      setPullDistance(0);
+      return;
+    }
+    const dy = e.touches[0].clientY - ptrTouchStartY.current;
+    if (dy <= 0) {
+      setPullDistance(0);
+      return;
+    }
+    setPullDistance(Math.min(PTR_MAX, dy * PTR_RESISTANCE));
+  };
+
+  const onPtrTouchEnd = () => {
+    if (!ptrActive.current) return;
+    ptrActive.current = false;
+    ptrTouchStartY.current = null;
+    if (pullDistance >= PTR_THRESHOLD) {
+      // Trigger refresh; keep the indicator visible at threshold
+      // height until both layers finish.
+      setPullDistance(PTR_THRESHOLD);
+      triggerRefresh();
+    } else {
+      // Snap back to 0 with a small transition.
+      setPullDistance(0);
+    }
+  };
+
+  const ptrTouchCancel = () => {
+    ptrActive.current = false;
+    ptrTouchStartY.current = null;
+    if (!isRefreshing) setPullDistance(0);
+  };
+
   useEffect(() => {
     const c = loadTodayCache();
     const fresh = (entry) => entry && entry.ts && (Date.now() - entry.ts < TODAY_CACHE_TTL);
+    // Weather schema gained a `daily` sub-object for the 7-day modal.
+    // Old caches from before the bump don't have it; force a refresh
+    // in that case so the modal works on first open after a deploy
+    // instead of waiting up to 30 minutes for the TTL to lapse.
+    const weatherShapeOk = c.weather && c.weather.daily && Array.isArray(c.weather.daily.time);
 
     let nextCache = { ...c };
 
-    if (!fresh(c.weather)) {
+    if (!fresh(c.weather) || !weatherShapeOk) {
       fetchWeather()
         .then((w) => {
           setWeather(w);
@@ -1760,12 +2587,34 @@ function TodayView({ data, onJumpToTab, profile }) {
   );
 
   // ── Quick-stats row ──
-  const statTile = (children, key) => (
-    <div key={key} className="bap-press" style={{
+  // Tiles that have an onClick handler render as a button (semantic
+  // and keyboard-accessible); tiles without one render as a plain div
+  // (no false affordance on the empty-state placeholders).
+  const statTile = (children, key, onClick) => {
+    const baseStyle = {
       flex: 1, background: C.white, border: `1px solid ${C.fog}`,
       borderRadius: 12, padding: "12px 14px", minWidth: 0,
-    }}>{children}</div>
-  );
+    };
+    if (onClick) {
+      return (
+        <button
+          key={key}
+          onClick={onClick}
+          className="bap-press"
+          aria-label={`Open ${key} details`}
+          style={{
+            ...baseStyle,
+            cursor: "pointer", textAlign: "left",
+            font: "inherit", color: "inherit",
+            display: "block",
+          }}
+        >{children}</button>
+      );
+    }
+    return (
+      <div key={key} className="bap-press" style={baseStyle}>{children}</div>
+    );
+  };
 
   const weatherAlert = weather ? computeWeatherAlert(weather) : null;
 
@@ -1830,10 +2679,11 @@ function TodayView({ data, onJumpToTab, profile }) {
       </>
     ),
     "weather",
+    weather ? () => setWeatherSheetOpen(true) : null,
   );
 
   const dolarTile = statTile(
-    dolar && dolar.venta ? (
+    dolar && dolar.compra ? (
       <>
         <div style={{
           fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
@@ -1842,7 +2692,7 @@ function TodayView({ data, onJumpToTab, profile }) {
         <div style={{
           fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 700,
           color: C.pepBlue, lineHeight: 1,
-        }}>{formatPesos(dolar.venta)}</div>
+        }}>{formatPesos(dolar.compra)}</div>
         <div style={{
           fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain,
           marginTop: 6, lineHeight: 1.3,
@@ -1866,6 +2716,7 @@ function TodayView({ data, onJumpToTab, profile }) {
       </>
     ),
     "dolar",
+    dolar && dolar.compra ? () => setDolarSheetOpen(true) : null,
   );
 
   // ── Holiday card ──
@@ -2077,19 +2928,85 @@ function TodayView({ data, onJumpToTab, profile }) {
     </div>
   );
 
+  // Effective pull translation. While refreshing, hold at the
+  // threshold so the indicator stays visible without flickering.
+  // Otherwise track the live pull distance, which snaps to 0 on
+  // release-without-trigger via the transition below.
+  const ptrTranslate = isRefreshing ? PTR_THRESHOLD : pullDistance;
+  const ptrReady = pullDistance >= PTR_THRESHOLD && !isRefreshing;
+  // Indicator opacity ramps from ~0 at no pull to fully visible by
+  // the time the user is past threshold or actively refreshing.
+  const ptrOpacity = isRefreshing ? 1 : Math.min(1, pullDistance / PTR_THRESHOLD);
+
   return (
-    <div>
-      {greetingStrip}
-      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-        {weatherTile}
-        {dolarTile}
+    <div
+      onTouchStart={onPtrTouchStart}
+      onTouchMove={onPtrTouchMove}
+      onTouchEnd={onPtrTouchEnd}
+      onTouchCancel={ptrTouchCancel}
+      style={{ position: "relative" }}
+    >
+      {/* Pull-to-refresh indicator. Sits in a 56 px slot above the
+          greeting strip; revealed by translating the content down. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: -56,
+          left: 0,
+          right: 0,
+          height: 56,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transform: `translateY(${ptrTranslate}px)`,
+          transition: ptrActive.current ? "none" : "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+          pointerEvents: "none",
+          opacity: ptrOpacity,
+        }}
+      >
+        <div
+          className={isRefreshing ? "bap-spin" : ""}
+          style={{
+            width: 28, height: 28, borderRadius: "50%",
+            border: `2.5px solid ${C.fog}`,
+            borderTopColor: ptrReady || isRefreshing ? C.pepBlue : C.fog,
+            transition: "border-top-color 0.18s ease-out",
+          }}
+        />
       </div>
-      <AnnouncementBanner announcements={data.announcements} />
-      <BirthdayCard birthdays={data.birthdays} />
-      {holidayCard}
-      {activityCard}
-      <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
-      {tipCard}
+
+      {/* Content; translates down with the pull so the indicator slot
+          becomes visible at the top. Snaps back via the same transition. */}
+      <div
+        style={{
+          transform: `translateY(${ptrTranslate}px)`,
+          transition: ptrActive.current ? "none" : "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
+        {greetingStrip}
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          {weatherTile}
+          {dolarTile}
+        </div>
+        <AnnouncementBanner announcements={data.announcements} />
+        <BirthdayCard birthdays={data.birthdays} />
+        {holidayCard}
+        {activityCard}
+        <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
+        {tipCard}
+      </div>
+
+      <WeatherSheet
+        open={weatherSheetOpen}
+        onClose={() => setWeatherSheetOpen(false)}
+        weather={weather}
+      />
+      <DolarSheet
+        open={dolarSheetOpen}
+        onClose={() => setDolarSheetOpen(false)}
+        dolar={dolar}
+      />
     </div>
   );
 }
@@ -4119,6 +5036,27 @@ export default function App() {
       });
   }, []);
 
+  // Manual refresh path used by the Today pull-to-refresh gesture.
+  // Calls fetchAllData with bust=true so the Apps Script's 1-hour
+  // CacheService entry is bypassed and the spreadsheet is re-read on
+  // this fetch. Returns a promise so the caller can await it and
+  // keep its refresh indicator visible until the round trip lands.
+  // Status flips to "refreshing" while in flight so the header pill
+  // shows the same state as a normal background refresh.
+  const refreshAllData = useCallback(async () => {
+    if (!SHEET_ID) return;
+    setStatus((prev) => (prev === "live" || prev === "cached" || prev === "fallback") ? "refreshing" : prev);
+    try {
+      const d = await fetchAllData({ bust: true });
+      setData(d);
+      setStatus("live");
+      saveCache(d);
+    } catch (err) {
+      console.error("Manual refresh failed:", err);
+      setStatus((prev) => (prev === "refreshing" ? "cached" : "fallback"));
+    }
+  }, []);
+
   // Position the bottom-nav pill under the active tab. Re-runs on tab
   // change and on window resize so the pill stays anchored when the
   // viewport changes width. Uses requestAnimationFrame to wait for
@@ -4198,13 +5136,13 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, padding: "20px 16px 100px", overflowY: "auto" }}>
+      <div style={{ flex: 1, padding: "20px 16px 100px", overflowY: "auto", overscrollBehaviorY: "contain" }}>
         {status === "loading" ? (
           <LoadingScreen tips={data.tips} />
         ) : (
           <>
             {tab !== "today" && <SectionTitle tabKey={tab} />}
-            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} />}
+            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} onRefreshData={refreshAllData} />}
             {tab === "schedule" && <ScheduleView data={data} profile={profile} onOpenSettings={() => setProfileOpen(true)} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
