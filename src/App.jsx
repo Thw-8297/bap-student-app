@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-27 — Today gained pull-to-refresh, plus tappable tiles opening two new bottom-sheet detail views. Pull-to-refresh on Today triggers a force-refresh of all three live data sources in parallel: weather (bypassing the 30-min TODAY_CACHE_TTL), dólar (same), and the consolidated sheet data (bypassing the Apps Script's 1-hour CacheService entry via a new ?bust=1 param threaded through fetchAllData → fetchAllDataConsolidated). The Director can now pull down on Today after editing the sheet and see the change immediately, instead of having to hit the Apps Script URL with ?bust=1 in a separate tab. Gesture wiring: TodayView root div carries onTouchStart/Move/End/Cancel, walks up to the closest scrollable ancestor on first touch, only activates when scrollTop===0, applies 0.55 resistance to the raw delta, caps visual pull at 110 px, fires on release past 70 px. Indicator is a 28 px circular spinner (Fog ring with a Pep Blue top segment, reusing the existing bap-spin keyframe and the brand-aligned loading-screen ring style); it ramps in opacity as the user pulls, switches its top-segment color to Pep Blue past the trigger threshold, and spins during the actual refresh. Content translates down with the pull and snaps back on release via a 280 ms cubic-bezier transition. overscroll-behavior-y: contain added to the App-level content scroll container so the browser's own pull-to-refresh doesn't fight ours. PTR is suppressed when either bottom sheet (Weather or Dólar) is open. New App-level callback refreshAllData() passed down to TodayView as onRefreshData; it sets status to 'refreshing' so the header pill matches the in-progress state, awaits a single fetchAllData({ bust: true }), and lands the result the same way the mount fetcher does. **Tappable tiles (also new):** Weather tile opens <WeatherSheet> with a 12-hour hourly strip and a 7-day daily list; rain probability shown when ≥25 % and max wind gust shown when ≥30 km/h, otherwise hidden. Dólar tile opens <DolarSheet>, a bidirectional currency calculator (default ARS → USD) with quick-pick chips, primary result at Blue compra, and an all-rates comparison strip. Dólar tile headline switched from venta to compra. fetchWeather extended: forecast_days 3 → 7, daily block now also requests weather_code, precipitation_probability_max, wind_gusts_10m_max; return shape gained a daily sub-object. New shared <BottomSheet> component, new helpers getWeatherLabel/formatHourLabel/getShortDayLabel/formatUsd. statTile accepts an optional onClick. Roadmap entry 'Pull-to-refresh on Today' retired. CACHE_VERSION stays at 5 because no sheet-data shape changed.";
+const BUILD_VERSION = "2026-04-27b — Hotfix on the hourly slice in fetchWeather. The startIdx anchor was computed from new Date().toISOString() (UTC), then string-compared against Open-Meteo hourly.time entries that arrive in BA local format because the call requests timezone=America/Argentina/Buenos_Aires. Buenos Aires is UTC-3, so the comparison drifted forward by exactly 3 hours: the next-12-hours strip in WeatherSheet showed a window starting 3h in the future, with 'Ahora' labeled over the wrong tile and the hour sequence appearing to jump (and visually 'out of order' around midnight when labels wrapped 22h → 23h → 0h → 1h instead of representing the actual current and next hours). The same off-by-3-hours error silently affected computeWeatherAlert, which had been scanning the wrong 48-hour window. Fix: anchor the slice to the API's own current.time field, which is emitted in the same BA-local format as hourly.time, so a plain YYYY-MM-DDTHH string comparison works without any timezone math. Defensive Intl.DateTimeFormat fallback (timeZone America/Argentina/Buenos_Aires, hourCycle h23) covers the unlikely case where current.time is ever missing. Also in this build (2026-04-27): pull-to-refresh on Today (force-refreshes weather, dólar, and sheet data with ?bust=1 in parallel; circular spinner indicator above the greeting strip; gesture suppressed when either bottom sheet is open; overscroll-behavior-y: contain on the App content scroll container); tappable Today tiles opening WeatherSheet (12-hour hourly strip + 7-day daily list with rain prob ≥25 % and wind gust ≥30 km/h shown only when meaningful) and DolarSheet (bidirectional currency calculator with quick-pick chips, primary result at Blue compra, all-rates comparison strip, bilingual footnote on the spread); dólar tile headline switched from venta to compra; fetchWeather extended to forecast_days=7 with daily weather_code/precipitation_probability_max/wind_gusts_10m_max; new shared <BottomSheet> component; new helpers getWeatherLabel/formatHourLabel/getShortDayLabel/formatUsd; statTile accepts an optional onClick. CACHE_VERSION stays at 5 because no sheet-data shape changed.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1440,11 +1440,40 @@ async function fetchWeather() {
   const h = j.hourly || {};
   const firstNum = (arr) => (Array.isArray(arr) && typeof arr[0] === "number" ? arr[0] : null);
   // Slice the hourly arrays to the next 48 hours starting from now.
-  // Open-Meteo returns from midnight today, so we find the index of
-  // the current hour and slice forward.
+  // Open-Meteo returns all 7 days of hourly data starting from midnight
+  // BA local time on day 1, so we have to find the index of the entry
+  // that represents the current hour and slice forward from there.
   const times = Array.isArray(h.time) ? h.time : [];
-  const nowIso = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
-  let startIdx = times.findIndex((t) => typeof t === "string" && t.slice(0, 13) >= nowIso);
+  // Anchor the 48-hour slice to "now" in Buenos Aires. The Open-Meteo
+  // response runs entirely in BA local time (because of timezone=
+  // America/Argentina/Buenos_Aires) and emits ISO strings without a
+  // timezone suffix, so comparing them against a UTC-based reference
+  // would drift by exactly 3 hours and skip the slice forward into
+  // the future. Two anchors, in order of preference:
+  //   1. The API's own current.time (BA local, same format as
+  //      hourly.time, so plain string compare works).
+  //   2. Intl.DateTimeFormat with explicit BA timezone, if current.time
+  //      is missing for any reason.
+  let nowLocalHour = "";
+  if (typeof c.time === "string" && c.time.length >= 13) {
+    nowLocalHour = c.time.slice(0, 13);
+  } else {
+    try {
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", hourCycle: "h23",
+      });
+      const parts = fmt.formatToParts(new Date());
+      const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
+      nowLocalHour = `${get("year")}-${get("month")}-${get("day")}T${get("hour")}`;
+    } catch (e) {
+      nowLocalHour = "";
+    }
+  }
+  let startIdx = nowLocalHour
+    ? times.findIndex((t) => typeof t === "string" && t.slice(0, 13) >= nowLocalHour)
+    : 0;
   if (startIdx < 0) startIdx = 0;
   const sliceN = (arr) => Array.isArray(arr) ? arr.slice(startIdx, startIdx + 48) : [];
   const arr = (a) => (Array.isArray(a) ? a : []);
@@ -1470,6 +1499,14 @@ async function fetchWeather() {
       precipProbMax: arr(d.precipitation_probability_max),
       windGustMax: arr(d.wind_gusts_10m_max),
     },
+    // Version marker on the hourly slice anchor. Bumped to 2 in the
+    // 2026-04-27b hotfix when the anchor switched from a UTC-based
+    // reference to the API's own current.time. Cached weather objects
+    // missing this marker (or carrying a smaller value) are treated
+    // as stale by <TodayView>'s effect and force-refreshed on next
+    // open, so students don't have to wait out the 30-min TTL to
+    // shake off the bad slice.
+    hourlySliceVersion: 2,
     ts: Date.now(),
   };
 }
@@ -2502,11 +2539,17 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   useEffect(() => {
     const c = loadTodayCache();
     const fresh = (entry) => entry && entry.ts && (Date.now() - entry.ts < TODAY_CACHE_TTL);
-    // Weather schema gained a `daily` sub-object for the 7-day modal.
-    // Old caches from before the bump don't have it; force a refresh
-    // in that case so the modal works on first open after a deploy
-    // instead of waiting up to 30 minutes for the TTL to lapse.
-    const weatherShapeOk = c.weather && c.weather.daily && Array.isArray(c.weather.daily.time);
+    // Weather shape must (a) carry the daily sub-object for the 7-day
+    // modal AND (b) have a slice anchor version of at least 2. Caches
+    // saved by builds before 2026-04-27b had the hourly slice anchored
+    // to UTC instead of BA local, drifting it ~3 hours into the future;
+    // the version bump invalidates those caches on next open, so
+    // students don't have to wait out the 30-min TTL for the fix to
+    // take effect.
+    const weatherShapeOk = c.weather
+      && c.weather.daily
+      && Array.isArray(c.weather.daily.time)
+      && (c.weather.hourlySliceVersion || 0) >= 2;
 
     let nextCache = { ...c };
 
