@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-27b — Hotfix on the hourly slice in fetchWeather. The startIdx anchor was computed from new Date().toISOString() (UTC), then string-compared against Open-Meteo hourly.time entries that arrive in BA local format because the call requests timezone=America/Argentina/Buenos_Aires. Buenos Aires is UTC-3, so the comparison drifted forward by exactly 3 hours: the next-12-hours strip in WeatherSheet showed a window starting 3h in the future, with 'Ahora' labeled over the wrong tile and the hour sequence appearing to jump (and visually 'out of order' around midnight when labels wrapped 22h → 23h → 0h → 1h instead of representing the actual current and next hours). The same off-by-3-hours error silently affected computeWeatherAlert, which had been scanning the wrong 48-hour window. Fix: anchor the slice to the API's own current.time field, which is emitted in the same BA-local format as hourly.time, so a plain YYYY-MM-DDTHH string comparison works without any timezone math. Defensive Intl.DateTimeFormat fallback (timeZone America/Argentina/Buenos_Aires, hourCycle h23) covers the unlikely case where current.time is ever missing. Also in this build (2026-04-27): pull-to-refresh on Today (force-refreshes weather, dólar, and sheet data with ?bust=1 in parallel; circular spinner indicator above the greeting strip; gesture suppressed when either bottom sheet is open; overscroll-behavior-y: contain on the App content scroll container); tappable Today tiles opening WeatherSheet (12-hour hourly strip + 7-day daily list with rain prob ≥25 % and wind gust ≥30 km/h shown only when meaningful) and DolarSheet (bidirectional currency calculator with quick-pick chips, primary result at Blue compra, all-rates comparison strip, bilingual footnote on the spread); dólar tile headline switched from venta to compra; fetchWeather extended to forecast_days=7 with daily weather_code/precipitation_probability_max/wind_gusts_10m_max; new shared <BottomSheet> component; new helpers getWeatherLabel/formatHourLabel/getShortDayLabel/formatUsd; statTile accepts an optional onClick. CACHE_VERSION stays at 5 because no sheet-data shape changed.";
+const BUILD_VERSION = "2026-04-28 — Today tile loading/offline/stale states + class date gating + finals. (1) Today tiles dim to a softer Ice background and ~55% opacity while refreshing or offline; tap is suppressed in those states. (2) Weather tile picks up a 'stale' state when the cached weather is older than 6 hours (WEATHER_STALE_MS); a stale tile stays dimmed and a tap fires a foreground re-fetch instead of opening WeatherSheet. On success it ungrays and the modal opens; on failure it stays grayed. New helper isWeatherStale(weather). New isOnline state on TodayView with online/offline event listeners; statTile signature gains a dimmed parameter. (3) WeatherSheet 7-day list now renders wind gusts in mph (kmhToMph) with a ≥20 mph display threshold for the US-leaning audience; underlying values stay in km/h via Open-Meteo. (4) Classes tab gains four optional columns: start_date, end_date, final_date, final_time. Settings gains finals_window_start and finals_window_end. New helpers isClassActive(c, dateStr), filterActiveClassesForDate(classes, dateStr), getStudentFinals(data, profile), getFinalForDate(data, profile, dateStr), and daysUntil(dateStr, today). Outside [start_date, end_date], classes are gated out of the Today activity card and the Schedule tab's Weekly Overview; Class Schedule and Courses sub-views remain unfiltered (browseable catalog). On a final exam day, the matching final replaces regular classes on Today's activity card. (5) New <FinalsCard /> pinned to the top of the Schedule tab (across all three sub-pills) when the student has personalized AND we're within 2 weeks of finals_window_start OR any enrolled class has a final_date. Renders one row per enrolled class with code, title, location, and either the assigned date+time or 'TBD · {finals window}'. (6) New <TodayFinalsTile /> rendered between the activity card and the tip rotator on the Today tab, under the same gating as FinalsCard. (7) DEFAULT_DATA gains the new fields with realistic Summer-2026 placeholders. CACHE_VERSION bumped 5 → 6 because the data shape now includes per-class start_date/end_date/final_date/final_time and the new Settings finals window keys.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -26,12 +26,14 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZUxnUtb39W_Lt
 
 const DEFAULT_DATA = {
   semester: "Summer 2026",
+  finals_window_start: "2026-07-13",
+  finals_window_end: "2026-07-13",
   classes: [
-    { code: "IES 300", title: "Argentine History & Society", professor: "García", honorific: "Prof.", firstname: "Ana", days: ["Mon", "Wed"], time: "9:00–10:30", location: "Classroom A", color: "#0057B8", email: "" },
-    { code: "SPA 201", title: "Intermediate Spanish II", professor: "Martínez", honorific: "Prof.", firstname: "Carlos", days: ["Mon", "Tue", "Thu"], time: "11:00–12:00", location: "Classroom B", color: "#64B5F6", email: "" },
-    { code: "REL 100", title: "The Way of Jesus", professor: "Smith", honorific: "Dr.", firstname: "John", days: ["Tue", "Thu"], time: "14:00–15:30", location: "Classroom A", color: "#425563", email: "" },
-    { code: "COM 300", title: "Intercultural Communication", professor: "Álvarez", honorific: "Prof.", firstname: "María", days: ["Wed", "Fri"], time: "14:00–15:30", location: "Classroom C", color: "#6CACE4", email: "" },
-    { code: "ART 280", title: "Tango & Argentine Arts", professor: "Reyes", honorific: "Prof.", firstname: "Lucía", days: ["Fri"], time: "10:00–12:30", location: "Studio", color: "#E35205", email: "" },
+    { code: "IES 300", title: "Argentine History & Society", professor: "García", honorific: "Prof.", firstname: "Ana", days: ["Mon", "Wed"], time: "9:00–10:30", location: "Classroom A", color: "#0057B8", email: "", start_date: "2026-05-18", end_date: "2026-07-10", final_date: "", final_time: "" },
+    { code: "SPA 201", title: "Intermediate Spanish II", professor: "Martínez", honorific: "Prof.", firstname: "Carlos", days: ["Mon", "Tue", "Thu"], time: "11:00–12:00", location: "Classroom B", color: "#64B5F6", email: "", start_date: "2026-05-18", end_date: "2026-07-10", final_date: "", final_time: "" },
+    { code: "REL 100", title: "The Way of Jesus", professor: "Smith", honorific: "Dr.", firstname: "John", days: ["Tue", "Thu"], time: "14:00–15:30", location: "Classroom A", color: "#425563", email: "", start_date: "2026-05-18", end_date: "2026-07-10", final_date: "", final_time: "" },
+    { code: "COM 300", title: "Intercultural Communication", professor: "Álvarez", honorific: "Prof.", firstname: "María", days: ["Wed", "Fri"], time: "14:00–15:30", location: "Classroom C", color: "#6CACE4", email: "", start_date: "2026-05-18", end_date: "2026-07-10", final_date: "", final_time: "" },
+    { code: "ART 280", title: "Tango & Argentine Arts", professor: "Reyes", honorific: "Prof.", firstname: "Lucía", days: ["Fri"], time: "10:00–12:30", location: "Studio", color: "#E35205", email: "", start_date: "2026-05-18", end_date: "2026-07-10", final_date: "", final_time: "" },
   ],
   calendarEvents: [
     { date: "2026-08-10", end_date: "", title: "Arrival Day", type: "milestone", description: "Airport pickup and welcome dinner", start_time: "", end_time: "", visibility: "both" },
@@ -234,6 +236,13 @@ function normalizeData(raw) {
 
   return {
     semester: settings.semester || "Summer 2026",
+    // Program-wide finals window. When populated, the Today tab and the
+    // Schedule tab use this range to (a) decide when to surface the
+    // upcoming-finals UI (2 weeks before the window opens) and (b)
+    // render a "TBD · {window}" hint for any class whose final_date
+    // hasn't been filled in yet. Both blank → finals UI never appears.
+    finals_window_start: settings.finals_window_start || "",
+    finals_window_end: settings.finals_window_end || "",
     classes: Classes.filter(r => r.code).map((r) => ({
       code: r.code.trim(),
       title: r.title.trim(),
@@ -245,6 +254,17 @@ function normalizeData(raw) {
       location: r.location.trim(),
       color: r.color ? r.color.trim() : "#64B5F6",
       email: r.email ? r.email.trim() : "",
+      // Optional date-gating fields. start_date and end_date bracket
+      // the regular meeting period: outside this window the class is
+      // suppressed from Today and Weekly Overview but stays visible in
+      // Class Schedule and Courses (browseable catalog). Either blank
+      // → no gating on that side. final_date and final_time describe
+      // the assigned final exam slot; both blank → "TBD" against the
+      // program's finals window from Settings.
+      start_date: r.start_date ? r.start_date.trim().slice(0, 10) : "",
+      end_date: r.end_date ? r.end_date.trim().slice(0, 10) : "",
+      final_date: r.final_date ? r.final_date.trim().slice(0, 10) : "",
+      final_time: r.final_time ? r.final_time.trim() : "",
     })),
     calendarEvents: Calendar.filter(r => r.date).map((r) => ({
       date: r.date.trim(),
@@ -480,7 +500,7 @@ async function fetchAllData({ bust = false } = {}) {
 // ============================================================
 
 const CACHE_KEY = "bap-app-cache";
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 function loadCache() {
   try {
@@ -565,6 +585,131 @@ function filterClassesByProfile(classes, profile) {
   if (!shouldFilterClasses(profile)) return classes;
   const set = new Set(profile.enrolledClasses);
   return (classes || []).filter((c) => set.has(c.code));
+}
+
+// ── Class date-gating helpers ──
+//
+// A class can carry optional start_date and end_date columns. Outside
+// that window the class is suppressed from Today and Weekly Overview
+// (the day-relevant views), but stays visible in Class Schedule and
+// Courses (the catalog views). Either column blank → that side of the
+// window is unbounded, so a class with both blank renders everywhere
+// (which is the legacy behavior and remains the default).
+function isClassActive(c, dateStr) {
+  if (!c || !dateStr) return true;
+  if (c.start_date && dateStr < c.start_date) return false;
+  if (c.end_date && dateStr > c.end_date) return false;
+  return true;
+}
+
+// Wrap isClassActive across an array. Used by the Today activity card
+// and Weekly Overview to drop pre-arrival or post-finals classes.
+function filterActiveClassesForDate(classes, dateStr) {
+  if (!Array.isArray(classes)) return [];
+  return classes.filter((c) => isClassActive(c, dateStr));
+}
+
+// Number of full days from `today` (a Date) to a YYYY-MM-DD string.
+// Negative if the target is in the past, 0 if the same day, positive
+// for future dates. Used by the 2-weeks-before-finals gating.
+function daysUntil(targetDateStr, today) {
+  if (!targetDateStr) return null;
+  const target = new Date(targetDateStr + "T12:00:00");
+  const ref = new Date(today);
+  ref.setHours(12, 0, 0, 0);
+  return Math.round((target - ref) / 86400000);
+}
+
+// Returns the student's enrolled classes (filtered by profile when
+// personalization is on) sorted for finals display: assigned finals
+// first by date+time, then unassigned (TBD) finals by class code.
+// When the student hasn't personalized, returns []; the finals UI is
+// per-student and silent without a profile.
+function getStudentFinals(data, profile) {
+  if (!shouldFilterClasses(profile)) return [];
+  const enrolled = filterClassesByProfile(data.classes || [], profile);
+  const withFinals = enrolled.map((c) => ({
+    code: c.code,
+    title: c.title,
+    location: c.location,
+    color: c.color,
+    final_date: c.final_date || "",
+    final_time: c.final_time || "",
+  }));
+  withFinals.sort((a, b) => {
+    const aHas = !!a.final_date;
+    const bHas = !!b.final_date;
+    if (aHas && bHas) {
+      if (a.final_date !== b.final_date) return a.final_date.localeCompare(b.final_date);
+      const ma = toMinutes(a.final_time);
+      const mb = toMinutes(b.final_time);
+      if (ma === null && mb === null) return a.code.localeCompare(b.code);
+      if (ma === null) return -1;
+      if (mb === null) return 1;
+      if (ma !== mb) return ma - mb;
+      return a.code.localeCompare(b.code);
+    }
+    if (aHas) return -1;
+    if (bHas) return 1;
+    return a.code.localeCompare(b.code);
+  });
+  return withFinals;
+}
+
+// Returns the enrolled-class final exam(s) happening on a specific
+// date, sorted by start time. Used by the Today activity card on
+// finals days to surface the final in place of the (already gated)
+// regular class schedule. Empty array when the student hasn't
+// personalized or no enrolled class has a final on that date.
+function getFinalForDate(data, profile, dateStr) {
+  const finals = getStudentFinals(data, profile);
+  return finals
+    .filter((f) => f.final_date && f.final_date === dateStr)
+    .sort((a, b) => {
+      const ma = toMinutes(a.final_time);
+      const mb = toMinutes(b.final_time);
+      if (ma === null && mb === null) return 0;
+      if (ma === null) return -1;
+      if (mb === null) return 1;
+      return ma - mb;
+    });
+}
+
+// Returns true when the finals UI should appear on the Today tab
+// and at the top of the Schedule tab. The rule: the student must
+// have personalized AND either (a) we're inside or within 14 days
+// of finals_window_start, OR (b) at least one enrolled class has a
+// final_date populated (e.g. an early-assigned final). Without a
+// finals_window_start in Settings the rule reduces to (b) alone.
+function shouldShowFinalsUI(data, profile, today) {
+  if (!shouldFilterClasses(profile)) return false;
+  const finals = getStudentFinals(data, profile);
+  if (finals.length === 0) return false;
+  const anyAssigned = finals.some((f) => !!f.final_date);
+  const anchor = data.finals_window_start || "";
+  if (anchor) {
+    const d = daysUntil(anchor, today);
+    if (d !== null && d <= 14) return true;
+  }
+  return anyAssigned;
+}
+
+// Number of milliseconds before a cached weather payload is treated
+// as "stale" for click purposes. Stale tiles stay dimmed and a tap
+// triggers a foreground re-fetch instead of opening WeatherSheet.
+const WEATHER_STALE_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function isWeatherStale(weather) {
+  if (!weather || !weather.ts) return false;
+  return (Date.now() - weather.ts) > WEATHER_STALE_MS;
+}
+
+// Convert km/h → mph, rounded. Open-Meteo returns wind gusts in km/h
+// by default; we keep the raw value in storage and convert at display
+// time so the underlying threshold logic doesn't need to change.
+function kmhToMph(kmh) {
+  if (typeof kmh !== "number") return null;
+  return Math.round(kmh * 0.621371);
 }
 
 // Look up a Holidays-tab entry for a YYYY-MM-DD date string. Returns
@@ -1671,11 +1816,30 @@ function getTodayItems(data, profile) {
   const holiday = findHolidayContext(data, todayStr);
   const suppressClasses = holiday && holiday.cancels_classes;
 
-  // Classes only render if (a) the student has personalized AND
-  // (b) today's holiday (if any) doesn't cancel classes.
-  const showClasses = shouldFilterClasses(profile) && !suppressClasses;
+  // Finals replace regular classes when the day matches an enrolled
+  // class's final_date. This sits above the start_date/end_date gate
+  // so a final exam scheduled after the regular session ends still
+  // surfaces on Today on the day it actually happens. Holidays still
+  // win over finals — a feriado on a final-exam day suppresses
+  // everything (and program ops should obviously not schedule a final
+  // on a feriado anyway).
+  const todaysFinals = !suppressClasses
+    ? getFinalForDate(data, profile, todayStr).map((f) => ({
+        kind: "final",
+        title: f.title,
+        code: f.code,
+        time: f.final_time || "",
+        sortMin: toMinutes(f.final_time),
+        location: f.location,
+      }))
+    : [];
+
+  // Regular classes only render if (a) the student has personalized,
+  // (b) today's holiday (if any) doesn't cancel classes, AND (c) no
+  // final exam is scheduled today (finals replace regular sessions).
+  const showClasses = shouldFilterClasses(profile) && !suppressClasses && todaysFinals.length === 0;
   const visibleClasses = showClasses
-    ? filterClassesByProfile(data.classes || [], profile)
+    ? filterActiveClassesForDate(filterClassesByProfile(data.classes || [], profile), todayStr)
     : [];
 
   const todayClasses = visibleClasses
@@ -1708,7 +1872,7 @@ function getTodayItems(data, profile) {
       location: "",
     }));
 
-  const items = [...todayClasses, ...todayEvents].sort((a, b) => {
+  const items = [...todaysFinals, ...todayClasses, ...todayEvents].sort((a, b) => {
     if (a.sortMin === null && b.sortMin === null) return 0;
     if (a.sortMin === null) return -1;
     if (b.sortMin === null) return 1;
@@ -1895,7 +2059,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
 // top, and a 7-day daily list below. Both sourced from the same
 // weather object that already drives the Today tile (no additional
 // fetch). Wind and rain probability are surfaced per-day only when
-// they cross gentle thresholds (≥30 km/h gusts; ≥25% rain prob) so
+// they cross gentle thresholds (≥20 mph gusts; ≥25% rain prob) so
 // quiet days stay clean. Dress hint is intentionally omitted here;
 // it lives only on the Today tile per the brief.
 function WeatherSheet({ open, onClose, weather }) {
@@ -1948,8 +2112,10 @@ function WeatherSheet({ open, onClose, weather }) {
       tempMinF: typeof tMin === "number" ? cToF(tMin) : null,
       // Show rain prob only when meaningful (>= 25%), per the brief
       probMax: typeof probMax === "number" && probMax >= 25 ? Math.round(probMax) : null,
-      // Show wind only when notably gusty (>= 30 km/h)
-      gustMax: typeof gustMax === "number" && gustMax >= 30 ? Math.round(gustMax) : null,
+      // Show wind only when notably gusty (>= 20 mph). Open-Meteo
+      // returns gust speeds in km/h; convert at display time so the
+      // students (mostly from Malibu) see units they're used to.
+      gustMax: typeof gustMax === "number" && kmhToMph(gustMax) >= 20 ? kmhToMph(gustMax) : null,
     });
   }
 
@@ -2079,7 +2245,7 @@ function WeatherSheet({ open, onClose, weather }) {
                           <span>☂ {d.probMax}%</span>
                         )}
                         {d.gustMax !== null && (
-                          <span>≈ {d.gustMax} km/h</span>
+                          <span>≈ {d.gustMax} mph</span>
                         )}
                       </div>
                     )}
@@ -2415,6 +2581,49 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   const [weatherSheetOpen, setWeatherSheetOpen] = useState(false);
   const [dolarSheetOpen, setDolarSheetOpen] = useState(false);
 
+  // ── Connectivity + per-tile refetch state ──
+  // isOnline: tracks navigator.onLine + the online/offline window
+  // events. Both tiles dim and tap-disable while offline so a tap
+  // doesn't open a sheet against possibly-stale data without warning.
+  // weatherRefetching: true while a stale-tile-tap is mid-flight on
+  // the weather tile. We track this separately from isRefreshing
+  // (the whole-page PTR) so the dolar tile doesn't dim when only
+  // the weather tile is being re-fetched.
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine !== false : true
+  );
+  const [weatherRefetching, setWeatherRefetching] = useState(false);
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  // Standalone weather re-fetch used by the stale-tile tap. On success,
+  // updates state + cache and opens the WeatherSheet (because the user's
+  // tap signaled they wanted the modal — we just made them wait for
+  // fresh data first). On failure, leaves the tile in its prior state.
+  const refetchWeatherForStaleTap = useCallback(async () => {
+    if (weatherRefetching) return;
+    setWeatherRefetching(true);
+    try {
+      const w = await fetchWeather();
+      setWeather(w);
+      const cur = loadTodayCache();
+      saveTodayCache({ ...cur, weather: w });
+      setWeatherSheetOpen(true);
+    } catch (e) {
+      // Swallow — the tile stays dimmed; user can try again.
+    } finally {
+      setWeatherRefetching(false);
+    }
+  }, [weatherRefetching]);
+
   // ── Pull-to-refresh ──
   // Mobile gesture: pull down from the top of Today to force-refresh
   // weather, dólar, AND the sheet data. The sheet refresh goes
@@ -2633,12 +2842,21 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   // Tiles that have an onClick handler render as a button (semantic
   // and keyboard-accessible); tiles without one render as a plain div
   // (no false affordance on the empty-state placeholders).
-  const statTile = (children, key, onClick) => {
+  //
+  // dimmed=true: tile is offline / refreshing / stale. Renders against
+  // the Ice background at ~55% opacity, with the tap suppressed when
+  // a click handler is supplied. Used to give a visible "this isn't
+  // current" cue without removing the tile entirely.
+  const statTile = (children, key, onClick, dimmed) => {
     const baseStyle = {
-      flex: 1, background: C.white, border: `1px solid ${C.fog}`,
+      flex: 1,
+      background: dimmed ? C.ice : C.white,
+      border: `1px solid ${C.fog}`,
       borderRadius: 12, padding: "12px 14px", minWidth: 0,
+      opacity: dimmed ? 0.55 : 1,
+      transition: "opacity 0.18s ease, background 0.18s ease",
     };
-    if (onClick) {
+    if (onClick && !dimmed) {
       return (
         <button
           key={key}
@@ -2654,12 +2872,35 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
         >{children}</button>
       );
     }
+    if (onClick && dimmed) {
+      // Dimmed but tappable: stale-weather case. The tap fires the
+      // handler (e.g. refetchWeatherForStaleTap) instead of opening a
+      // sheet. The bap-press class is omitted to read as "waiting"
+      // rather than "interactive."
+      return (
+        <button
+          key={key}
+          onClick={onClick}
+          aria-label={`Refresh ${key}`}
+          style={{
+            ...baseStyle,
+            cursor: "pointer", textAlign: "left",
+            font: "inherit", color: "inherit",
+            display: "block",
+          }}
+        >{children}</button>
+      );
+    }
     return (
-      <div key={key} className="bap-press" style={baseStyle}>{children}</div>
+      <div key={key} className={dimmed ? "" : "bap-press"} style={baseStyle}>{children}</div>
     );
   };
 
   const weatherAlert = weather ? computeWeatherAlert(weather) : null;
+  // Stale = cached weather older than 6 hours (WEATHER_STALE_MS). When
+  // stale, the tile dims and a tap triggers a foreground re-fetch via
+  // refetchWeatherForStaleTap instead of opening WeatherSheet directly.
+  const weatherStale = isWeatherStale(weather);
 
   const weatherTile = statTile(
     weather ? (
@@ -2722,7 +2963,19 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
       </>
     ),
     "weather",
-    weather ? () => setWeatherSheetOpen(true) : null,
+    // Click handler: when fresh + online + idle, opens the modal.
+    // When stale-but-online, fires a foreground re-fetch instead;
+    // success ungrays + opens the modal. When refreshing or offline,
+    // statTile sees dimmed=true and ignores onClick — no false tap.
+    weather
+      ? (
+          weatherStale && isOnline && !isRefreshing && !weatherRefetching
+            ? refetchWeatherForStaleTap
+            : () => setWeatherSheetOpen(true)
+        )
+      : null,
+    // Dimmed state: refreshing OR offline OR stale OR mid-stale-refetch.
+    isRefreshing || !isOnline || weatherStale || weatherRefetching,
   );
 
   const dolarTile = statTile(
@@ -2759,7 +3012,11 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
       </>
     ),
     "dolar",
-    dolar && dolar.compra ? () => setDolarSheetOpen(true) : null,
+    dolar && dolar.compra && !isRefreshing && isOnline ? () => setDolarSheetOpen(true) : null,
+    // Dimmed state: refreshing OR offline. (No staleness rule on dolar
+    // — rates fluctuate but the brief only specified the 6h gate for
+    // weather. Offline + refresh dimming applies symmetrically.)
+    isRefreshing || !isOnline,
   );
 
   // ── Holiday card ──
@@ -2909,6 +3166,7 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
         </div>
         {items.map((item, i) => {
           const isNext = nextItem && nextItem === item;
+          const isFinal = item.kind === "final";
           return (
             <div key={i} style={{
               display: "flex", justifyContent: "space-between", alignItems: "baseline",
@@ -2927,6 +3185,15 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
                       fontFamily: "'DM Mono', monospace", fontSize: 10.5,
                       color: C.ocean, marginRight: 6, letterSpacing: 0.5,
                     }}>{item.code}</span>
+                  )}
+                  {isFinal && (
+                    <span style={{
+                      fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700,
+                      color: C.white, background: C.pepOrange,
+                      padding: "1px 6px", borderRadius: 6, marginRight: 6,
+                      textTransform: "uppercase", letterSpacing: 1,
+                      verticalAlign: 1,
+                    }}>Final</span>
                   )}
                   {item.title}
                 </div>
@@ -3036,6 +3303,7 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
         <BirthdayCard birthdays={data.birthdays} />
         {holidayCard}
         {activityCard}
+        <TodayFinalsTile data={data} profile={profile} now={now} onJumpToTab={onJumpToTab} />
         <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
         {tipCard}
       </div>
@@ -3465,21 +3733,40 @@ function WeeklyOverviewView({ data, profile }) {
   // Personalized classes by day-of-week. Only computed when the
   // student has personalized AND the filter toggle is on (which
   // auto-enables when classes are first selected). Empty otherwise,
-  // and never rendered on a day that has a holiday event.
+  // and never rendered on a day that has a holiday event. Each day
+  // additionally gates by the per-class start_date/end_date window
+  // so pre-arrival or post-finals weeks don't carry over the regular
+  // class grid into the overview.
   const showClasses = shouldFilterClasses(profile);
   const visibleClasses = showClasses
     ? filterClassesByProfile(data.classes || [], profile)
     : [];
-  const classesByDow = {};
+
+  // Pre-compute, per displayed date, the active classes for that day.
+  // Stored by YYYY-MM-DD so the day-card render doesn't recompute the
+  // active filter on every re-render.
+  const activeClassesByDate = {};
   if (showClasses) {
-    DAYS_ORDER.forEach((dow) => {
-      classesByDow[dow] = visibleClasses
+    weekDates.forEach((d) => {
+      const ds = toDateStr(d);
+      const dow = WEEK_DAYS_SHORT[d.getDay()];
+      const dayActive = filterActiveClassesForDate(visibleClasses, ds);
+      activeClassesByDate[ds] = dayActive
         .filter((c) => c.days && c.days.includes(dow))
         .sort((a, b) =>
           getSortTime(a.time, dow).localeCompare(getSortTime(b.time, dow))
         );
     });
   }
+
+  // Pre-compute final exams happening on each displayed date for the
+  // student's enrolled classes. On a finals day, the regular class
+  // grid for that day is replaced with the finals (which is what the
+  // Today tab does too).
+  const finalsByDate = {};
+  weekDates.forEach((d) => {
+    finalsByDate[toDateStr(d)] = getFinalForDate(data, profile, toDateStr(d));
+  });
 
   const weekLabel = `${formatDate(weekStartStr)} – ${formatDate(weekEndStr)}`;
 
@@ -3520,14 +3807,35 @@ function WeeklyOverviewView({ data, profile }) {
           const holidayContext = findHolidayContext(data, ds);
           const cancelsClasses = !!(holidayContext && holidayContext.cancels_classes);
           // Personal classes only render when (a) the student has
-          // personalized AND (b) the day's holiday (if any) cancels
-          // classes. Cultural observances (cancels_classes=false) do
-          // NOT suppress classes. Class Schedule's own week view
+          // personalized AND (b) the day's holiday (if any) doesn't
+          // cancel classes. Cultural observances (cancels_classes=false)
+          // do NOT suppress classes. Class Schedule's own week view
           // stays unaffected; this is only for the weekly overview.
-          const dayClasses = (showClasses && !cancelsClasses)
+          //
+          // As of 2026-04-28 each class is also gated by its own
+          // start_date / end_date — outside that range the class meeting
+          // is suppressed for that day. And on a class's final_date,
+          // the regular class meeting is replaced by a "Final" entry
+          // (rendered in dayFinals below) instead of the normal class.
+          const dayClassesAll = (showClasses && !cancelsClasses)
             ? (classesByDow[dow] || [])
             : [];
-          const hasContent = dayEvents.length > 0 || dayClasses.length > 0 || !!holidayContext;
+          const dayClasses = dayClassesAll
+            .filter((c) => isClassActive(c, ds))
+            .filter((c) => !(c.final_date && c.final_date === ds));
+          const dayFinals = (showClasses && !cancelsClasses)
+            ? visibleClasses
+                .filter((c) => c.final_date && c.final_date === ds)
+                .sort((a, b) => {
+                  const ma = toMinutes((a.final_time || "").split(/[–-]/)[0]);
+                  const mb = toMinutes((b.final_time || "").split(/[–-]/)[0]);
+                  if (ma === null && mb === null) return a.code.localeCompare(b.code);
+                  if (ma === null) return -1;
+                  if (mb === null) return 1;
+                  return ma - mb;
+                })
+            : [];
+          const hasContent = dayEvents.length > 0 || dayClasses.length > 0 || dayFinals.length > 0 || !!holidayContext;
 
           return (
             <div key={ds} style={{
@@ -3582,11 +3890,13 @@ function WeeklyOverviewView({ data, profile }) {
                 );
               })()}
 
-              {/* Events + classes for the day. Events render first
-                  (they're typically time-blocked program events that
-                  reshape the day's schedule); classes follow as a
-                  thinner secondary list with a faint top divider. */}
-              {(dayEvents.length > 0 || dayClasses.length > 0) && (
+              {/* Events + finals + classes for the day. Events render
+                  first (typically time-blocked program events that
+                  reshape the day's schedule). Finals come next when
+                  any enrolled final lands on this day, called out in
+                  Pep Orange so they pop above regular class meetings.
+                  Classes follow as a thinner secondary list. */}
+              {(dayEvents.length > 0 || dayFinals.length > 0 || dayClasses.length > 0) && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {dayEvents.map((e, i) => {
                     // Skip legacy holiday events when there's already a
@@ -3621,6 +3931,38 @@ function WeeklyOverviewView({ data, profile }) {
                       </div>
                     );
                   })}
+
+                  {dayFinals.map((c, i) => (
+                    <div key={`fin-${i}`} style={{
+                      background: "#FFF4ED", borderLeft: `3px solid ${C.pepOrange}`,
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                        <span style={{ fontFamily: "'Roboto', sans-serif", fontWeight: 500, fontSize: 13, color: C.pepBlack, minWidth: 0 }}>
+                          <span style={{
+                            fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700,
+                            color: C.white, background: C.pepOrange,
+                            padding: "1px 6px", borderRadius: 6, marginRight: 6,
+                            textTransform: "uppercase", letterSpacing: 1, verticalAlign: 1,
+                          }}>Final</span>
+                          <span style={{
+                            fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                            color: C.ocean, marginRight: 6, letterSpacing: 0.5,
+                          }}>{c.code}</span>
+                          {c.title}
+                        </span>
+                        {c.final_time && (
+                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap" }}>{c.final_time}</span>
+                        )}
+                      </div>
+                      {c.location && (
+                        <div style={{
+                          fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
+                          color: C.stone, marginTop: 3,
+                        }}>{c.location}</div>
+                      )}
+                    </div>
+                  ))}
 
                   {dayClasses.map((c, i) => {
                     const t = getTimeForDay(c.time, dow);
@@ -3782,6 +4124,7 @@ function ClassScheduleView({ data, view, profile }) {
 function ScheduleView({ data, profile, onOpenSettings }) {
   const [section, setSection] = useState("overview");
   const filterActive = shouldFilterClasses(profile);
+  const today = new Date();
 
   return (
     <div>
@@ -3812,6 +4155,10 @@ function ScheduleView({ data, profile, onOpenSettings }) {
           </span>
         </div>
       )}
+      {/* FinalsCard sits above all three sub-views — it's a persistent
+          "what's coming" anchor while finals are in scope, and visible
+          regardless of which sub-tab the student is on. */}
+      <FinalsCard data={data} profile={profile} today={today} />
       {section === "overview" && <WeeklyOverviewView data={data} profile={profile} />}
       {(section === "week" || section === "list") && <ClassScheduleView data={data} view={section} profile={profile} />}
     </div>
@@ -4125,6 +4472,226 @@ function EventCard({ event }) {
           )}
           {event.link && <LinkButton url={event.link} />}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Finals helpers (display-time) ───
+//
+// formatFinalDate: short date label keyed off the user's local time
+// zone. We pass `T12:00:00` to dodge any DST-edge weirdness around
+// midnight conversions; YYYY-MM-DD is treated as UTC otherwise.
+function formatFinalDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T12:00:00");
+  const dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  return `${dow}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+// Format the finals window for the TBD copy. Single-day windows
+// collapse to "Jul 13"; multi-day windows render as "Jul 13–15"
+// (same-month) or "Jul 30 – Aug 1" (cross-month). Falls back to
+// just the start when only one bound is set.
+function formatFinalsWindow(startStr, endStr) {
+  if (!startStr && !endStr) return "";
+  if (startStr && !endStr) return formatFinalDate(startStr).split(", ")[1] || "";
+  if (!startStr && endStr) return formatFinalDate(endStr).split(", ")[1] || "";
+  if (startStr === endStr) return formatFinalDate(startStr).split(", ")[1] || "";
+  return dateRangeLabel(startStr, endStr);
+}
+
+// ─── Today tile: Finals coming up ───
+//
+// Compact preview that appears on the Today dashboard 14 days before
+// the program-wide finals window starts (or as soon as any enrolled
+// class has a final_date assigned). Tapping the tile jumps to the
+// Schedule tab, where <FinalsCard> shows the same data in fuller form.
+// Mirrors <EventsTodayTile>'s shape but uses a Pep Blue accent so it
+// reads as academic, not cultural.
+function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
+  if (!shouldShowFinalsUI(data, profile, now)) return null;
+  const finals = getStudentFinals(data, profile);
+  if (finals.length === 0) return null;
+
+  const winLabel = formatFinalsWindow(data.finals_window_start, data.finals_window_end);
+  const preview = finals.slice(0, 3);
+
+  return (
+    <div
+      onClick={() => { if (onJumpToTab) onJumpToTab("schedule"); }}
+      className="bap-press"
+      role="button"
+      style={{
+        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
+        padding: "12px 14px 14px", marginBottom: 14, cursor: "pointer",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.pepBlue, marginBottom: 2,
+          }}>Exámenes finales</div>
+          <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 17, fontWeight: 700, color: C.pepBlack, lineHeight: 1.1 }}>
+            Finals coming up
+          </div>
+        </div>
+        <span style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.ocean,
+          display: "inline-flex", alignItems: "center", gap: 4,
+        }}>
+          See all →
+        </span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {preview.map((f) => (
+          <div key={f.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 4, alignSelf: "stretch", background: f.color || C.pepBlue,
+              borderRadius: 2, flexShrink: 0, minHeight: 28,
+            }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: "'EB Garamond', serif", fontSize: 14, fontWeight: 700,
+                color: C.pepBlack, lineHeight: 1.2,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                  color: C.ocean, marginRight: 6, fontWeight: 400, letterSpacing: 0.5,
+                }}>{f.code}</span>
+                {f.title}
+              </div>
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                color: C.stone, marginTop: 1,
+              }}>
+                {f.final_date
+                  ? (f.final_time ? `${formatFinalDate(f.final_date)} · ${f.final_time}` : formatFinalDate(f.final_date))
+                  : (winLabel ? `TBD · ${winLabel}` : "TBD")
+                }
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {finals.length > preview.length && (
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.stone,
+          marginTop: 8, textAlign: "center",
+        }}>
+          +{finals.length - preview.length} more
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Schedule top-of-tab: Finals card ───
+//
+// Pinned above all three Schedule sub-tabs (Weekly Overview, Class
+// Schedule, Courses) when the student has personalized AND we're
+// within 2 weeks of finals_window_start OR at least one enrolled
+// class has a final_date assigned. Each row uses the class's color
+// stripe so it visually pairs with the Class Schedule cards below.
+// Renders nothing when the gating fails (e.g. mid-semester with no
+// finals assigned, or for a non-personalized student).
+function FinalsCard({ data, profile, today }) {
+  if (!shouldShowFinalsUI(data, profile, today)) return null;
+  const finals = getStudentFinals(data, profile);
+  if (finals.length === 0) return null;
+
+  const winLabel = formatFinalsWindow(data.finals_window_start, data.finals_window_end);
+
+  return (
+    <div style={{
+      background: C.parchment,
+      border: `1px solid ${C.fog}`,
+      borderLeft: `4px solid ${C.pepBlue}`,
+      borderRadius: 12, padding: "12px 14px 14px",
+      marginBottom: 16,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "baseline", justifyContent: "space-between",
+        marginBottom: 10, gap: 8,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.pepBlue, marginBottom: 2,
+          }}>Exámenes finales</div>
+          <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 18, fontWeight: 700, color: C.pepBlack, lineHeight: 1.1 }}>
+            Finals
+          </div>
+        </div>
+        {winLabel && (
+          <span style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.ocean,
+            background: C.white, border: `1px solid ${C.fog}`,
+            padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap",
+          }}>{winLabel}</span>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {finals.map((f) => {
+          const hasDate = !!f.final_date;
+          return (
+            <div key={f.code} style={{
+              display: "flex", alignItems: "stretch",
+              background: C.white, border: `1px solid ${C.fog}`, borderRadius: 8,
+              overflow: "hidden",
+            }}>
+              <div style={{ width: 4, background: f.color || C.pepBlue, flexShrink: 0 }} />
+              <div style={{ padding: "8px 12px", flex: 1, minWidth: 0 }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                  gap: 8,
+                }}>
+                  <div style={{
+                    fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14.5,
+                    color: C.pepBlack, lineHeight: 1.2,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    <span style={{
+                      fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                      color: C.ocean, marginRight: 6, fontWeight: 400, letterSpacing: 0.5,
+                    }}>{f.code}</span>
+                    {f.title}
+                  </div>
+                  {hasDate
+                    ? (
+                      <span style={{
+                        fontFamily: "'DM Mono', monospace", fontSize: 11,
+                        color: C.pepBlack, fontWeight: 700, whiteSpace: "nowrap",
+                      }}>
+                        {formatFinalDate(f.final_date)}
+                        {f.final_time ? ` · ${f.final_time}` : ""}
+                      </span>
+                    )
+                    : (
+                      <span style={{
+                        fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700,
+                        color: C.white, background: C.stone,
+                        padding: "2px 8px", borderRadius: 6, whiteSpace: "nowrap",
+                        textTransform: "uppercase", letterSpacing: 1,
+                      }}>TBD</span>
+                    )
+                  }
+                </div>
+                {f.location && (
+                  <div style={{
+                    fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
+                    color: C.stone, marginTop: 2,
+                  }}>{f.location}</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
