@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-01 — Fix: Today tab rendered a blank Agenda card on class-cancelling holidays with nothing else scheduled (e.g. Día del Trabajador). The activity-card branch only handled (items > 0) and (items === 0 && no holiday); it fell through to the agenda-list else for (items === 0 && class-cancelling holiday), rendering the card shell with just the 'Agenda' header and no rows. Added the missing third branch that sets activityCard to null in that case, matching the comment's stated intent — the holiday card above already explains the open day, so an empty Agenda tile is just visual noise. Days with at least one event still render the agenda card normally (events ignore the class-suppression gate).";
+const BUILD_VERSION = "2026-05-01b — Bolder color confidence + río wave goes live as a Today tip-card watermark. Five small, reversible visual moves bundled together: (1) <SectionTitle> now carries a 28×2 px BAP Blue accent rule above the bilingual headline, threading BAP Blue through every main view's chrome consistently. (2) Today's activity card and (3) tip card both adopt a 4 px BAP Blue left stripe (the same accent pattern used by the announcement banner), anchoring them to the BAP identity instead of reading as generic white cards. (4) Quick-stat tiles (weather, dólar) switch from solid white to a subtle 135° linear-gradient from white to Ice Blue (#E3F2FD) — keeps text readable but warms them with BAP Blue tone; the dimmed/offline/stale states are unchanged. (5) <RioWaveIcon> goes live on Today's tip card as a low-opacity (18 %) decorative glyph in the top-right; defined in the icon library since 2026-04-25 but never wired into a view. Obelisco was prototyped as a SectionDivider on Local > Explore BA but pulled before ship — read as visually clunky on the existing card list. No new dependencies, no sheet schema changes, no CACHE_VERSION bump.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -2850,7 +2850,7 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   const statTile = (children, key, onClick, dimmed) => {
     const baseStyle = {
       flex: 1,
-      background: dimmed ? C.ice : C.white,
+      background: dimmed ? C.ice : `linear-gradient(135deg, ${C.white} 0%, ${C.ice} 100%)`,
       border: `1px solid ${C.fog}`,
       borderRadius: 12, padding: "12px 14px", minWidth: 0,
       opacity: dimmed ? 0.55 : 1,
@@ -3142,7 +3142,9 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   } else {
     activityCard = (
       <div style={{
-        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+        background: C.white,
+        border: `1px solid ${C.fog}`, borderLeft: `4px solid ${C.bapBlue}`,
+        borderRadius: 12,
         padding: "14px 16px 12px", marginBottom: 14,
       }}>
         <div style={{
@@ -3223,19 +3225,29 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   // ── Tip card ──
   const tipCard = (
     <div style={{
-      background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
-      padding: "14px 16px",
+      background: C.white,
+      border: `1px solid ${C.fog}`, borderLeft: `4px solid ${C.bapBlue}`,
+      borderRadius: 12, padding: "14px 16px",
+      position: "relative", overflow: "hidden",
     }}>
+      <div aria-hidden="true" style={{
+        position: "absolute", top: 8, right: 10, opacity: 0.18,
+        pointerEvents: "none",
+      }}>
+        <RioWaveIcon size={36} />
+      </div>
       <div style={{
         fontFamily: "'DM Mono', monospace", fontSize: 9.5, color: C.ocean,
         textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 6,
         display: "flex", alignItems: "center", gap: 6,
+        position: "relative",
       }}>
         <span>¿Sabías que…?</span>
       </div>
       <div className={`bap-tip-text${tipFading ? " fading" : ""}`} style={{
         fontFamily: "'Roboto', sans-serif", fontSize: 13.5, lineHeight: 1.5,
         color: C.pepBlack, minHeight: 40,
+        position: "relative",
       }}>{renderTip(tip.text)}</div>
     </div>
   );
@@ -3390,6 +3402,10 @@ function SectionTitle({ tabKey }) {
   if (!t) return null;
   return (
     <div style={{ marginBottom: 18, lineHeight: 1 }}>
+      <div style={{
+        width: 28, height: 2, background: C.bapBlue,
+        borderRadius: 1, marginBottom: 10,
+      }} />
       <div style={{
         fontFamily: "'EB Garamond', serif", fontSize: 28, fontWeight: 700,
         color: C.pepBlue, letterSpacing: -0.5, lineHeight: 1.05,
