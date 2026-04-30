@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-28b — Hotfix: Schedule tab was rendering a white screen because <WeeklyOverviewView>'s day-card render still referenced `classesByDow[dow]` from the previous architecture, but the 2026-04-28 build replaced that pre-compute with `activeClassesByDate[ds]` (which already applies the personalization, per-class date-range, and day-of-week filters in one pass). `classesByDow` was therefore undefined at render time, throwing on the first map iteration and crashing the entire Schedule view. Fix collapses the three-step filter (`dayClassesAll` → isClassActive → not-final-today) down to a single filter on `activeClassesByDate[ds]` that just drops classes whose final lands on that date.";
+const BUILD_VERSION = "2026-05-01 — Fix: Today tab rendered a blank Agenda card on class-cancelling holidays with nothing else scheduled (e.g. Día del Trabajador). The activity-card branch only handled (items > 0) and (items === 0 && no holiday); it fell through to the agenda-list else for (items === 0 && class-cancelling holiday), rendering the card shell with just the 'Agenda' header and no rows. Added the missing third branch that sets activityCard to null in that case, matching the comment's stated intent — the holiday card above already explains the open day, so an empty Agenda tile is just visual noise. Days with at least one event still render the agenda card normally (events ignore the class-suppression gate).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -3088,7 +3088,9 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   //     rhythm.
   const suppressEmptyForHoliday = !!(holiday && holiday.cancels_classes);
   let activityCard;
-  if (items.length === 0 && !suppressEmptyForHoliday) {
+  if (items.length === 0 && suppressEmptyForHoliday) {
+    activityCard = null;
+  } else if (items.length === 0) {
     activityCard = (
       <div style={{
         background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
