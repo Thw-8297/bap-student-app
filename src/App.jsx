@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-04-28 — Today tile loading/offline/stale states + class date gating + finals. (1) Today tiles dim to a softer Ice background and ~55% opacity while refreshing or offline; tap is suppressed in those states. (2) Weather tile picks up a 'stale' state when the cached weather is older than 6 hours (WEATHER_STALE_MS); a stale tile stays dimmed and a tap fires a foreground re-fetch instead of opening WeatherSheet. On success it ungrays and the modal opens; on failure it stays grayed. New helper isWeatherStale(weather). New isOnline state on TodayView with online/offline event listeners; statTile signature gains a dimmed parameter. (3) WeatherSheet 7-day list now renders wind gusts in mph (kmhToMph) with a ≥20 mph display threshold for the US-leaning audience; underlying values stay in km/h via Open-Meteo. (4) Classes tab gains four optional columns: start_date, end_date, final_date, final_time. Settings gains finals_window_start and finals_window_end. New helpers isClassActive(c, dateStr), filterActiveClassesForDate(classes, dateStr), getStudentFinals(data, profile), getFinalForDate(data, profile, dateStr), and daysUntil(dateStr, today). Outside [start_date, end_date], classes are gated out of the Today activity card and the Schedule tab's Weekly Overview; Class Schedule and Courses sub-views remain unfiltered (browseable catalog). On a final exam day, the matching final replaces regular classes on Today's activity card. (5) New <FinalsCard /> pinned to the top of the Schedule tab (across all three sub-pills) when the student has personalized AND we're within 2 weeks of finals_window_start OR any enrolled class has a final_date. Renders one row per enrolled class with code, title, location, and either the assigned date+time or 'TBD · {finals window}'. (6) New <TodayFinalsTile /> rendered between the activity card and the tip rotator on the Today tab, under the same gating as FinalsCard. (7) DEFAULT_DATA gains the new fields with realistic Summer-2026 placeholders. CACHE_VERSION bumped 5 → 6 because the data shape now includes per-class start_date/end_date/final_date/final_time and the new Settings finals window keys.";
+const BUILD_VERSION = "2026-04-28b — Hotfix: Schedule tab was rendering a white screen because <WeeklyOverviewView>'s day-card render still referenced `classesByDow[dow]` from the previous architecture, but the 2026-04-28 build replaced that pre-compute with `activeClassesByDate[ds]` (which already applies the personalization, per-class date-range, and day-of-week filters in one pass). `classesByDow` was therefore undefined at render time, throwing on the first map iteration and crashing the entire Schedule view. Fix collapses the three-step filter (`dayClassesAll` → isClassActive → not-final-today) down to a single filter on `activeClassesByDate[ds]` that just drops classes whose final lands on that date.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -3817,12 +3817,15 @@ function WeeklyOverviewView({ data, profile }) {
           // is suppressed for that day. And on a class's final_date,
           // the regular class meeting is replaced by a "Final" entry
           // (rendered in dayFinals below) instead of the normal class.
-          const dayClassesAll = (showClasses && !cancelsClasses)
-            ? (classesByDow[dow] || [])
+          //
+          // activeClassesByDate is pre-computed above and already applies
+          // (i) the personalization filter, (ii) the per-class active
+          // date range, and (iii) the day-of-week match. The remaining
+          // filter here drops any class whose final lands on this date,
+          // since dayFinals will surface it as a "Final" entry instead.
+          const dayClasses = (showClasses && !cancelsClasses)
+            ? (activeClassesByDate[ds] || []).filter((c) => !(c.final_date && c.final_date === ds))
             : [];
-          const dayClasses = dayClassesAll
-            .filter((c) => isClassActive(c, ds))
-            .filter((c) => !(c.final_date && c.final_date === ds));
           const dayFinals = (showClasses && !cancelsClasses)
             ? visibleClasses
                 .filter((c) => c.final_date && c.final_date === ds)
