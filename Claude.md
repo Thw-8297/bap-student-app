@@ -47,6 +47,13 @@ The first is the developer-facing reference (architecture, components, helpers, 
 
 **Apps Script changes don't ship via git.** Edits to `Code.gs` need to be copied into the script editor and re-deployed from there. After editing `Code.gs` in the repo, remind the user that a manual re-deploy is needed.
 
+**Shipping path: tiered.** Vercel auto-deploys from `main`, so anything that lands there goes live in ~60 seconds. Pick the path by change size:
+
+- **Small fixes** — bug fixes, copy edits, single-helper tweaks, sheet-parsing adjustments that don't change `CACHE_VERSION` — commit and push directly to `main` once verified locally. From a worktree on a feature branch, `git push origin HEAD:main` ships the current branch's commits to remote `main` without needing to switch branches. This matches how the project has historically shipped (small commits, `BUILD_VERSION` as the commit message) and keeps iteration fast.
+- **Bigger changes** — new features, schema changes that bump `CACHE_VERSION`, multi-file refactors, anything touching the visual identity — keep the work on a branch, push the branch, and merge to `main` deliberately (locally or via PR). The branch gives a clean rollback unit if the change needs to be reverted without affecting unrelated work.
+
+Either path: ask before pushing if the size of the change is ambiguous. Never force-push `main`. The `Co-Authored-By: Claude` trailer goes on every commit.
+
 ## Documentation Hygiene
 
 After any meaningful behavior change, schema change, or new feature, proactively update the relevant living docs so they stay in sync with reality:
