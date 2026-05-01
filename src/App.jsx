@@ -4,7 +4,7 @@ import Papa from "papaparse";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-01b — Bolder color confidence + río wave goes live as a Today tip-card watermark. Five small, reversible visual moves bundled together: (1) <SectionTitle> now carries a 28×2 px BAP Blue accent rule above the bilingual headline, threading BAP Blue through every main view's chrome consistently. (2) Today's activity card and (3) tip card both adopt a 4 px BAP Blue left stripe (the same accent pattern used by the announcement banner), anchoring them to the BAP identity instead of reading as generic white cards. (4) Quick-stat tiles (weather, dólar) switch from solid white to a subtle 135° linear-gradient from white to Ice Blue (#E3F2FD) — keeps text readable but warms them with BAP Blue tone; the dimmed/offline/stale states are unchanged. (5) <RioWaveIcon> goes live on Today's tip card as a low-opacity (18 %) decorative glyph in the top-right; defined in the icon library since 2026-04-25 but never wired into a view. Obelisco was prototyped as a SectionDivider on Local > Explore BA but pulled before ship — read as visually clunky on the existing card list. No new dependencies, no sheet schema changes, no CACHE_VERSION bump.";
+const BUILD_VERSION = "2026-05-02 — Three small upgrades. (1) Dólar tile gains a 3-hour staleness gate (DOLAR_STALE_MS) parallel to weather's existing 6-hour gate. New `isDolarStale(dolar)` helper, new `dolarRefetching` state, and new `refetchDolarForStaleTap` handler in <TodayView> mirror the weather pattern exactly: stale tile dims, the tap fires a foreground re-fetch, on success the tile ungrays and DolarSheet opens; on failure the tile stays dimmed. The threshold is tighter than weather's because Blue/MEP/Oficial can drift 5–10 % over a single trading day, so a stale rate is more misleading at the calculator than a stale weather card. (2) Event cost pills auto-append a USD parenthetical when the cost string is parseable as ARS and the cached Blue compra rate is available: '$8.000 ARS' renders as '$8.000 ARS · ~$6 USD'. New `parseArsAmount(costStr)` helper sits next to `formatUsd`; conservative parse — skips strings that already cite USD/US$/U$S, requires a '$' prefix, treats '.' as Argentine thousands separator, and rejects amounts under 10 pesos so a comma-decimal misparse never renders a meaningless '~$0.00 USD'. <EventsView> reads the rate once via `loadTodayCache()` at render and threads it down to each <EventCard> as a `dolarCompra` prop. (3) Reset profile button gains a bilingual `window.confirm()` before wiping name + enrolled classes + filter toggle, so a fat-finger no longer costs a student five minutes of re-ticking courses. No new dependencies, no sheet schema changes, no CACHE_VERSION bump.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -702,6 +702,17 @@ const WEATHER_STALE_MS = 6 * 60 * 60 * 1000; // 6 hours
 function isWeatherStale(weather) {
   if (!weather || !weather.ts) return false;
   return (Date.now() - weather.ts) > WEATHER_STALE_MS;
+}
+
+// Tighter staleness window for dólar than for weather: Blue/MEP/Oficial
+// can move 5–10 % over a single trading day, so a stale rate is more
+// misleading at the calculator than a stale weather card. Same dim-
+// then-tap-to-refetch pattern as weather.
+const DOLAR_STALE_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+function isDolarStale(dolar) {
+  if (!dolar || !dolar.ts) return false;
+  return (Date.now() - dolar.ts) > DOLAR_STALE_MS;
 }
 
 // Convert km/h → mph, rounded. Open-Meteo returns wind gusts in km/h
@@ -1944,6 +1955,23 @@ function formatUsd(n) {
   return "$" + Math.round(n).toLocaleString("en-US");
 }
 
+// Pull an Argentine-peso integer out of a free-text cost string. Used
+// by <EventCard> to append a USD parenthetical to event prices. Skips
+// strings that already cite USD (so "$15 USD" is left alone). Honors
+// the Argentine "." thousands convention: "$8.000" → 8000. Sub-10
+// values are returned as null so a comma-decimal misparse like "$5,50"
+// (which the regex truncates to "$5") doesn't render a meaningless
+// "~$0.00 USD" annotation.
+function parseArsAmount(costStr) {
+  if (typeof costStr !== "string") return null;
+  if (/USD|US\$|U\$D|U\$S/i.test(costStr)) return null;
+  const m = costStr.match(/\$\s*([0-9.]+)/);
+  if (!m) return null;
+  const n = parseInt(m[1].replace(/\./g, ""), 10);
+  if (!isFinite(n) || n < 10) return null;
+  return n;
+}
+
 // ─── BottomSheet ───
 //
 // Generic slide-up modal used by <WeatherSheet> and <DolarSheet>.
@@ -2585,14 +2613,15 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   // isOnline: tracks navigator.onLine + the online/offline window
   // events. Both tiles dim and tap-disable while offline so a tap
   // doesn't open a sheet against possibly-stale data without warning.
-  // weatherRefetching: true while a stale-tile-tap is mid-flight on
-  // the weather tile. We track this separately from isRefreshing
-  // (the whole-page PTR) so the dolar tile doesn't dim when only
-  // the weather tile is being re-fetched.
+  // weatherRefetching / dolarRefetching: true while a stale-tile-tap is
+  // mid-flight on the respective tile. We track them separately from
+  // isRefreshing (the whole-page PTR) and from each other so a refetch
+  // on one tile doesn't dim the unrelated one.
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine !== false : true
   );
   const [weatherRefetching, setWeatherRefetching] = useState(false);
+  const [dolarRefetching, setDolarRefetching] = useState(false);
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
     const goOffline = () => setIsOnline(false);
@@ -2623,6 +2652,25 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
       setWeatherRefetching(false);
     }
   }, [weatherRefetching]);
+
+  // Same pattern for dólar. The 3-hour staleness gate is tighter than
+  // weather's 6-hour gate because Blue/MEP/Oficial can drift enough in
+  // half a day to make the calculator's output misleading.
+  const refetchDolarForStaleTap = useCallback(async () => {
+    if (dolarRefetching) return;
+    setDolarRefetching(true);
+    try {
+      const d = await fetchDolar();
+      setDolar(d);
+      const cur = loadTodayCache();
+      saveTodayCache({ ...cur, dolar: d });
+      setDolarSheetOpen(true);
+    } catch (e) {
+      // Swallow — the tile stays dimmed; user can try again.
+    } finally {
+      setDolarRefetching(false);
+    }
+  }, [dolarRefetching]);
 
   // ── Pull-to-refresh ──
   // Mobile gesture: pull down from the top of Today to force-refresh
@@ -2901,6 +2949,8 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
   // stale, the tile dims and a tap triggers a foreground re-fetch via
   // refetchWeatherForStaleTap instead of opening WeatherSheet directly.
   const weatherStale = isWeatherStale(weather);
+  // Same gate for dolar at the tighter 3-hour DOLAR_STALE_MS threshold.
+  const dolarStale = isDolarStale(dolar);
 
   const weatherTile = statTile(
     weather ? (
@@ -3012,11 +3062,20 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
       </>
     ),
     "dolar",
-    dolar && dolar.compra && !isRefreshing && isOnline ? () => setDolarSheetOpen(true) : null,
-    // Dimmed state: refreshing OR offline. (No staleness rule on dolar
-    // — rates fluctuate but the brief only specified the 6h gate for
-    // weather. Offline + refresh dimming applies symmetrically.)
-    isRefreshing || !isOnline,
+    // Click handler mirrors weather: when fresh + online + idle, opens
+    // the calculator. When stale-but-online, fires a foreground re-
+    // fetch via refetchDolarForStaleTap; success ungrays + opens. When
+    // refreshing or offline, statTile sees dimmed=true and ignores
+    // onClick — no false tap affordance.
+    dolar && dolar.compra
+      ? (
+          dolarStale && isOnline && !isRefreshing && !dolarRefetching
+            ? refetchDolarForStaleTap
+            : () => setDolarSheetOpen(true)
+        )
+      : null,
+    // Dimmed state: refreshing OR offline OR stale OR mid-stale-refetch.
+    isRefreshing || !isOnline || dolarStale || dolarRefetching,
   );
 
   // ── Holiday card ──
@@ -4346,6 +4405,15 @@ function EventsView({ events, activeFilter, onFilterChange, categoriesPresent })
   today.setHours(12, 0, 0, 0);
   const todayStr = toDateStr(today);
 
+  // Pull the cached Blue compra rate once so each <EventCard> can
+  // annotate ARS prices with a USD parenthetical without each card
+  // doing its own localStorage read. Compra (not venta) because that's
+  // the rate students actually transact at when cashing USD; the same
+  // rate the dólar tile and DolarSheet's primary result use.
+  const todayCache = loadTodayCache();
+  const dolarCompra = todayCache && todayCache.dolar && todayCache.dolar.compra
+    ? todayCache.dolar.compra : null;
+
   // Hide events that have already ended; sort chronologically.
   const upcoming = sortEventsChronological(filterUpcomingEvents(events, todayStr));
 
@@ -4402,7 +4470,7 @@ function EventsView({ events, activeFilter, onFilterChange, categoriesPresent })
             letterSpacing: 1.5, color: C.stone, marginBottom: 8,
           }}>This week / Esta semana</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: later.length > 0 ? 18 : 0 }}>
-            {thisWeek.map((e, i) => <EventCard key={`tw-${i}`} event={e} />)}
+            {thisWeek.map((e, i) => <EventCard key={`tw-${i}`} event={e} dolarCompra={dolarCompra} />)}
           </div>
         </>
       )}
@@ -4414,7 +4482,7 @@ function EventsView({ events, activeFilter, onFilterChange, categoriesPresent })
             letterSpacing: 1.5, color: C.stone, marginBottom: 8,
           }}>Coming up / Próximamente</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {later.map((e, i) => <EventCard key={`lt-${i}`} event={e} />)}
+            {later.map((e, i) => <EventCard key={`lt-${i}`} event={e} dolarCompra={dolarCompra} />)}
           </div>
         </>
       )}
@@ -4422,10 +4490,17 @@ function EventsView({ events, activeFilter, onFilterChange, categoriesPresent })
   );
 }
 
-function EventCard({ event }) {
+function EventCard({ event, dolarCompra }) {
   const meta = getEventCategory(event.category);
   const Icon = meta.Icon;
   const dateLabel = eventDateLabel(event);
+
+  // Append a USD parenthetical to the cost pill when the cost string is
+  // parseable as ARS and we have a cached Blue compra rate to convert
+  // against. Returns null when either condition fails, in which case
+  // the pill renders the raw cost string unchanged.
+  const arsAmount = parseArsAmount(event.cost);
+  const usdAmount = arsAmount && dolarCompra ? arsAmount / dolarCompra : null;
 
   return (
     <div className="bap-press" style={{
@@ -4489,6 +4564,12 @@ function EventCard({ event }) {
               border: `1px solid ${C.fog}`,
             }}>
               {event.cost}
+              {usdAmount !== null && (
+                <>
+                  <span style={{ color: C.stone, margin: "0 4px" }}>·</span>
+                  <span style={{ color: C.stone }}>~{formatUsd(usdAmount)} USD</span>
+                </>
+              )}
             </span>
           )}
           {event.link && <LinkButton url={event.link} />}
@@ -5309,13 +5390,16 @@ function ProfileModal({ open, onClose, profile, onChange, classes }) {
     });
   };
   const toggleFilter = () => onChange({ ...profile, filterEnabled: !profile.filterEnabled });
-  const clearAll = () => onChange({
-    ...profile,
-    name: "",
-    enrolledClasses: [],
-    filterEnabled: false,
-    dismissedAnnouncements: [],
-  });
+  const clearAll = () => {
+    if (!window.confirm("¿Querés borrar tu perfil? / Reset your profile?\n\nEsto borra tu nombre y las clases marcadas. / This clears your name and selected classes.")) return;
+    onChange({
+      ...profile,
+      name: "",
+      enrolledClasses: [],
+      filterEnabled: false,
+      dismissedAnnouncements: [],
+    });
+  };
 
   return (
     <div
