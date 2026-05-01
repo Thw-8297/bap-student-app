@@ -1,0 +1,21 @@
+# Dependencies
+node_modules
+package-lock.json
+
+# Build output
+dist
+
+# Vite cache
+.vite
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# macOS
+.DS_Store
