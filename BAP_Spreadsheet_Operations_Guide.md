@@ -17,9 +17,9 @@ Anyone with edit access to the sheet can use this guide; no code knowledge is re
 
 The app reads the sheet's contents every time a student opens it (via a small Apps Script Web App that returns all tabs as one JSON blob), caches the response on the device, and rerenders. There is no "publish" button; saving a cell is the publish.
 
-**Edits take up to 1 hour to appear in the app.** The Apps Script caches its response for an hour to avoid re-reading the spreadsheet on every student open. To force fresh content immediately after an important edit, append `?bust=1` to the Apps Script Web App URL once in your browser; the next student fetch will pick up the new data. The Apps Script URL is stored in `App.jsx`; ask the developer for the current value if you need it. Routine edits don't need this; an hour is fine.
+**Edits take up to 1 hour to appear in the app.** The Apps Script caches its response for an hour to avoid re-reading the spreadsheet on every student open. To force fresh content immediately after an important edit, append `?bust=1&token=<cohort-passcode>` to the Apps Script Web App URL once in your browser; the next student fetch will pick up the new data. The Apps Script URL is stored in `App.jsx`; ask the developer for the current value if you need it. Routine edits don't need this; an hour is fine.
 
-If the Apps Script ever goes down or returns garbled data, the app silently falls back to fetching each tab directly from the published sheet and edits then propagate within seconds. Students see no visible difference; the app just takes a beat longer to load that one open.
+**The app is locked behind a cohort passcode.** As of 2026-05-03 the spreadsheet is no longer published to the web; the Apps Script is the only way into the data, and it requires a token. The spreadsheet's sharing settings should stay at "Restricted" (only people you explicitly add). If you ever need to "Publish to web" or open up sharing again for some external workflow, that re-opens the back door — coordinate with the developer first.
 
 Three things to internalize:
 
@@ -42,6 +42,7 @@ When a new cohort is about to start, work through these in order. The first grou
 | **Calendar** | Replace all program-specific events with the new semester's dates: arrival, orientation, classes-begin, study tours, excursions, milestones, classes-end, departure. | Powers the Calendar tab and the Schedule tab's Weekly Overview. Old dates are misleading. |
 | **Contacts** | Verify program director, assistant director, on-call phone, and any staff-turnover entries. Update `whatsapp` numbers in particular. | The Contacts tab is the emergency reference. Out-of-date numbers are dangerous. |
 | **Birthdays** | Clear the previous cohort's student rows and add the new cohort. Only include students who've affirmatively opted in. Staff and faculty rows can typically remain. | The Today tab birthday card matches by MM-DD; old students from a past cohort would still appear if not removed. |
+| **Cohort passcode** | Rotate the `COHORT_TOKEN` Script Property in the Apps Script editor (Extensions → Apps Script → ⚙️ Project Settings → Script Properties → edit `COHORT_TOKEN`) and announce the new code in the cohort's WhatsApp group on the first day of orientation. **No re-deploy needed** — Script Properties are read at request time. The previous cohort's stored tokens fail with AuthError on the next open and the app re-prompts automatically. | Closes the door on previous-cohort devices that still have the app cached. The passcode is the single credential gating the app's data; rotating it per cohort is the cheap way to keep last semester's students from passively picking up this semester's content. |
 
 ### Tier 2 — should update / verify each cohort
 
@@ -375,4 +376,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-04-28.*
+*Last updated: 2026-05-03.*

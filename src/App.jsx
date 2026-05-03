@@ -1,23 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import Papa from "papaparse";
 
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-02 — Three small upgrades. (1) Dólar tile gains a 3-hour staleness gate (DOLAR_STALE_MS) parallel to weather's existing 6-hour gate. New `isDolarStale(dolar)` helper, new `dolarRefetching` state, and new `refetchDolarForStaleTap` handler in <TodayView> mirror the weather pattern exactly: stale tile dims, the tap fires a foreground re-fetch, on success the tile ungrays and DolarSheet opens; on failure the tile stays dimmed. The threshold is tighter than weather's because Blue/MEP/Oficial can drift 5–10 % over a single trading day, so a stale rate is more misleading at the calculator than a stale weather card. (2) Event cost pills auto-append a USD parenthetical when the cost string is parseable as ARS and the cached Blue compra rate is available: '$8.000 ARS' renders as '$8.000 ARS · ~$6 USD'. New `parseArsAmount(costStr)` helper sits next to `formatUsd`; conservative parse — skips strings that already cite USD/US$/U$S, requires a '$' prefix, treats '.' as Argentine thousands separator, and rejects amounts under 10 pesos so a comma-decimal misparse never renders a meaningless '~$0.00 USD'. <EventsView> reads the rate once via `loadTodayCache()` at render and threads it down to each <EventCard> as a `dolarCompra` prop. (3) Reset profile button gains a bilingual `window.confirm()` before wiping name + enrolled classes + filter toggle, so a fat-finger no longer costs a student five minutes of re-ticking courses. No new dependencies, no sheet schema changes, no CACHE_VERSION bump.";
+const BUILD_VERSION = "2026-05-03 — Lock down the app behind a cohort passcode. Three coordinated changes that close the 'anyone with the URL gets the data' hole. (1) Search-engine hygiene: <meta name='robots' content='noindex, nofollow'> in index.html plus a public/robots.txt that disallows everything, so the app drops out of Google/Bing indexing entirely and nobody stumbles onto it. (2) Auth gate at the data layer: Code.gs now reads a COHORT_TOKEN from PropertiesService and rejects any request whose ?token= query param doesn't match — the script always returns JSON 200 (doGet can't set status codes) so a rejection comes back as { error: 'unauthorized' } and is detected as such. New AuthError class makes that detection explicit at the App.jsx layer. (3) UI gate that uses the same token: new <PasscodeGate> component renders before any data is fetched or any cached data is shown. It probes the Apps Script with the entered code; success → token saved to localStorage at COHORT_TOKEN_KEY ('bap-cohort-token'), data primed via handleAuth (justAuthed ref short-circuits the would-be-redundant background fetch), gate dismounts; failure → bilingual 'Código incorrecto / Wrong code' message, gate stays put. Network errors get their own 'Couldn't connect' message so they don't read as a wrong passcode. The token is threaded through fetchAllData() and refreshAllData() on every call; AuthError on either path clears the bad token and re-renders the gate, so a rotated cohort code re-prompts automatically. The gviz CSV fallback path is gone — fetchAllDataConsolidated/PerTab/sheetURL/fetchTab and the papaparse import all removed, so the Apps Script is the only door. New helpers: loadCohortToken, saveCohortToken, clearCohortToken. Preview mode (no SHEET_ID) bypasses the gate so the hardcoded DEFAULT_DATA preview is still reachable. CACHE_VERSION stays at 6 because the data shape didn't change. Manual deploy steps after this lands: set COHORT_TOKEN='asado-summer-26' in Apps Script Project Settings → Script Properties, re-deploy a new version of the script (URL stays the same), unpublish the sheet from the web (File → Share → Publish to web → Stop) and tighten Share to Restricted so the gviz back door closes too.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
 // ============================================================
 const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";
 
-// Optional Apps Script Web App that returns all sheet tabs as one
-// JSON blob. When set, the app prefers this over 15 parallel gviz
-// CSV fetches; on any failure (network error, non-200, non-JSON
-// response, etc.) it falls back to the per-tab path automatically.
+// Apps Script Web App that returns all sheet tabs as one JSON blob.
+// As of 2026-05-03 this is the only data path; the gviz fallback was
+// removed so the cohort token in Script Properties is the single
+// source of access control. Every request must carry ?token=<value>
+// matching the COHORT_TOKEN set in the script's Properties — without
+// it the script returns { error: "unauthorized" }.
 // Deploy via Extensions > Apps Script in the spreadsheet, with
-// "Execute as: Me" and "Who has access: Anyone". Leave empty
-// string to force the legacy per-tab path.
+// "Execute as: Me" and "Who has access: Anyone".
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZUxnUtb39W_LtY_DPdSp9RvUx_pXBqCtx7fnB7O9lqEeSMD5hrbqkQTKa72YdB_E/exec";
 
 // ============================================================
@@ -124,16 +124,15 @@ const DEFAULT_DATA = {
 // GOOGLE SHEETS FETCHER
 // ============================================================
 
-function sheetURL(tabName) {
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-}
-
-async function fetchTab(tabName) {
-  const res = await fetch(sheetURL(tabName));
-  if (!res.ok) throw new Error(`Failed to fetch ${tabName}`);
-  const text = await res.text();
-  const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-  return parsed.data;
+// Thrown when the Apps Script rejects a request because the cohort
+// token is missing or wrong. The auth gate catches this specifically
+// to clear the bad token from localStorage and re-prompt the student
+// instead of falling through to the generic error path.
+class AuthError extends Error {
+  constructor(message) {
+    super(message || "unauthorized");
+    this.name = "AuthError";
+  }
 }
 
 // Parse day codes from the spreadsheet. Accepts both single-letter
@@ -384,111 +383,33 @@ function normalizeData(raw) {
   };
 }
 
-// Consolidated path: one round trip to the Apps Script Web App, which
-// returns all 15 tabs as a single JSON blob. The script caches its own
-// response for 1 hour via CacheService, so most hits don't re-read the
-// spreadsheet at all. Throws on any failure so the router can fall back.
+// Sole data path: one round trip to the Apps Script Web App, which
+// returns all 15 tabs as a single JSON blob. The script caches its
+// own response for 1 hour via CacheService, so most hits don't
+// re-read the spreadsheet at all.
 //
-// When `bust` is true, we append `?bust=1` to the URL so the Apps
-// Script's CacheService entry is bypassed and the script re-reads the
-// spreadsheet. Used by the pull-to-refresh gesture on Today; without
-// the bust, a freshly edited sheet can take up to an hour to appear.
-async function fetchAllDataConsolidated({ bust = false } = {}) {
+// `token` is the cohort passcode the student entered at the auth
+// gate; it's appended as ?token=<value> and the script rejects the
+// request if it doesn't match the COHORT_TOKEN in Script Properties.
+// A rejection is detected by the { error: "unauthorized" } shape
+// (the script always returns 200 with JSON; doGet can't set status
+// codes) and re-thrown as AuthError so the gate can re-prompt.
+//
+// `bust=true` appends ?bust=1 so the script's CacheService entry is
+// bypassed and the spreadsheet is re-read. Used by the pull-to-refresh
+// gesture on Today; without it a freshly edited sheet can take up to
+// an hour to appear.
+async function fetchAllData({ token, bust = false } = {}) {
   if (!APPS_SCRIPT_URL) throw new Error("APPS_SCRIPT_URL not configured");
-  const url = bust ? `${APPS_SCRIPT_URL}?bust=1` : APPS_SCRIPT_URL;
+  if (!token) throw new AuthError("missing token");
+  const params = new URLSearchParams({ token });
+  if (bust) params.set("bust", "1");
+  const url = `${APPS_SCRIPT_URL}?${params.toString()}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Apps Script endpoint returned ${res.status}`);
-  // Guard against the Apps Script returning HTML instead of JSON (e.g.
-  // a Google login page when the deploy was set to a restricted access
-  // level by mistake). res.json() throws on non-JSON, which the router
-  // catches and falls back from.
   const tabs = await res.json();
+  if (tabs && tabs.error === "unauthorized") throw new AuthError();
   return normalizeData(tabs);
-}
-
-// Legacy path: 15 parallel gviz CSV fetches, one per tab, parsed with
-// PapaParse on the client. Slower than the consolidated path but has
-// no script-deploy dependency, so it's the safety net if the Apps
-// Script ever breaks.
-async function fetchAllDataPerTab() {
-  const [settingsRaw, classesRaw, calendarRaw, healthRaw, churchesRaw, faqRaw, contactsRaw, exploreRaw] =
-    await Promise.all([
-      fetchTab("Settings"),
-      fetchTab("Classes"),
-      fetchTab("Calendar"),
-      fetchTab("Health"),
-      fetchTab("Churches"),
-      fetchTab("FAQ"),
-      fetchTab("Contacts"),
-      fetchTab("Explore"),
-    ]);
-
-  // Resources tab is optional — don't break the whole fetch if it's missing
-  let resourcesRaw = [];
-  try { resourcesRaw = await fetchTab("Resources"); } catch (e) { /* tab not created yet */ }
-
-  // Announcements tab is optional — only populates when a reminder is active
-  let announcementsRaw = [];
-  try { announcementsRaw = await fetchTab("Announcements"); } catch (e) { /* tab not created yet */ }
-
-  // Apps tab is optional — won't break if missing
-  let appsRaw = [];
-  try { appsRaw = await fetchTab("Apps"); } catch (e) { /* tab not created yet */ }
-
-  // Tips tab is optional — used by the loading screen rotator
-  let tipsRaw = [];
-  try { tipsRaw = await fetchTab("Tips"); } catch (e) { /* tab not created yet */ }
-
-  // Events tab is optional — populates the "This Week" sub-tab in Local
-  // and the "Esta semana" tile on Today.
-  let eventsRaw = [];
-  try { eventsRaw = await fetchTab("Events"); } catch (e) { /* tab not created yet */ }
-
-  // Holidays tab is optional — when present, takes over class-cancellation
-  // logic from the calendar's holiday-typed events.
-  let holidaysRaw = [];
-  try { holidaysRaw = await fetchTab("Holidays"); } catch (e) { /* tab not created yet */ }
-
-  // Birthdays tab is optional — populates the Today birthday card.
-  let birthdaysRaw = [];
-  try { birthdaysRaw = await fetchTab("Birthdays"); } catch (e) { /* tab not created yet */ }
-
-  return normalizeData({
-    Settings: settingsRaw,
-    Classes: classesRaw,
-    Calendar: calendarRaw,
-    Health: healthRaw,
-    Churches: churchesRaw,
-    FAQ: faqRaw,
-    Contacts: contactsRaw,
-    Explore: exploreRaw,
-    Resources: resourcesRaw,
-    Announcements: announcementsRaw,
-    Apps: appsRaw,
-    Tips: tipsRaw,
-    Events: eventsRaw,
-    Holidays: holidaysRaw,
-    Birthdays: birthdaysRaw,
-  });
-}
-
-// Top-level fetcher used by the React app. Tries the consolidated
-// Apps Script endpoint first when configured; on any failure (network
-// error, non-200, non-JSON response), falls back transparently to the
-// per-tab gviz path. This keeps the app robust against script outages
-// without students ever seeing a difference. When `bust` is true, the
-// consolidated path appends `?bust=1` to bypass the Apps Script's
-// CacheService; the per-tab gviz path always hits the sheet directly
-// so no bust flag is needed there.
-async function fetchAllData({ bust = false } = {}) {
-  if (APPS_SCRIPT_URL) {
-    try {
-      return await fetchAllDataConsolidated({ bust });
-    } catch (e) {
-      console.warn("[BAP] Consolidated endpoint failed, falling back to per-tab gviz fetches:", e && e.message ? e.message : e);
-    }
-  }
-  return fetchAllDataPerTab();
 }
 
 // ============================================================
@@ -524,6 +445,42 @@ function saveCache(data) {
     }));
   } catch (e) {
     // Quota exceeded or storage disabled; silently skip
+  }
+}
+
+// ============================================================
+// COHORT AUTH TOKEN — Required to fetch any data
+// Stored at its own localStorage key (bap-cohort-token). When
+// missing or rejected, the app renders <PasscodeGate> instead of
+// the main UI. The token is the shared cohort passcode the
+// program office hands out at orientation; rotated each cohort by
+// editing the COHORT_TOKEN entry in Apps Script Properties (no
+// re-deploy needed for rotation).
+// ============================================================
+
+const COHORT_TOKEN_KEY = "bap-cohort-token";
+
+function loadCohortToken() {
+  try {
+    return localStorage.getItem(COHORT_TOKEN_KEY) || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function saveCohortToken(token) {
+  try {
+    localStorage.setItem(COHORT_TOKEN_KEY, token);
+  } catch (e) {
+    // Quota exceeded or storage disabled; silently skip
+  }
+}
+
+function clearCohortToken() {
+  try {
+    localStorage.removeItem(COHORT_TOKEN_KEY);
+  } catch (e) {
+    // Storage disabled; silently skip
   }
 }
 
@@ -5596,11 +5553,173 @@ function ProfileModal({ open, onClose, profile, onChange, classes }) {
 }
 
 // ============================================================
+// PASSCODE GATE
+// ============================================================
+// Bilingual full-screen gate that runs before any data is fetched
+// or any cached data is rendered. Submission probes the Apps
+// Script with the entered token; on success the token is stashed
+// in localStorage and the resolved data is handed up to <App> via
+// onAuth so the main effect doesn't have to refetch. On failure
+// the user gets a bilingual "wrong code" message and the gate
+// stays put. Network errors surface as a separate generic message
+// so they aren't conflated with a wrong passcode.
+function PasscodeGate({ onAuth }) {
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorKey, setErrorKey] = useState(""); // "" | "wrong" | "network"
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    const candidate = code.trim();
+    if (!candidate || submitting) return;
+    setSubmitting(true);
+    setErrorKey("");
+    try {
+      const data = await fetchAllData({ token: candidate });
+      onAuth(candidate, data);
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        setErrorKey("wrong");
+        setCode("");
+        if (inputRef.current) inputRef.current.focus();
+      } else {
+        setErrorKey("network");
+      }
+      setSubmitting(false);
+    }
+  }, [code, submitting, onAuth]);
+
+  const errorText = errorKey === "wrong"
+    ? { es: "Código incorrecto.", en: "Wrong code." }
+    : errorKey === "network"
+    ? { es: "No se pudo conectar. Probá de nuevo.", en: "Couldn't connect. Try again." }
+    : null;
+
+  return (
+    <div style={{
+      maxWidth: 480, margin: "0 auto", minHeight: "100vh",
+      background: `linear-gradient(160deg, ${C.pepBlue} 0%, ${C.ocean} 60%, ${C.bapBlue} 100%)`,
+      color: C.white, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "32px 24px",
+      position: "relative", overflow: "hidden",
+    }}>
+      <SouthernCrossDecoration />
+      <img src={LOGO_URI} alt="Buenos Aires Program" style={{
+        width: 96, height: 96, borderRadius: "50%", marginBottom: 24,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+      }} />
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+        letterSpacing: 2.5, color: C.bapBlue, marginBottom: 6, textAlign: "center",
+      }}>
+        Pepperdine University
+      </div>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontSize: 30, fontWeight: 700,
+        lineHeight: 1.1, marginBottom: 4, textAlign: "center",
+      }}>
+        Buenos Aires Program
+      </div>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 16,
+        color: C.fog, marginBottom: 32, textAlign: "center",
+      }}>
+        Programa de Buenos Aires
+      </div>
+
+      <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: 320 }}>
+        <label htmlFor="bap-passcode" style={{
+          display: "block", fontFamily: "'DM Mono', monospace", fontSize: 11,
+          textTransform: "uppercase", letterSpacing: 2, color: C.bapBlue,
+          marginBottom: 8, textAlign: "center",
+        }}>
+          Código de acceso&nbsp;/&nbsp;Access code
+        </label>
+        <input
+          ref={inputRef}
+          id="bap-passcode"
+          type="text"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={code}
+          onChange={(e) => { setCode(e.target.value); if (errorKey) setErrorKey(""); }}
+          disabled={submitting}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 12,
+            border: `1px solid ${errorKey === "wrong" ? C.pepOrange : "rgba(255,255,255,0.25)"}`,
+            background: "rgba(255,255,255,0.10)", color: C.white,
+            fontFamily: "'Roboto', sans-serif", fontSize: 17, letterSpacing: 0.5,
+            outline: "none", textAlign: "center",
+          }}
+        />
+        {errorText && (
+          <div style={{
+            marginTop: 10, padding: "8px 12px", borderRadius: 8,
+            background: "rgba(227, 82, 5, 0.18)",
+            border: `1px solid ${C.pepOrange}`,
+            fontFamily: "'Roboto', sans-serif", fontSize: 13,
+            color: C.white, textAlign: "center",
+          }}>
+            {errorText.es}
+            <span style={{ color: C.fog, margin: "0 6px" }}>/</span>
+            <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic" }}>
+              {errorText.en}
+            </span>
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={!code.trim() || submitting}
+          className="bap-press"
+          style={{
+            marginTop: 18, width: "100%", padding: "14px 16px",
+            borderRadius: 12, border: "none", cursor: code.trim() && !submitting ? "pointer" : "default",
+            background: code.trim() && !submitting ? C.bapBlue : "rgba(255,255,255,0.15)",
+            color: code.trim() && !submitting ? C.pepBlue : "rgba(255,255,255,0.5)",
+            fontFamily: "'Roboto', sans-serif", fontSize: 16, fontWeight: 700,
+            letterSpacing: 0.3,
+          }}
+        >
+          {submitting ? "Conectando…  /  Connecting…" : "Continuar  /  Continue"}
+        </button>
+      </form>
+
+      <div style={{
+        marginTop: 28, fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+        fontSize: 13, color: C.fog, textAlign: "center", maxWidth: 320, lineHeight: 1.5,
+      }}>
+        ¿No tenés el código? Pedíselo al equipo del programa.
+        <br />
+        <span style={{ fontSize: 12 }}>Don't have the code? Ask the program staff.</span>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 
 export default function App() {
   const [tab, setTab] = useState("today");
+
+  // Cohort auth token. Lazy-init from localStorage so a student who
+  // has already entered the passcode on this device skips the gate.
+  // When empty (and SHEET_ID is configured), the App early-returns
+  // the <PasscodeGate> instead of the main UI. Cleared on AuthError
+  // so a rotated cohort code re-prompts automatically.
+  const [cohortToken, setCohortToken] = useState(() => loadCohortToken());
+
+  // Set inside handleAuth so the post-auth render doesn't immediately
+  // re-fetch what the gate's validation probe just retrieved.
+  const justAuthed = useRef(false);
 
   // Profile state. Lazy-init from localStorage so the very first
   // render already reflects the student's choices (no flash of
@@ -5736,19 +5855,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!SHEET_ID) return;
-    fetchAllData()
+    if (!SHEET_ID || !cohortToken) return;
+    // Skip the immediate post-auth fetch — handleAuth already
+    // primed setData/setStatus/cache from the gate's probe.
+    if (justAuthed.current) {
+      justAuthed.current = false;
+      return;
+    }
+    fetchAllData({ token: cohortToken })
       .then((d) => {
         setData(d);
         setStatus("live");
         saveCache(d);
       })
       .catch((err) => {
+        if (err && err.name === "AuthError") {
+          // Token is no longer valid (cohort rotation, manual revoke).
+          // Clear it and re-render the gate so the student can re-enter.
+          clearCohortToken();
+          setCohortToken("");
+          return;
+        }
         console.error("Sheet fetch failed:", err);
         // If we were already showing cached data, keep it on screen.
         // Otherwise drop to the hardcoded defaults.
         setStatus((prev) => (prev === "refreshing" ? "cached" : "fallback"));
       });
+  }, [cohortToken]);
+
+  // Called by <PasscodeGate> on successful submit. The gate's probe
+  // already fetched a full data payload as proof the token works, so
+  // we prime data/status/cache from that and short-circuit the
+  // useEffect's would-be redundant re-fetch via the justAuthed ref.
+  const handleAuth = useCallback((token, primedData) => {
+    justAuthed.current = true;
+    saveCohortToken(token);
+    setData(primedData);
+    setStatus("live");
+    saveCache(primedData);
+    setCohortToken(token);
   }, []);
 
   // Manual refresh path used by the Today pull-to-refresh gesture.
@@ -5759,18 +5904,23 @@ export default function App() {
   // Status flips to "refreshing" while in flight so the header pill
   // shows the same state as a normal background refresh.
   const refreshAllData = useCallback(async () => {
-    if (!SHEET_ID) return;
+    if (!SHEET_ID || !cohortToken) return;
     setStatus((prev) => (prev === "live" || prev === "cached" || prev === "fallback") ? "refreshing" : prev);
     try {
-      const d = await fetchAllData({ bust: true });
+      const d = await fetchAllData({ token: cohortToken, bust: true });
       setData(d);
       setStatus("live");
       saveCache(d);
     } catch (err) {
+      if (err && err.name === "AuthError") {
+        clearCohortToken();
+        setCohortToken("");
+        return;
+      }
       console.error("Manual refresh failed:", err);
       setStatus((prev) => (prev === "refreshing" ? "cached" : "fallback"));
     }
-  }, []);
+  }, [cohortToken]);
 
   // Position the bottom-nav pill under the active tab. Re-runs on tab
   // change and on window resize so the pill stays anchored when the
@@ -5802,6 +5952,14 @@ export default function App() {
 
   // Treat "live" and "refreshing" as the healthy/synced visual state
   const isHealthy = status === "live" || status === "refreshing";
+
+  // Auth gate. With SHEET_ID configured but no cohort token in
+  // localStorage, render <PasscodeGate> in place of the main UI.
+  // Preview mode (no SHEET_ID) skips the gate so the hardcoded
+  // DEFAULT_DATA preview is still reachable.
+  if (SHEET_ID && !cohortToken) {
+    return <PasscodeGate onAuth={handleAuth} />;
+  }
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.parchment, display: "flex", flexDirection: "column" }}>
