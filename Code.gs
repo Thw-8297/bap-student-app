@@ -86,6 +86,7 @@ function doGet(e) {
 // in the sheet don't bloat the response.
 function readAllTabs() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tz = ss.getSpreadsheetTimeZone();
   const out = {};
   for (let i = 0; i < TABS.length; i++) {
     const tabName = TABS[i];
@@ -111,7 +112,20 @@ function readAllTabs() {
         const key = headers[c];
         if (!key) continue;
         const cell = row[c];
-        const value = cell == null ? "" : String(cell);
+        let value;
+        if (cell == null) {
+          value = "";
+        } else if (cell instanceof Date) {
+          // Date cells must come through as YYYY-MM-DD strings —
+          // App.jsx normalizeData does `r.date.trim().slice(0, 10)`
+          // and downstream date arithmetic assumes ISO-like input.
+          // String(dateObj) would emit "Sun May 25 2026 00:00:00
+          // GMT-0300 ..." which slices to "Sun May 25" and parses
+          // as year 2001 in V8, blowing up everywhere downstream.
+          value = Utilities.formatDate(cell, tz, "yyyy-MM-dd");
+        } else {
+          value = String(cell);
+        }
         obj[key] = value;
         if (value !== "") hasAny = true;
       }
