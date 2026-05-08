@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
+const BUILD_VERSION = "2026-05-09b — 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -511,9 +511,41 @@ function saveCache(data) {
 
 const COHORT_TOKEN_KEY = "bap-cohort-token";
 
+// 60-day expiry on both stored auth credentials (cohort token
+// and current user). Saved values older than this are treated
+// as missing on load, so a student who hasn't opened the app in
+// a while is gently re-prompted for the cohort code and their
+// CWID + birthday. Acts as a soft floor in case a phone gets
+// passed to someone else and the student forgot to sign out, and
+// stays well outside the typical "I forgot my code, ask the
+// program office" window. Same value for both credentials; if
+// they ever need to diverge, split into two constants.
+const AUTH_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+
 function loadCohortToken() {
   try {
-    return localStorage.getItem(COHORT_TOKEN_KEY) || "";
+    const raw = localStorage.getItem(COHORT_TOKEN_KEY);
+    if (!raw) return "";
+    // New envelope format: { token, savedAt }. Recognized by the
+    // leading "{" so we don't pay JSON.parse on plain-string
+    // values from the legacy format below.
+    if (raw.charAt(0) === "{") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.token === "string" && typeof parsed.savedAt === "number") {
+          if (Date.now() - parsed.savedAt > AUTH_TTL_MS) return "";
+          return parsed.token;
+        }
+      } catch (e) {
+        // Malformed envelope; treat as missing.
+      }
+      return "";
+    }
+    // Legacy plain-string format from before 2026-05-09b. Accept
+    // it as still-valid so already-logged-in students aren't
+    // bounced today; the next save upgrades to the envelope
+    // format, after which the TTL applies.
+    return raw;
   } catch (e) {
     return "";
   }
@@ -521,7 +553,10 @@ function loadCohortToken() {
 
 function saveCohortToken(token) {
   try {
-    localStorage.setItem(COHORT_TOKEN_KEY, token);
+    localStorage.setItem(COHORT_TOKEN_KEY, JSON.stringify({
+      token,
+      savedAt: Date.now(),
+    }));
   } catch (e) {
     // Quota exceeded or storage disabled; silently skip
   }
@@ -560,10 +595,25 @@ function loadUser() {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Sanity floor: a stored user is only valid if it carries the
-    // identity primitives. Anything else and we treat as missing.
-    if (!parsed || typeof parsed !== "object" || !parsed.cwid) return null;
-    return parsed;
+    if (!parsed || typeof parsed !== "object") return null;
+
+    // New envelope format: { value, savedAt }. Subject to the
+    // AUTH_TTL_MS expiry; older values are treated as missing
+    // so the student gets re-prompted at the user gate.
+    if (parsed.value && typeof parsed.savedAt === "number") {
+      if (Date.now() - parsed.savedAt > AUTH_TTL_MS) return null;
+      const u = parsed.value;
+      if (!u || typeof u !== "object" || !u.cwid) return null;
+      return u;
+    }
+
+    // Legacy flat format from before 2026-05-09b (the bare user
+    // record at the top level). Accept as still-valid; the next
+    // save upgrades to the envelope format, after which the TTL
+    // applies. Sanity floor: must carry identity primitives.
+    if (parsed.cwid) return parsed;
+
+    return null;
   } catch (e) {
     return null;
   }
@@ -571,7 +621,10 @@ function loadUser() {
 
 function saveUser(user) {
   try {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localStorage.setItem(USER_KEY, JSON.stringify({
+      value: user,
+      savedAt: Date.now(),
+    }));
   } catch (e) {
     // Quota exceeded or storage disabled; silently skip
   }
