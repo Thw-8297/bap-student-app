@@ -403,7 +403,9 @@ Within the sub-tab, events are split into two groups: "This week / Esta semana" 
 
 ## Apps Script Endpoint
 
-A Google Apps Script Web App is the sole data endpoint. It reads every tab the app needs from the spreadsheet and returns one JSON blob keyed by tab name (each tab is an array of header-keyed row objects). As of 2026-05-03 it is also the single auth boundary: every request must carry a `?token=` query parameter matching the `COHORT_TOKEN` entry in Script Properties, or the script returns `{ error: "unauthorized" }` with no data.
+The app reads from two Apps Script Web Apps, each bound to its own spreadsheet for permission isolation: this section covers the **content endpoint** (class schedules, calendar, contacts, etc.); the parallel **Roster Auth Endpoint** (see next section) handles per-user identification. Splitting the two means the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other.
+
+The content Apps Script Web App reads every tab the app needs from the content spreadsheet and returns one JSON blob keyed by tab name (each tab is an array of header-keyed row objects). As of 2026-05-03 it is also the cohort-level auth boundary: every request must carry a `?token=` query parameter matching the `COHORT_TOKEN` entry in Script Properties, or the script returns `{ error: "unauthorized" }` with no data.
 
 **Deployed URL location.** Stored in `App.jsx` as the `APPS_SCRIPT_URL` constant in the CONFIGURATION section.
 
@@ -428,6 +430,56 @@ A Google Apps Script Web App is the sole data endpoint. It reads every tab the a
 
 **Failure mode.** When the script is reachable but rejects auth, the app returns to the passcode gate with a "Wrong code" message. When the script is unreachable (network error, deploy expired), `App.jsx` keeps cached content on screen and downgrades the status pill to "Saved version (offline)" — same behavior as before. There is no longer a fallback path; the gviz CSV approach was removed on 2026-05-03 because it was the only remaining auth-free door into the data.
 
+## Roster Auth Endpoint
+
+A second Apps Script Web App, bound to a separate "BAP App Roster" spreadsheet, handles per-user identification. Same shape as the content endpoint (Apps Script returning JSON over a Web App URL with `?token=…`), different concern (validates a CWID + birthday against the Roster tab and returns the matched user's curated row).
+
+**Deployed URL location.** Stored in `App.jsx` as the `AUTH_SCRIPT_URL` constant in the CONFIGURATION section, alongside `APPS_SCRIPT_URL`.
+
+**Source.** `AuthCode.gs`, kept in the repo root as the canonical reference. Lives bound to the Roster spreadsheet (Extensions > Apps Script from the Roster sheet's menu). The repo copy and the script editor have to be kept in sync manually after any edit, same convention as `Code.gs`.
+
+**Endpoint shape:**
+
+```
+GET ?action=identify&token=<cohort>&cwid=<cwid>&birthday=<MM-DD>
+  → { user: { cwid, first_name, last_name, preferred_name, pronouns,
+              role, email, whatsapp, housing_assignment, tshirt_size,
+              tshirt_fit, dietary_restrictions, food_allergies,
+              program_status } }
+  → { error: "unauthorized" }   // bad cohort token
+  → { error: "no_match" }       // cwid not found, birthday mismatch, or program_status not active
+  → { error: "bad_request" }    // missing/unparseable params
+```
+
+The `birthday` field is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical notes, passport, emergency contacts) are deliberately not in the Roster sheet at all and not in `CURATED_FIELDS`; they belong to Pepperdine's existing intake systems, not to this app.
+
+**Cohort token shared with the content script.** The auth script reads `COHORT_TOKEN` from its own Script Properties; the value should match the content script's `COHORT_TOKEN`. Rotation is two 30-second copies — once per Script Property. **No re-deploy is needed for token rotation** (Script Properties are read at request time).
+
+**Lookup logic.** `findRosterRow(cwid)` reads the Roster tab via `getDataRange().getValues()`, finds the row whose `cwid` column matches after `normalizeCwid()`, and returns the row as a header-keyed object. `normalizeCwid()` strips non-digits and leading zeros, so input variations (`"0123456789"`, `"123-456-789"`, `" 123456789 "`) all collapse to the same canonical form. CWIDs are conventionally 9-digit numerics with no leading zeros, but the lookup is lenient on input variation; `validateRoster()` flags non-conforming rows in the editor.
+
+**Birthday matching.** `parseBirthdayMD()` mirrors `App.jsx`'s parser: accepts `MM-DD`, `M-D`, or full `YYYY-MM-DD`, returns canonical `MM-DD`. Both sides of the comparison are canonicalized before matching, so a sheet row entered as `2005-05-12` still matches a front-end submission of `05-12`.
+
+**`program_status` gate.** If the matched row's `program_status` is anything other than `active` (case-insensitive), the script returns `no_match` instead of the user record. Blank is treated as `active`. This means a student who has `program_status: withdrawn` can't sign back in mid-cohort; the Director controls re-enabling them by editing the cell.
+
+**No response caching.** Identify happens roughly once per device per cohort (then localStorage takes over), so per-request spreadsheet reads are negligible. No-cache means roster edits propagate immediately — useful when adding a late-add student or fixing a typo mid-cohort.
+
+**Editor helpers in `AuthCode.gs`:**
+
+- `testReadRoster()` — run once after pasting the script in to trigger the OAuth scope prompt. Logs the row count and headers to the execution log.
+- `validateRoster()` — flag duplicate CWIDs (raw and normalized), missing required fields, unrecognized roles (anything not in `student | staff | faculty`), malformed birthdays, malformed emails, CWIDs containing non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs with leading zeros. Run anytime you've meaningfully edited the Roster.
+
+**Deploy procedure (first-time):**
+
+1. Open the Roster spreadsheet, then Extensions > Apps Script.
+2. Paste in the contents of `AuthCode.gs`. Save.
+3. Project Settings > Script Properties > Add property: `COHORT_TOKEN` = the same value used in the content script's properties.
+4. Run `testReadRoster()` once from the editor to authorize the spreadsheet read scope.
+5. Run `validateRoster()` to confirm the seeded data has no warnings.
+6. Deploy > New deployment > Web app. Execute as: Me. Who has access: **Anyone** (not "Anyone within Pepperdine University" — that requires a `@pepperdine.edu` Google sign-in in the calling browser, which breaks for students using Safari without a signed-in Workspace session).
+7. Copy the URL into `App.jsx` as `AUTH_SCRIPT_URL`. Commit, push, Vercel rebuilds.
+
+**Re-deploy after script edits.** Same convention as the content script: Apps Script Web Apps freeze at the version they were deployed at. Editing `AuthCode.gs` doesn't affect production until a new deployment is created (Deploy > Manage deployments > pencil icon > Version: New version). The URL stays the same across re-deployments.
+
 ## Cohort Auth
 
 The cohort passcode is the single credential gating the app. Same string serves three roles: (1) the API token the Apps Script validates on every request, (2) the localStorage entry the app reads to decide whether to render the gate or the main UI, and (3) the code the program office hands out at orientation in the WhatsApp group.
@@ -449,6 +501,60 @@ The token is stored as a plain string at the localStorage key `bap-cohort-token`
 **What the gate does not do.** It doesn't gate by user identity (everyone in the cohort uses the same code). It doesn't sync across devices — each device gets its own gate experience until the code is entered there too. It doesn't survive a browser "Clear site data" action; in that case the student re-enters the code on next open, same as the first open. iOS Safari can evict localStorage from installed PWAs after ~7 days of non-use, so a long-quiet student may be re-prompted occasionally; this is iOS behavior, not a bug.
 
 **Threat model.** The gate is calibrated to "keep the URL out of search engines and out of strangers' hands while the cohort is in session." It is not a defense against device theft (anyone with the unlocked phone can read localStorage and the cached app), against a student deliberately sharing the code outside the cohort (which would be an honor-code matter, not a technical one), or against a determined actor with network-monitoring tools (the token is sent in the URL query; on the wire it's TLS-encrypted, but it's visible to anyone who shares the device's network at the OS level). The data the app surfaces is mostly low-stakes (class schedules, public healthcare addresses, opt-in birthdays without years), so this calibration is appropriate; if the data ever grew more sensitive the calibration should be revisited.
+
+## User Auth
+
+The cohort passcode is layer 1 ("are you in this cohort?"); per-user identification via CWID + birthday is layer 2 ("which person in the cohort are you?"). Layer 1 is a security boundary; layer 2 is identification, not authentication — the cohort passcode is doing the security lifting, and the user gate is calibrated to "tell us which row in the Roster you are" so future features can be person-specific (RSVPs, t-shirt sizes, role-gated views, dinner menu choices, and so on).
+
+**How auth flows on a cold open.** After `<PasscodeGate>` succeeds and the cohort token is stashed, `<App>` early-returns `<UserGate>` if `currentUser` is null. The gate's submit handler fires `identifyUser({ token: cohortToken, cwid, birthday })` against the Roster Auth Endpoint. On success the curated user record is handed up via `onAuth(user)`, which saves the user to localStorage at `bap-user` and dismounts the gate; the main UI renders immediately with content data already primed by the cohort gate's probe fetch. On `NoMatchError` the gate shows a bilingual "We couldn't find you. Verify CWID and birthday" panel and the fields stay populated for editing. On `AuthError` (the cohort token was rotated mid-session, between the cohort gate succeeding and the user gate submitting), the gate calls `onCohortReset` which clears the cohort token; the next render bounces to `<PasscodeGate>` instead of showing a misleading wrong-credentials message in the user gate. On any other error the gate shows "Couldn't connect."
+
+**How auth flows on background fetches.** No identify call happens on background fetches — once `currentUser` is in localStorage it persists until cleared (sign out, AuthError on a content fetch, or manual site-data clear). The data-fetch effect's `AuthError` handler now clears `currentUser` alongside the cohort token, so a rotated cohort code resets both gates in lockstep rather than letting a stale identity from a previous cohort silently persist across the rotation.
+
+**Storage shape:**
+
+The curated user record is stored as JSON at the localStorage key `bap-user`:
+
+```json
+{
+  "cwid": "123456789",
+  "first_name": "María",
+  "last_name": "García",
+  "preferred_name": "Mari",
+  "pronouns": "she/her",
+  "role": "student",
+  "email": "mgarcia@pepperdine.edu",
+  "whatsapp": "+5491144197092",
+  "housing_assignment": "Homestay – Recoleta (Familia López)",
+  "tshirt_size": "M",
+  "tshirt_fit": "women's",
+  "dietary_restrictions": "vegetarian",
+  "food_allergies": "",
+  "program_status": "active"
+}
+```
+
+`birthday` is intentionally not in the response (and therefore not in localStorage). No version field on the stored user; the auth script's `CURATED_FIELDS` projection is the source of truth for shape. If a field is later removed from `CURATED_FIELDS`, old localStorage entries still load fine — extra fields are ignored at read time.
+
+**Helpers in `App.jsx`:**
+
+- `class NoMatchError extends Error` — thrown by `identifyUser()` when the auth script returns `{ error: "no_match" }`. Distinct from `AuthError` so the gate can show the right message for the right failure (wrong-credentials vs. stale-cohort-token).
+- `loadUser()` / `saveUser(user)` / `clearUser()` — three small wrappers around `localStorage.getItem/setItem/removeItem` for the `bap-user` key, each try/catch-wrapped. `loadUser` returns `null` (not an empty object) on any malformed or missing entry — the App's gate logic uses `null` as the trigger to show `<UserGate>`.
+- `identifyUser({ token, cwid, birthday })` — async function next to `fetchAllData`. Calls `AUTH_SCRIPT_URL`, parses the response, and throws `AuthError` / `NoMatchError` / generic `Error` so the gate can branch cleanly. CWID is sent as the digit-stripped form from the input; birthday is sent as `MM-DD`.
+- `isStaffOrFaculty(user)` — returns `true` when `user.role` is `staff` or `faculty` (case-insensitive). Single source of truth for any role-gated UI surface added later. Returns `false` on null/missing user so preview mode (no SHEET_ID, no auth) reads as "student" for safety — a future staff-only view stays hidden in preview.
+- `<UserGate cohortToken onAuth onCohortReset />` — bilingual full-screen gate component. Visual identity matches `<PasscodeGate>` (same gradient, same logo, same EB Garamond title-pair pattern, same DM Mono caption, same Pep Orange–accented error panel, same submit button style). Microline reads "Buenos Aires Program" instead of "Pepperdine University" to signal continuation from the cohort gate. Title pair: "¡Hola! / Hello!" (warmer than the cohort gate's institutional title). Caption: "Decinos quién sos / Tell us who you are." Two fields: a 9-digit CWID input (`inputMode="numeric"`, `maxLength={9}`, onChange strips non-digits so a paste like `"123-456-789"` cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via `MONTH_OPTIONS`, day options re-cap when month changes via `daysInMonthMD()` — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Helper line at the bottom with a mailto link to `buenosaires@pepperdine.edu`. Auto-focuses the CWID input on mount. Reuses `SouthernCrossDecoration` and `LOGO_URI`.
+- `<App>` state additions: `const [currentUser, setCurrentUser] = useState(() => loadUser())`. New callbacks: `handleUserAuth(user)` (stash user, dismount gate); `handleCohortReset()` (clear cohort token, bounce to cohort gate); `handleSignOut()` (clear user only — leaves cohort token AND profile intact, so signing back in restores everything). Three-state early-return: no SHEET_ID → preview; no cohort token → `<PasscodeGate>`; cohort token + no user → `<UserGate>`; both → main UI.
+
+**ProfileModal integration.** The "First name" text input is gone (name comes from the roster, not user input). In its place is a read-only "Logged in as" card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed "Cerrar sesión / Sign out" button below. Sign out clears `currentUser` only — leaves the cohort token AND the profile (`enrolledClasses`, `filterEnabled`) intact, so the next sign-in restores the student's settings without making them re-tick courses.
+
+**Constants used by `<UserGate>`:**
+
+- `MONTH_OPTIONS` — array of `{ value, es, en }` objects for the month dropdown; Spanish primary, English secondary in the option labels.
+- `daysInMonthMD(monthStr)` — pure function returning days available in the day dropdown for a given month. Returns 31 when month is unset so the day dropdown is fully populated until a month is chosen.
+- `SELECT_CHEVRON` — inline SVG data URI used as the right-side affordance on the month/day selects (since we strip native appearance to match the CWID input's visual styling).
+
+**What the gate does not do.** It doesn't authenticate the user against an institutional identity provider (no Google sign-in, no Pepperdine SSO; that's a Phase-3-roadmap option held until the data grows sensitive enough to warrant it). It doesn't sync identity across devices — each device gets its own gate experience. It doesn't survive a "Clear site data" action; in that case the student re-enters CWID + birthday on next open. The cohort gate continues to do the actual security work; this gate just records who's using the app.
+
+**Threat model.** Per-user identification, not authentication. Within a cohort, a student could enter another student's CWID + birthday and get into the app as that person. For the use cases the gate enables (RSVPs, dinner menus, t-shirt sizes, role-based UI), this is calibrated correctly: low-stakes data, closed cohort, honor-code expectations. If the app ever exposes anything individually sensitive (grades, medical info, financial details), this calibration should be revisited and Google sign-in via `@pepperdine.edu` becomes the right next step.
 
 ## Local Cache
 
@@ -492,14 +598,17 @@ The cache itself does not eliminate the underlying network fetch entirely; it ju
 
 The app supports per-student personalization via a small profile stored locally in the browser. The profile is optional: students who never open Settings see exactly the same app every other student does. Director use is unaffected; the filter is off by default and only takes effect when explicitly enabled.
 
+The profile is distinct from `currentUser` (the User Auth section above). The roster row identified at sign-in is the authoritative source for *who the student is* (first name, role, email, t-shirt size, etc.); the profile holds *what the student has chosen on this device* (which courses they're enrolled in, whether the filter is on). They live at separate localStorage keys (`bap-profile` vs. `bap-user`) so each can be cleared independently — sign out wipes identity but preserves course selections, while a profile reset clears selections but leaves identity untouched.
+
 **What's customizable:**
 
-- **First name.** When set, the Today greeting reads "Buen día, María" instead of just "Buen día." Falls back to the bare greeting when blank.
 - **Enrolled courses.** A multi-select list of every course currently in the Classes tab. Each row shows the course code and title with the same color accent used elsewhere in the app.
 - **Show only my classes (toggle).** When on, the Today tab's "Today's Activity" card and the Schedule tab's Class Schedule and Courses sub-tabs filter to only the ticked courses. The Weekly Overview is unaffected because it shows calendar events, not classes; calendar events are never filtered by profile.
 - **Persistent announcement dismissals.** The × on an announcement now sticks across sessions instead of returning every time the app reloads. Tracked by a stable `djb2` hash of the message text, so editing an announcement in the sheet effectively resurfaces it as new.
 
-**Access:** A small gear icon in the top-right of the header opens the Settings modal. The modal is full-screen within the 480px column, with name field, toggle, course checklist, and a "Reset profile" button. Changes save immediately to localStorage on every interaction; the "Done" button just closes the modal.
+The "First name" field that used to live here was removed in v2: the Today greeting now reads from `currentUser.preferred_name || currentUser.first_name` (the authoritative roster identity) instead of a student-typed string. Existing v1 profiles are migrated by `loadProfile()` rather than nuked — `enrolledClasses` and `filterEnabled` are salvaged so a student who already personalized doesn't lose course selections on the deploy that introduces the user gate.
+
+**Access:** A small gear icon in the top-right of the header opens the Settings modal. The modal is full-screen within the 480px column. At the top is a read-only "Logged in as" card (preferred-or-first name + last name, role, email, plus a confirmed "Cerrar sesión / Sign out" button) sourced from `currentUser`; below it are the toggle, course checklist, and "Reset profile" button. Changes save immediately to localStorage on every interaction; the "Done" button just closes the modal. Sign out clears `currentUser` only — leaves the cohort token AND the rest of the profile intact, so signing back in restores everything.
 
 **Filter affordance:** When the filter is active, an inline pill at the top of the Schedule sub-tabs (Class Schedule and Courses) reads "My classes only — Showing N of M. Tap to change." Tapping it reopens the Settings modal. The pill does not appear on the Weekly Overview (calendar-only) or on the Today tab (where the filter is visible implicitly through the activity card).
 
@@ -513,21 +622,22 @@ The app supports per-student personalization via a small profile stored locally 
 
 ```json
 {
-  "version": 1,
-  "name": "",
+  "version": 2,
   "enrolledClasses": ["SPAN 350", "HUM 295"],
   "filterEnabled": false,
   "dismissedAnnouncements": []
 }
 ```
 
-Stored under the localStorage key `bap-profile`, separate from `bap-app-cache`. This separation is intentional: bumping `CACHE_VERSION` (which happens when the Google Sheet data shape changes) wipes the data cache but leaves the profile intact, so students don't lose their settings every time the schema evolves.
+Stored under the localStorage key `bap-profile`, separate from `bap-app-cache` and from `bap-user`. This separation is intentional: bumping `CACHE_VERSION` (which happens when the Google Sheet data shape changes) wipes the data cache but leaves the profile intact, so students don't lose their settings every time the schema evolves; signing out clears `bap-user` but leaves the profile alone, so re-signing-in restores course selections without making the student re-tick anything.
 
 The `dismissedAnnouncements` array is a legacy field kept in the schema for backwards compatibility with previously stored profiles. As of the 2026-04-26 announcement-banner redesign, announcements are no longer user-dismissible (the program office controls lifecycle via `end_date`), so this field is neither read nor written anymore. It will simply remain at `[]` for new profiles and stay frozen at whatever value existing profiles had.
 
+The `name` field that lived in v1 was removed in v2 — see the "Logged in as" card discussion above.
+
 **PROFILE_VERSION:**
 
-The constant `PROFILE_VERSION` in `App.jsx` is the profile-shape version. Bump it only when the profile shape itself changes (new field, renamed field, removed field). On next open, the version mismatch causes `loadProfile()` to return `EMPTY_PROFILE` and the next save writes a fresh profile at the new version. Field additions that have safe defaults (`""`, `[]`, `false`) generally don't need a bump because the spread-with-defaults in `loadProfile()` backfills missing keys.
+The constant `PROFILE_VERSION` in `App.jsx` is the profile-shape version (currently 2). Bump it only when the profile shape itself changes (new field, renamed field, removed field). On next open, the version mismatch causes `loadProfile()` to return `EMPTY_PROFILE` for any version it doesn't recognize, and the next save writes a fresh profile at the new version. The v1 → v2 transition is special-cased: rather than nuking, `loadProfile()` salvages `enrolledClasses` and `filterEnabled` from old v1 profiles so course selections survive the deploy that introduces the user gate. Future migrations should follow the same pattern when there's value in preserving carryover state.
 
 **Helpers in `App.jsx`:**
 
@@ -847,6 +957,7 @@ The candidates below were considered alongside them and held for later. None req
 
 | Date | Changes |
 |------|---------|
+| 2026-05-09 | **Per-user identification via CWID + birthday gate.** Two-layer auth model now: cohort passcode is layer 1 (security boundary, "are you in this cohort?"), CWID + birthday is layer 2 (identification, "which person in the cohort are you?"). New `<UserGate>` renders after `<PasscodeGate>` succeeds; new `currentUser` state in `<App>` lazy-init from localStorage at key `bap-user`. Three-state early-return: no SHEET_ID → preview; cohort token missing → `<PasscodeGate>`; cohort token + no user → `<UserGate>`; both → main UI. **Two-spreadsheet permission isolation.** A separate "BAP App Roster" Google Sheet holds the cohort roster (cwid, first_name, last_name, preferred_name, pronouns, birthday, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status); a second Apps Script (`AuthCode.gs`, canonical in repo root) is bound to that sheet and exposes `?action=identify&token=…&cwid=…&birthday=…` returning a curated user record on match. The content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New `AUTH_SCRIPT_URL` constant alongside `APPS_SCRIPT_URL`; same `COHORT_TOKEN` value lives in both Script Properties (rotation is two 30-second copies). **CWID handling lenient on input variation.** `normalizeCwid()` strips non-digits and leading zeros so `123456789`, `0123456789`, `123-456-789`, and ` 123456789 ` all collapse to the same canonical form for comparison; doesn't pad short values, so `12345` and `123456789` stay distinct. CWIDs are conventionally 9-digit numerics with no leading zeros; `validateRoster()` flags non-conforming rows in the editor. **Birthday matching** via `parseBirthdayMD()` — accepts MM-DD, M-D, or YYYY-MM-DD on the sheet side, MM-DD from the front-end dropdowns; both canonicalized to MM-DD before comparing. **`program_status` gate** — non-active rows return `no_match` so a withdrawn or completed student can't sign in. **`<UserGate>` component.** Two fields: 9-digit CWID input (`inputMode=numeric` for iOS keypad, `maxLength=9`, onChange digit-strip so a paste like `123-456-789` cleans up automatically) and birthday two-dropdown row (Spanish-primary month labels via `MONTH_OPTIONS`, day options re-cap when month changes via `daysInMonthMD` — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Visual identity matches `<PasscodeGate>`; title pair shifts to "¡Hola! / Hello!" with caption "Decinos quién sos / Tell us who you are." `NoMatchError` → "We couldn't find you" panel; `AuthError` (cohort code rotated mid-session) → calls `onCohortReset` to bounce back to `<PasscodeGate>` without a misleading wrong-credentials message; other errors → "Couldn't connect." Helper line at the bottom with mailto to `buenosaires@pepperdine.edu`. **Cohort rotation now resets both gates in lockstep** — `AuthError` handlers in the data-fetch and `refreshAllData` paths clear `currentUser` alongside the cohort token. **`PROFILE_VERSION` 1 → 2.** Profile shape lost its `name` field (identity now comes from `currentUser.preferred_name || currentUser.first_name`, the authoritative roster identity). `loadProfile` gains a v1 → v2 migration that salvages `enrolledClasses` and `filterEnabled` rather than nuking the profile, so a student who already personalized doesn't lose course selections on this deploy. **`<ProfileModal>` redesign.** "Name" input replaced with a read-only "Logged in as" card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed "Cerrar sesión / Sign out" button. `handleSignOut` clears `currentUser` only — leaves cohort token AND profile intact, so signing back in restores everything. New helpers: `class NoMatchError`; `identifyUser({ token, cwid, birthday })`; `loadUser` / `saveUser` / `clearUser` at `USER_KEY` ("bap-user"); `isStaffOrFaculty(user)` for future role-gating (no callers yet); `MONTH_OPTIONS`; `daysInMonthMD`; `SELECT_CHEVRON`. New components: `<UserGate>`. New App-level callbacks: `handleUserAuth`, `handleCohortReset`, `handleSignOut`. `AuthCode.gs` ships with `testReadRoster()` (one-shot OAuth + sanity log) and `validateRoster()` (flags duplicate CWIDs, missing required fields, unrecognized roles, malformed birthdays/emails, non-9-digit CWIDs, leading-zero CWIDs). `CACHE_VERSION` stays at 6 because the content data shape didn't change. **Manual cutover steps after this commit lands:** (a) populate the Roster sheet with the actual cohort, (b) confirm `COHORT_TOKEN` matches in both Script Properties, (c) run `validateRoster()` to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID + birthday after the access code |
 | 2026-05-08 | **Fix: timed events rendered as `1899-12-30` everywhere a time was shown.** The 2026-05-04 Date-handling fix in `Code.gs` formatted every Date cell with `Utilities.formatDate(cell, tz, "yyyy-MM-dd")`. That works for date-only cells, but Google Sheets stores time-only cells as Date objects anchored to its serial-date epoch of December 30, 1899 — so `Calendar.start_time` / `Calendar.end_time` and `Events.time` (which the user routinely enters into time-formatted cells) all came through as the string `"1899-12-30"` instead of `"10:00"`. Visible fallout: the Schedule tab's Weekly Overview showed time pills like `1899-12-30–1899-12-30` next to every program-scheduled event; the Local > This Week sub-tab and the Today "Esta semana" tile did the same; chronological event sort within a day silently degraded because `toMinutes("1899-12-30")` returns null and untimed-first sorting kicked in for everything. **Fix:** in `Code.gs` `readAllTabs()`, branch on `cell.getFullYear() === 1899` for Date cells: format as `HH:mm` for the 1899 sentinel, keep the existing `yyyy-MM-dd` for real dates. Heuristic is safe by construction — Sheets' time epoch is a fixed sentinel, not a real date anyone stores in this app. After re-deploying, run `clearCache()` from the Apps Script editor (or hit the URL once with `?token=…&bust=1`) so the bad cached payload is dropped. No `App.jsx` change; no `CACHE_VERSION` bump; no sheet schema change required (the operations-side workflow doesn't change either — time cells can stay time-formatted) |
 | 2026-05-03 | **Lock down the app behind a cohort passcode.** Three coordinated changes that close the "anyone with the URL gets the data" hole. (1) **Search-engine hygiene.** New `<meta name="robots" content="noindex, nofollow" />` in `index.html` and a new `public/robots.txt` that disallows everything, so the app drops out of Google/Bing indexing entirely and nobody stumbles onto it via search. (2) **Auth gate at the data layer.** `Code.gs` now reads a `COHORT_TOKEN` from `PropertiesService.getScriptProperties()` and rejects any request whose `?token=` query param doesn't match — the script always returns JSON 200 (`doGet` can't set status codes), so a rejection comes back as `{ error: "unauthorized" }` and is detected as such by the client. New `class AuthError extends Error` makes that detection explicit at the `App.jsx` layer instead of relying on string-matching error messages. (3) **UI gate that uses the same token.** New `<PasscodeGate>` component renders before any data is fetched or any cached data is shown — pure gate, no app chrome behind it. Bilingual full-screen treatment (BAP Blue → Ocean → Pep Blue gradient, EB Garamond title pair "Buenos Aires Program" / "Programa de Buenos Aires", DM Mono "Código de acceso / Access code" label, single text input, "Continuar / Continue" button, `<SouthernCrossDecoration>` reused from the header). Submission probes the Apps Script with the entered token via `fetchAllData({ token: candidate })`; success → token saved at `localStorage` key `bap-cohort-token`, data primed via `handleAuth` (`justAuthed` ref short-circuits the would-be-redundant background fetch on the post-auth render), gate dismounts. Failure → bilingual "Código incorrecto / Wrong code" message in a Pep Orange–accented panel, input clears, focus returns. Network errors get their own "No se pudo conectar / Couldn't connect" message so they don't read as a wrong passcode and vice versa. The token is threaded through every `fetchAllData()` and `refreshAllData()` call from `cohortToken` state; AuthError on either path clears the bad token via `clearCohortToken()` and sets `cohortToken` to empty, which triggers an early-return back to the gate on the next render — so a rotated cohort code re-prompts automatically without any explicit logout flow. **The gviz CSV fallback path is gone.** `fetchAllDataConsolidated`, `fetchAllDataPerTab`, `sheetURL`, `fetchTab`, and the `papaparse` import are all removed; `fetchAllData` is now a single auth-aware fetcher against the Apps Script. The `papaparse` dependency was dropped from `package.json` to keep the bundle clean. Preview mode (no `SHEET_ID`) bypasses the gate so the hardcoded `DEFAULT_DATA` preview is still reachable. New helpers: `loadCohortToken`, `saveCohortToken`, `clearCohortToken`, `class AuthError`. New constant: `COHORT_TOKEN_KEY`. New component: `<PasscodeGate>`. The `index.html` preconnect to `docs.google.com` was swapped for `script.google.com` since gviz is no longer hit. **Manual cutover steps after this commit lands:** (a) set `COHORT_TOKEN` in Apps Script Project Settings → Script Properties to the cohort code, (b) re-deploy a new version of the script (URL stays the same), (c) unpublish the spreadsheet (File → Share → Publish to web → Stop) and tighten Share to Restricted, (d) drop the cohort code in the WhatsApp group. **Token rotation each cohort** is just a Script Property edit; no re-deploy. `CACHE_VERSION` stays at 6 because the data shape didn't change |
 | 2026-05-02 | **Three small upgrades.** (1) **Dólar tile gains a 3-hour staleness gate** parallel to the existing 6-hour weather gate. New `DOLAR_STALE_MS = 3 * 60 * 60 * 1000` and `isDolarStale(dolar)` helper sit next to their weather equivalents. New `dolarRefetching` state in `<TodayView>` is tracked separately from `weatherRefetching` so a refetch on one tile doesn't dim the other. New `refetchDolarForStaleTap` handler mirrors `refetchWeatherForStaleTap` exactly: when the cached dólar's `ts` is older than 3 hours and the tile is tapped, a foreground `fetchDolar()` runs; on success state and cache update and `<DolarSheet>` opens (the tap signaled the user wanted the modal); on failure the tile stays dimmed. The threshold is tighter than weather's because Blue/MEP/Oficial can drift 5–10 % over a single trading day, so an aging rate is genuinely misleading at the calculator. (2) **Event cost pills auto-append a USD parenthetical** when the cost string is parseable as ARS and the cached Blue compra rate is available: `$8.000 ARS` renders as `$8.000 ARS · ~$6 USD`. New `parseArsAmount(costStr)` helper sits next to `formatUsd`; conservative parse — skips strings that already cite USD/US$/U$S, requires a `$` prefix, treats `.` as the Argentine thousands separator, and rejects amounts under 10 pesos so a comma-decimal misparse like `$5,50` (regex truncates to `$5`) never renders a meaningless `~$0.00 USD`. `<EventsView>` reads the rate once via `loadTodayCache()` at render and threads it down to each `<EventCard>` as a `dolarCompra` prop, so each card doesn't repeat the localStorage read. Compra (not venta) is used because that's the rate students actually transact at when cashing USD — the same rate the dólar tile and `<DolarSheet>`'s primary result already use. (3) **Reset profile button gains a bilingual `window.confirm()`** before wiping name + enrolled classes + filter toggle, so a fat-finger no longer costs a student five minutes of re-ticking courses. No new dependencies, no sheet schema changes, no `CACHE_VERSION` bump |

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-03 — Lock down the app behind a cohort passcode. Three coordinated changes that close the 'anyone with the URL gets the data' hole. (1) Search-engine hygiene: <meta name='robots' content='noindex, nofollow'> in index.html plus a public/robots.txt that disallows everything, so the app drops out of Google/Bing indexing entirely and nobody stumbles onto it. (2) Auth gate at the data layer: Code.gs now reads a COHORT_TOKEN from PropertiesService and rejects any request whose ?token= query param doesn't match — the script always returns JSON 200 (doGet can't set status codes) so a rejection comes back as { error: 'unauthorized' } and is detected as such. New AuthError class makes that detection explicit at the App.jsx layer. (3) UI gate that uses the same token: new <PasscodeGate> component renders before any data is fetched or any cached data is shown. It probes the Apps Script with the entered code; success → token saved to localStorage at COHORT_TOKEN_KEY ('bap-cohort-token'), data primed via handleAuth (justAuthed ref short-circuits the would-be-redundant background fetch), gate dismounts; failure → bilingual 'Código incorrecto / Wrong code' message, gate stays put. Network errors get their own 'Couldn't connect' message so they don't read as a wrong passcode. The token is threaded through fetchAllData() and refreshAllData() on every call; AuthError on either path clears the bad token and re-renders the gate, so a rotated cohort code re-prompts automatically. The gviz CSV fallback path is gone — fetchAllDataConsolidated/PerTab/sheetURL/fetchTab and the papaparse import all removed, so the Apps Script is the only door. New helpers: loadCohortToken, saveCohortToken, clearCohortToken. Preview mode (no SHEET_ID) bypasses the gate so the hardcoded DEFAULT_DATA preview is still reachable. CACHE_VERSION stays at 6 because the data shape didn't change. Manual deploy steps after this lands: set COHORT_TOKEN='asado-summer-26' in Apps Script Project Settings → Script Properties, re-deploy a new version of the script (URL stays the same), unpublish the sheet from the web (File → Share → Publish to web → Stop) and tighten Share to Restricted so the gviz back door closes too.";
+const BUILD_VERSION = "2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -19,6 +19,19 @@ const SHEET_ID = "1Bn1wpsKr6-3eXRZtH-_6IxmTiQA4I157-nt-0tdmyaA";
 // Deploy via Extensions > Apps Script in the spreadsheet, with
 // "Execute as: Me" and "Who has access: Anyone".
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZUxnUtb39W_LtY_DPdSp9RvUx_pXBqCtx7fnB7O9lqEeSMD5hrbqkQTKa72YdB_E/exec";
+
+// Roster auth endpoint. A separate Apps Script bound to the
+// "BAP App Roster" spreadsheet (physically distinct from the
+// content spreadsheet, for permission isolation — the content
+// script literally has no read access to the roster). Validates
+// CWID + birthday against the Roster tab; called only by the
+// <UserGate> component, never by the data path.
+//   ?action=identify&token=<cohort>&cwid=<cwid>&birthday=<MM-DD>
+//     → { user: { ... } }
+//     → { error: "unauthorized" | "no_match" | "bad_request" }
+// Same COHORT_TOKEN value as APPS_SCRIPT_URL; one cohort code,
+// two homes (one Script Property in each script).
+const AUTH_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCA5tLOB2DdOPLSNwkDSVigSXIvlcCIyhM_-c7CwOe1Oqkdce55VeRboyI4pza9Eaa/exec";
 
 // ============================================================
 // DEFAULT DATA — Used when no Google Sheet is connected
@@ -132,6 +145,21 @@ class AuthError extends Error {
   constructor(message) {
     super(message || "unauthorized");
     this.name = "AuthError";
+  }
+}
+
+// Thrown by identifyUser() when the auth script returns
+// { error: "no_match" } — the CWID isn't in the roster, the
+// birthday doesn't line up, or the row's program_status isn't
+// "active". <UserGate> catches this specifically to show a
+// "We couldn't find you" message rather than a generic network
+// error. Distinct from AuthError so a stale cohort token (which
+// returns "unauthorized") triggers the cohort gate, not the user
+// gate's wrong-credentials panel.
+class NoMatchError extends Error {
+  constructor(message) {
+    super(message || "no_match");
+    this.name = "NoMatchError";
   }
 }
 
@@ -412,6 +440,29 @@ async function fetchAllData({ token, bust = false } = {}) {
   return normalizeData(tabs);
 }
 
+// Hit the auth script's identify endpoint with the cohort token
+// plus a CWID and a MM-DD birthday. Returns the curated user
+// record on success. On rejection, throws AuthError (cohort token
+// stale — cohort code rotated since the student last opened) or
+// NoMatchError (credentials don't match a row). Anything else
+// bubbles as a generic Error so the gate can show "Couldn't
+// connect" rather than a misleading "wrong credentials."
+async function identifyUser({ token, cwid, birthday }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  const params = new URLSearchParams({ action: "identify", token, cwid, birthday });
+  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error) throw new Error(`Auth script error: ${body.error}`);
+  if (!body || !body.user) throw new Error("Auth script returned no user");
+  return body.user;
+}
+
 // ============================================================
 // LOCAL CACHE — Stale-while-revalidate
 // Renders cached data instantly on repeat opens, then refreshes
@@ -485,6 +536,67 @@ function clearCohortToken() {
 }
 
 // ============================================================
+// CURRENT USER — Per-device identity (CWID + birthday auth)
+// The curated row returned by the auth script's identify
+// endpoint, stashed in localStorage so a returning student skips
+// the user gate. Stored at its own key (bap-user), separate from
+// the cohort token and the profile, so each piece can be cleared
+// independently. Cleared in three cases: (1) student taps "Sign
+// out" in the profile editor, (2) the cohort token rotates and
+// the AuthError handler wipes everything, (3) browser site-data
+// reset.
+//
+// Shape (post-Phase 2; Phase 3 wires it up):
+//   { cwid, first_name, last_name, preferred_name, pronouns,
+//     role, email, whatsapp, housing_assignment, tshirt_size,
+//     tshirt_fit, dietary_restrictions, food_allergies,
+//     program_status }
+// ============================================================
+
+const USER_KEY = "bap-user";
+
+function loadUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Sanity floor: a stored user is only valid if it carries the
+    // identity primitives. Anything else and we treat as missing.
+    if (!parsed || typeof parsed !== "object" || !parsed.cwid) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveUser(user) {
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (e) {
+    // Quota exceeded or storage disabled; silently skip
+  }
+}
+
+function clearUser() {
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch (e) {
+    // Storage disabled; silently skip
+  }
+}
+
+// Returns true when the current user is staff or faculty (vs.
+// student). Single source of truth for any role-restricted UI
+// surface added later. Returns false on null/missing user so the
+// preview-mode fallback (no SHEET_ID, no auth) reads as "student"
+// for safety — a future staff-only view stays hidden in preview.
+function isStaffOrFaculty(user) {
+  if (!user || !user.role) return false;
+  const r = String(user.role).trim().toLowerCase();
+  return r === "staff" || r === "faculty";
+}
+
+// ============================================================
 // STUDENT PROFILE — Per-student personalization
 // Stored at its own localStorage key (bap-profile) so it survives
 // CACHE_VERSION bumps to the data cache. Profile is optional: an
@@ -494,11 +606,10 @@ function clearCohortToken() {
 // ============================================================
 
 const PROFILE_KEY = "bap-profile";
-const PROFILE_VERSION = 1;
+const PROFILE_VERSION = 2;
 
 const EMPTY_PROFILE = {
   version: PROFILE_VERSION,
-  name: "",
   enrolledClasses: [],
   filterEnabled: false,
   dismissedAnnouncements: [],
@@ -509,6 +620,20 @@ function loadProfile() {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (!raw) return { ...EMPTY_PROFILE };
     const parsed = JSON.parse(raw);
+
+    // V1 → V2 migration: the `name` field moved to currentUser
+    // (the authoritative roster identity). Salvage enrolledClasses
+    // and filterEnabled rather than nuking the profile so a student
+    // who already personalized doesn't lose their course selections
+    // on the deploy that introduces the user gate.
+    if (parsed.version === 1) {
+      return {
+        ...EMPTY_PROFILE,
+        enrolledClasses: Array.isArray(parsed.enrolledClasses) ? parsed.enrolledClasses : [],
+        filterEnabled: !!parsed.filterEnabled,
+      };
+    }
+
     if (parsed.version !== PROFILE_VERSION) return { ...EMPTY_PROFILE };
     return {
       ...EMPTY_PROFILE,
@@ -2545,7 +2670,7 @@ function DolarSheet({ open, onClose, dolar }) {
 }
 
 // ─── Today View ───
-function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
+function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData }) {
   // Clock tick. Updates every minute so the Próximo countdown stays
   // accurate and the greeting/gradient shifts as the day progresses.
   const [now, setNow] = useState(() => new Date());
@@ -2835,7 +2960,15 @@ function TodayView({ data, onJumpToTab, profile, onRefreshData }) {
       <div style={{
         fontFamily: "'EB Garamond', serif", fontSize: 26, fontWeight: 700,
         lineHeight: 1.05, letterSpacing: -0.4,
-      }}>{profile && profile.name ? `${greeting.es}, ${profile.name}` : greeting.es}</div>
+      }}>{(() => {
+        // Prefer the preferred_name over first_name so a student
+        // who goes by "Cris" instead of "Cristina" sees the right
+        // greeting. Falls back to the bare greeting in preview
+        // mode (no SHEET_ID, currentUser is null) or for users
+        // whose roster row has no first/preferred name.
+        const userName = (currentUser && (currentUser.preferred_name || currentUser.first_name)) || "";
+        return userName ? `${greeting.es}, ${userName}` : greeting.es;
+      })()}</div>
       <div style={{
         fontFamily: "'EB Garamond', serif", fontStyle: "italic",
         fontSize: 16, color: C.fog, marginTop: 4,
@@ -5321,13 +5454,12 @@ function GearIcon({ size = 20, color = "#FFFFFF" }) {
 // their first name, ticks the courses they're enrolled in, and toggles
 // "Show only my classes". Reads/writes the profile via the onChange
 // callback so the App owns the source of truth.
-function ProfileModal({ open, onClose, profile, onChange, classes }) {
+function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut }) {
   if (!open) return null;
 
   const sortedClasses = [...(classes || [])].sort((a, b) => a.code.localeCompare(b.code));
   const enrolledSet = new Set(profile.enrolledClasses || []);
 
-  const setName = (v) => onChange({ ...profile, name: v });
   const toggleClass = (code) => {
     const next = new Set(enrolledSet);
     if (next.has(code)) next.delete(code); else next.add(code);
@@ -5348,14 +5480,18 @@ function ProfileModal({ open, onClose, profile, onChange, classes }) {
   };
   const toggleFilter = () => onChange({ ...profile, filterEnabled: !profile.filterEnabled });
   const clearAll = () => {
-    if (!window.confirm("¿Querés borrar tu perfil? / Reset your profile?\n\nEsto borra tu nombre y las clases marcadas. / This clears your name and selected classes.")) return;
+    if (!window.confirm("¿Querés borrar tu perfil? / Reset your profile?\n\nEsto borra las clases marcadas y la configuración. / This clears your selected classes and settings.")) return;
     onChange({
       ...profile,
-      name: "",
       enrolledClasses: [],
       filterEnabled: false,
       dismissedAnnouncements: [],
     });
+  };
+
+  const handleSignOutClick = () => {
+    if (!window.confirm("¿Cerrar sesión? / Sign out?\n\nVas a tener que ingresar tu CWID y cumpleaños de nuevo. / You'll need to enter your CWID and birthday again.")) return;
+    if (typeof onSignOut === "function") onSignOut();
   };
 
   return (
@@ -5402,30 +5538,55 @@ function ProfileModal({ open, onClose, profile, onChange, classes }) {
 
         {/* Modal body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px 24px" }}>
-          {/* Name */}
-          <div style={{ marginBottom: 22 }}>
+          {/* Logged in as */}
+          {currentUser && (
             <div style={{
-              fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-              letterSpacing: 1.5, color: C.stone, marginBottom: 8,
-            }}>First name</div>
-            <input
-              type="text"
-              value={profile.name || ""}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. María"
-              maxLength={40}
-              style={{
-                width: "100%", boxSizing: "border-box",
-                padding: "10px 14px", borderRadius: 10,
-                border: `1px solid ${C.fog}`, background: C.white,
-                fontFamily: "'EB Garamond', serif", fontSize: 16, color: C.pepBlack,
-                outline: "none",
-              }}
-            />
-            <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.stone, marginTop: 6 }}>
-              Used in your daily greeting on the Today screen.
+              marginBottom: 22, padding: "14px 14px",
+              background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
+            }}>
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+                letterSpacing: 1.5, color: C.stone, marginBottom: 6,
+              }}>
+                Sesión iniciada como&nbsp;/&nbsp;Logged in as
+              </div>
+              <div style={{
+                fontFamily: "'EB Garamond', serif", fontSize: 18, fontWeight: 700, color: C.pepBlack,
+                lineHeight: 1.2,
+              }}>
+                {currentUser.preferred_name || currentUser.first_name}
+                {currentUser.last_name ? ` ${currentUser.last_name}` : ""}
+              </div>
+              <div style={{
+                fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.stone, marginTop: 4,
+                display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6,
+              }}>
+                {currentUser.role && (
+                  <span style={{ textTransform: "capitalize" }}>{currentUser.role}</span>
+                )}
+                {currentUser.role && currentUser.email && (
+                  <span style={{ color: C.fog }}>·</span>
+                )}
+                {currentUser.email && (
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
+                    {currentUser.email}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleSignOutClick}
+                className="bap-press"
+                style={{
+                  marginTop: 12,
+                  background: "none", border: `1px solid ${C.fog}`, borderRadius: 8,
+                  padding: "8px 14px", cursor: "pointer",
+                  fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain, letterSpacing: 0.5,
+                }}
+              >
+                Cerrar sesión&nbsp;/&nbsp;Sign out
+              </button>
             </div>
-          </div>
+          )}
 
           {/* My classes toggle */}
           <div style={{
@@ -5704,6 +5865,313 @@ function PasscodeGate({ onAuth }) {
 }
 
 // ============================================================
+// USER GATE — CWID + birthday identification
+// Renders after <PasscodeGate> succeeds and before any per-user
+// features. Probes the auth script (separate Apps Script bound
+// to the Roster spreadsheet) with the entered CWID + birthday;
+// on success the curated user record is handed up via onAuth so
+// subsequent renders can personalize. Wrong-credentials get a
+// "We couldn't find you" panel; AuthError (cohort token rotated
+// mid-session) bubbles to onCohortReset so the App can bounce
+// the student back to the cohort gate without showing a misleading
+// wrong-credentials message in this gate (the student didn't enter
+// the cohort code here). Network errors get a generic "Couldn't
+// connect" message.
+// ============================================================
+
+const MONTH_OPTIONS = [
+  { value: "01", es: "Enero",      en: "January"   },
+  { value: "02", es: "Febrero",    en: "February"  },
+  { value: "03", es: "Marzo",      en: "March"     },
+  { value: "04", es: "Abril",      en: "April"     },
+  { value: "05", es: "Mayo",       en: "May"       },
+  { value: "06", es: "Junio",      en: "June"      },
+  { value: "07", es: "Julio",      en: "July"      },
+  { value: "08", es: "Agosto",     en: "August"    },
+  { value: "09", es: "Septiembre", en: "September" },
+  { value: "10", es: "Octubre",    en: "October"   },
+  { value: "11", es: "Noviembre",  en: "November"  },
+  { value: "12", es: "Diciembre",  en: "December"  },
+];
+
+// Days available in the day dropdown for a given month. February
+// always returns 29 so leap-year birthdays are pickable; the
+// auth script's parseBirthdayMD handles 02-29 either way. Returns
+// 31 when month is unset so the day dropdown stays fully populated
+// until a month is chosen.
+function daysInMonthMD(monthStr) {
+  if (!monthStr) return 31;
+  const m = parseInt(monthStr, 10);
+  if (m === 2) return 29;
+  if (m === 4 || m === 6 || m === 9 || m === 11) return 30;
+  return 31;
+}
+
+// Inline chevron used as the trailing affordance on the month/day
+// selects. Stripping the native appearance makes the closed
+// selects match the CWID input visually; the chevron signals
+// "this is a picker." The native picker UI still opens on tap.
+const SELECT_CHEVRON = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>")`;
+
+function UserGate({ cohortToken, onAuth, onCohortReset }) {
+  const [cwid, setCwid] = useState("");
+  const [month, setMonth] = useState("");
+  const [day, setDay] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorKey, setErrorKey] = useState(""); // "" | "wrong" | "network"
+  const cwidInputRef = useRef(null);
+
+  useEffect(() => {
+    if (cwidInputRef.current) cwidInputRef.current.focus();
+  }, []);
+
+  // If the user picks a month that has fewer days than the day
+  // they previously selected (e.g. picked 31, then changed month
+  // to April), clear the day so the dropdown resets cleanly
+  // instead of holding an out-of-range value.
+  const dayMax = daysInMonthMD(month);
+  useEffect(() => {
+    if (day && parseInt(day, 10) > dayMax) {
+      setDay("");
+    }
+  }, [day, dayMax]);
+
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    const trimmedCwid = cwid.trim();
+    if (!trimmedCwid || !month || !day || submitting) return;
+    setSubmitting(true);
+    setErrorKey("");
+    const birthday = `${month}-${String(day).padStart(2, "0")}`;
+    try {
+      const user = await identifyUser({ token: cohortToken, cwid: trimmedCwid, birthday });
+      onAuth(user);
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        // Cohort token rotated since this student entered it.
+        // Hand back to the cohort gate; do NOT show a wrong-
+        // credentials panel here, that would mislead the student
+        // about which thing went wrong.
+        if (typeof onCohortReset === "function") onCohortReset();
+        return;
+      }
+      if (err && err.name === "NoMatchError") {
+        setErrorKey("wrong");
+      } else {
+        setErrorKey("network");
+      }
+      setSubmitting(false);
+    }
+  }, [cwid, month, day, submitting, cohortToken, onAuth, onCohortReset]);
+
+  const errorText = errorKey === "wrong"
+    ? { es: "No te encontramos. Verificá tu CWID y cumpleaños.", en: "We couldn't find you. Check your CWID and birthday." }
+    : errorKey === "network"
+    ? { es: "No se pudo conectar. Probá de nuevo.", en: "Couldn't connect. Try again." }
+    : null;
+
+  const canSubmit = !!cwid.trim() && !!month && !!day && !submitting;
+
+  const fieldBorder = errorKey === "wrong" ? C.pepOrange : "rgba(255,255,255,0.25)";
+
+  return (
+    <div style={{
+      maxWidth: 480, margin: "0 auto", minHeight: "100vh",
+      background: `linear-gradient(160deg, ${C.pepBlue} 0%, ${C.ocean} 60%, ${C.bapBlue} 100%)`,
+      color: C.white, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "32px 24px",
+      position: "relative", overflow: "hidden",
+    }}>
+      <SouthernCrossDecoration />
+      <img src={LOGO_URI} alt="Buenos Aires Program" style={{
+        width: 96, height: 96, borderRadius: "50%", marginBottom: 24,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+      }} />
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+        letterSpacing: 2.5, color: C.bapBlue, marginBottom: 6, textAlign: "center",
+      }}>
+        Buenos Aires Program
+      </div>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontSize: 32, fontWeight: 700,
+        lineHeight: 1.1, marginBottom: 4, textAlign: "center",
+      }}>
+        ¡Hola!
+      </div>
+      <div style={{
+        fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 18,
+        color: C.fog, marginBottom: 10, textAlign: "center",
+      }}>
+        Hello!
+      </div>
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+        letterSpacing: 1.5, color: C.fog, marginBottom: 32, textAlign: "center",
+        maxWidth: 320, lineHeight: 1.5,
+      }}>
+        Decinos quién sos&nbsp;/&nbsp;Tell us who you are
+      </div>
+
+      <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: 320 }}>
+        {/* CWID */}
+        <label htmlFor="bap-cwid" style={{
+          display: "block", fontFamily: "'DM Mono', monospace", fontSize: 11,
+          textTransform: "uppercase", letterSpacing: 2, color: C.bapBlue,
+          marginBottom: 8, textAlign: "center",
+        }}>
+          CWID
+        </label>
+        <input
+          ref={cwidInputRef}
+          id="bap-cwid"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={cwid}
+          onChange={(e) => {
+            // Strip anything non-digit on input so a paste containing
+            // dashes ("123-456-789"), spaces, or stray letters cleans
+            // up automatically. CWIDs are 9-digit numerics with no
+            // leading zeros, but the auth script normalizes both
+            // sides for leading-zero tolerance just in case.
+            const digits = e.target.value.replace(/\D/g, "");
+            setCwid(digits);
+            if (errorKey) setErrorKey("");
+          }}
+          disabled={submitting}
+          placeholder="123456789"
+          maxLength={9}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 12,
+            border: `1px solid ${fieldBorder}`,
+            background: "rgba(255,255,255,0.10)", color: C.white,
+            fontFamily: "'Roboto', sans-serif", fontSize: 17, letterSpacing: 0.5,
+            outline: "none", textAlign: "center",
+            boxSizing: "border-box",
+          }}
+        />
+
+        {/* Birthday */}
+        <label htmlFor="bap-bday-month" style={{
+          display: "block", fontFamily: "'DM Mono', monospace", fontSize: 11,
+          textTransform: "uppercase", letterSpacing: 2, color: C.bapBlue,
+          marginTop: 20, marginBottom: 8, textAlign: "center",
+        }}>
+          Cumpleaños&nbsp;/&nbsp;Birthday
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <select
+            id="bap-bday-month"
+            value={month}
+            onChange={(e) => { setMonth(e.target.value); if (errorKey) setErrorKey(""); }}
+            disabled={submitting}
+            style={{
+              flex: 1.5, padding: "14px 16px", paddingRight: 36, borderRadius: 12,
+              border: `1px solid ${fieldBorder}`,
+              background: "rgba(255,255,255,0.10)", color: month ? C.white : "rgba(255,255,255,0.6)",
+              fontFamily: "'Roboto', sans-serif", fontSize: 16,
+              outline: "none", appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+              cursor: submitting ? "default" : "pointer",
+              boxSizing: "border-box",
+              backgroundImage: SELECT_CHEVRON,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 14px center",
+              backgroundSize: "10px 6px",
+            }}
+          >
+            <option value="" style={{ color: C.pepBlack }}>Mes / Month</option>
+            {MONTH_OPTIONS.map((m) => (
+              <option key={m.value} value={m.value} style={{ color: C.pepBlack }}>
+                {m.es} / {m.en}
+              </option>
+            ))}
+          </select>
+          <select
+            value={day}
+            onChange={(e) => { setDay(e.target.value); if (errorKey) setErrorKey(""); }}
+            disabled={submitting}
+            style={{
+              flex: 1, padding: "14px 16px", paddingRight: 32, borderRadius: 12,
+              border: `1px solid ${fieldBorder}`,
+              background: "rgba(255,255,255,0.10)", color: day ? C.white : "rgba(255,255,255,0.6)",
+              fontFamily: "'Roboto', sans-serif", fontSize: 16,
+              outline: "none", appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+              cursor: submitting ? "default" : "pointer",
+              boxSizing: "border-box",
+              backgroundImage: SELECT_CHEVRON,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 12px center",
+              backgroundSize: "10px 6px",
+            }}
+          >
+            <option value="" style={{ color: C.pepBlack }}>Día / Day</option>
+            {Array.from({ length: dayMax }, (_, i) => {
+              const d = String(i + 1).padStart(2, "0");
+              return (
+                <option key={d} value={d} style={{ color: C.pepBlack }}>
+                  {i + 1}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {errorText && (
+          <div style={{
+            marginTop: 14, padding: "10px 12px", borderRadius: 8,
+            background: "rgba(227, 82, 5, 0.18)",
+            border: `1px solid ${C.pepOrange}`,
+            fontFamily: "'Roboto', sans-serif", fontSize: 13,
+            color: C.white, textAlign: "center", lineHeight: 1.4,
+          }}>
+            {errorText.es}
+            <span style={{ color: C.fog, margin: "0 6px" }}>/</span>
+            <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic" }}>
+              {errorText.en}
+            </span>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="bap-press"
+          style={{
+            marginTop: 18, width: "100%", padding: "14px 16px",
+            borderRadius: 12, border: "none", cursor: canSubmit ? "pointer" : "default",
+            background: canSubmit ? C.bapBlue : "rgba(255,255,255,0.15)",
+            color: canSubmit ? C.pepBlue : "rgba(255,255,255,0.5)",
+            fontFamily: "'Roboto', sans-serif", fontSize: 16, fontWeight: 700,
+            letterSpacing: 0.3,
+          }}
+        >
+          {submitting ? "Verificando…  /  Checking…" : "Continuar  /  Continue"}
+        </button>
+      </form>
+
+      <div style={{
+        marginTop: 28, fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+        fontSize: 13, color: C.fog, textAlign: "center", maxWidth: 320, lineHeight: 1.5,
+      }}>
+        ¿No te encontramos? Escribinos a{" "}
+        <a
+          href="mailto:buenosaires@pepperdine.edu"
+          style={{ color: C.fog, textDecoration: "underline" }}
+        >
+          buenosaires@pepperdine.edu
+        </a>
+        <br />
+        <span style={{ fontSize: 12 }}>Can't find you? Email us.</span>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 
@@ -5716,6 +6184,15 @@ export default function App() {
   // the <PasscodeGate> instead of the main UI. Cleared on AuthError
   // so a rotated cohort code re-prompts automatically.
   const [cohortToken, setCohortToken] = useState(() => loadCohortToken());
+
+  // Current user identity. The curated row returned by the auth
+  // script's identify endpoint, lazy-init from localStorage so a
+  // returning student skips the user gate. When non-null AND a
+  // cohort token is present, the App proceeds to the main UI;
+  // otherwise the App renders <UserGate> after <PasscodeGate>
+  // succeeds. Cleared together with the cohort token on AuthError
+  // so a rotated cohort code resets both gates in lockstep.
+  const [currentUser, setCurrentUser] = useState(() => loadUser());
 
   // Set inside handleAuth so the post-auth render doesn't immediately
   // re-fetch what the gate's validation probe just retrieved.
@@ -5871,9 +6348,14 @@ export default function App() {
       .catch((err) => {
         if (err && err.name === "AuthError") {
           // Token is no longer valid (cohort rotation, manual revoke).
-          // Clear it and re-render the gate so the student can re-enter.
+          // Clear it AND the cached user so a rotated cohort code
+          // resets both gates in lockstep — otherwise the student
+          // would re-enter the cohort code and skip straight to a
+          // possibly-stale identity from a previous cohort.
           clearCohortToken();
           setCohortToken("");
+          clearUser();
+          setCurrentUser(null);
           return;
         }
         console.error("Sheet fetch failed:", err);
@@ -5896,6 +6378,43 @@ export default function App() {
     setCohortToken(token);
   }, []);
 
+  // Called by <UserGate> on successful identification. Stash the
+  // curated user record and dismount the gate. No data priming
+  // needed here — the cohort gate already fetched and primed the
+  // full content payload, so the main UI renders immediately with
+  // the cached data alongside the freshly known identity. No
+  // justAuthed ref needed for the same reason.
+  const handleUserAuth = useCallback((user) => {
+    saveUser(user);
+    setCurrentUser(user);
+  }, []);
+
+  // Called by <UserGate> when its identify call returns AuthError —
+  // i.e., the cohort token was rotated between the cohort gate
+  // succeeding and the user gate submitting (rare, but possible).
+  // Wipe the cohort token so the App falls back to <PasscodeGate>
+  // on the next render. Do NOT touch `currentUser`: there isn't
+  // one yet (the user gate is what was being shown), and a stale
+  // cached user from a prior session was already cleared by the
+  // data-fetch AuthError handler that runs in parallel.
+  const handleCohortReset = useCallback(() => {
+    clearCohortToken();
+    setCohortToken("");
+  }, []);
+
+  // Called by <ProfileModal>'s sign-out button. Clears the user
+  // record but leaves the cohort token in place — the student is
+  // still in the cohort, just identifying as nobody on this device
+  // until they enter CWID + birthday again. Next render of <App>
+  // sees cohortToken set + currentUser empty, falls through to
+  // <UserGate>. Profile (enrolledClasses, filterEnabled) is left
+  // untouched: signing out and back in shouldn't reset what
+  // courses the student ticked.
+  const handleSignOut = useCallback(() => {
+    clearUser();
+    setCurrentUser(null);
+  }, []);
+
   // Manual refresh path used by the Today pull-to-refresh gesture.
   // Calls fetchAllData with bust=true so the Apps Script's 1-hour
   // CacheService entry is bypassed and the spreadsheet is re-read on
@@ -5913,8 +6432,12 @@ export default function App() {
       saveCache(d);
     } catch (err) {
       if (err && err.name === "AuthError") {
+        // Match the data-fetch AuthError handler: cohort token
+        // rotation should reset both gates, not just the cohort one.
         clearCohortToken();
         setCohortToken("");
+        clearUser();
+        setCurrentUser(null);
         return;
       }
       console.error("Manual refresh failed:", err);
@@ -5953,12 +6476,29 @@ export default function App() {
   // Treat "live" and "refreshing" as the healthy/synced visual state
   const isHealthy = status === "live" || status === "refreshing";
 
-  // Auth gate. With SHEET_ID configured but no cohort token in
-  // localStorage, render <PasscodeGate> in place of the main UI.
-  // Preview mode (no SHEET_ID) skips the gate so the hardcoded
-  // DEFAULT_DATA preview is still reachable.
+  // Auth gate. Three cases, in order:
+  //   1. No SHEET_ID configured → preview mode, skip both gates.
+  //   2. SHEET_ID set but no cohort token → <PasscodeGate>. Once
+  //      the cohort code is entered, the gate's probe fetch primes
+  //      content data into state via handleAuth.
+  //   3. SHEET_ID set, cohort token present, but no current user →
+  //      <UserGate>. The student enters CWID + birthday; the auth
+  //      script (separate from the content script, see Roster
+  //      docs) returns the curated user record on match, which is
+  //      stashed via handleUserAuth.
+  // Once both gates clear (or the app is in preview mode), the
+  // main UI renders below.
   if (SHEET_ID && !cohortToken) {
     return <PasscodeGate onAuth={handleAuth} />;
+  }
+  if (SHEET_ID && cohortToken && !currentUser) {
+    return (
+      <UserGate
+        cohortToken={cohortToken}
+        onAuth={handleUserAuth}
+        onCohortReset={handleCohortReset}
+      />
+    );
   }
 
   return (
@@ -6015,7 +6555,7 @@ export default function App() {
         ) : (
           <>
             {tab !== "today" && <SectionTitle tabKey={tab} />}
-            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} onRefreshData={refreshAllData} />}
+            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} currentUser={currentUser} onRefreshData={refreshAllData} />}
             {tab === "schedule" && <ScheduleView data={data} profile={profile} onOpenSettings={() => setProfileOpen(true)} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
@@ -6075,6 +6615,8 @@ export default function App() {
         profile={profile}
         onChange={updateProfile}
         classes={data.classes}
+        currentUser={currentUser}
+        onSignOut={handleSignOut}
       />
     </div>
   );

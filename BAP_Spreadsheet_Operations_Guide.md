@@ -15,11 +15,20 @@ Anyone with edit access to the sheet can use this guide; no code knowledge is re
 
 ## How the sheet and the app talk to each other
 
-The app reads the sheet's contents every time a student opens it (via a small Apps Script Web App that returns all tabs as one JSON blob), caches the response on the device, and rerenders. There is no "publish" button; saving a cell is the publish.
+**Two spreadsheets, by design.** As of 2026-05-09 the app reads from two separate Google Sheets, each with its own bound Apps Script:
+
+1. **Content sheet** — class schedules, calendar, contacts, etc. Most of this guide is about this sheet. All the public-ish program content lives here.
+2. **Roster sheet** — the per-person identity table (CWIDs, birthdays, names, dietary restrictions, t-shirt sizes, etc.). Used only by the user gate at sign-in. See "The Roster spreadsheet" below.
+
+The two-sheet split is intentional. The content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. As Director, you'll spend most of your time in the content sheet (mid-program updates, calendar adds, announcements); the Roster gets touched at the start of each cohort and occasionally for late-add students.
+
+The app reads the content sheet every time a student opens it (via a small Apps Script Web App that returns all tabs as one JSON blob), caches the response on the device, and rerenders. There is no "publish" button; saving a cell is the publish.
 
 **Edits take up to 1 hour to appear in the app.** The Apps Script caches its response for an hour to avoid re-reading the spreadsheet on every student open. To force fresh content immediately after an important edit, append `?bust=1&token=<cohort-passcode>` to the Apps Script Web App URL once in your browser; the next student fetch will pick up the new data. The Apps Script URL is stored in `App.jsx`; ask the developer for the current value if you need it. Routine edits don't need this; an hour is fine.
 
-**The app is locked behind a cohort passcode.** As of 2026-05-03 the spreadsheet is no longer published to the web; the Apps Script is the only way into the data, and it requires a token. The spreadsheet's sharing settings should stay at "Restricted" (only people you explicitly add). If you ever need to "Publish to web" or open up sharing again for some external workflow, that re-opens the back door — coordinate with the developer first.
+**The Roster auth script does NOT cache.** Identify happens roughly once per device per cohort, so per-request reads are negligible. Roster edits propagate immediately — useful when adding a late-add student or fixing a birthday typo mid-cohort.
+
+**The app is locked behind a cohort passcode plus per-user identification.** As of 2026-05-03 the spreadsheets are no longer published to the web; the Apps Scripts are the only way into the data, and both require the cohort token. As of 2026-05-09 there's a second gate after the cohort passcode: students enter their CWID + birthday, which is matched against the Roster. Both spreadsheets' sharing settings should stay at "Restricted" (only people you explicitly add). If you ever need to "Publish to web" or open up sharing on either sheet, that re-opens a back door — coordinate with the developer first.
 
 Three things to internalize:
 
@@ -42,7 +51,8 @@ When a new cohort is about to start, work through these in order. The first grou
 | **Calendar** | Replace all program-specific events with the new semester's dates: arrival, orientation, classes-begin, study tours, excursions, milestones, classes-end, departure. | Powers the Calendar tab and the Schedule tab's Weekly Overview. Old dates are misleading. |
 | **Contacts** | Verify program director, assistant director, on-call phone, and any staff-turnover entries. Update `whatsapp` numbers in particular. | The Contacts tab is the emergency reference. Out-of-date numbers are dangerous. |
 | **Birthdays** | Clear the previous cohort's student rows and add the new cohort. Only include students who've affirmatively opted in. Staff and faculty rows can typically remain. | The Today tab birthday card matches by MM-DD; old students from a past cohort would still appear if not removed. |
-| **Cohort passcode** | Rotate the `COHORT_TOKEN` Script Property in the Apps Script editor (Extensions → Apps Script → ⚙️ Project Settings → Script Properties → edit `COHORT_TOKEN`) and announce the new code in the cohort's WhatsApp group on the first day of orientation. **No re-deploy needed** — Script Properties are read at request time. The previous cohort's stored tokens fail with AuthError on the next open and the app re-prompts automatically. | Closes the door on previous-cohort devices that still have the app cached. The passcode is the single credential gating the app's data; rotating it per cohort is the cheap way to keep last semester's students from passively picking up this semester's content. |
+| **Roster** *(separate sheet)* | Open the **BAP App Roster** spreadsheet (this is a different file from the content sheet). Clear the previous cohort's rows and paste in the new cohort with: `cwid` (9-digit numeric, no leading zeros), `first_name`, `last_name`, `preferred_name` (optional), `pronouns` (optional), `birthday` (MM-DD), `role` (`student` / `staff` / `faculty`), `email`, `whatsapp`, `housing_assignment`, `tshirt_size`, `tshirt_fit` (optional), `dietary_restrictions`, `food_allergies`, `program_status` (default `active`). Add yourself + assistant director + any other staff/faculty too. Then run `validateRoster()` from the auth script's editor (Roster sheet → Extensions → Apps Script → function dropdown → validateRoster → Run) and confirm no warnings. | Without a Roster row, a student can't get past the user gate. Late-adds and corrections are immediate (no cache); they'll work the next time the student opens the app. |
+| **Cohort passcode** | Rotate the `COHORT_TOKEN` Script Property in **both** Apps Script editors (content script bound to the content sheet, AND auth script bound to the Roster sheet) — same value in both. (Extensions → Apps Script → ⚙️ Project Settings → Script Properties → edit `COHORT_TOKEN`.) Announce the new code in the cohort's WhatsApp group on the first day of orientation. **No re-deploy needed** — Script Properties are read at request time. The previous cohort's stored tokens fail with AuthError on the next open and both gates re-prompt automatically. | Closes the door on previous-cohort devices that still have the app cached. The passcode + roster pair is the credential gating the app; rotating per cohort is the cheap way to keep last semester's students from passively picking up this semester's content. |
 
 ### Tier 2 — should update / verify each cohort
 
@@ -79,12 +89,63 @@ These are what you'll touch *during* a cohort, not just at startup.
 - **Events.** Whenever a notable local happening comes across your radar (festivals, concerts, exhibits), add a row. Students see these on the Today tab's "This week" tile and the Local tab's "This Week" sub-tab.
 - **Tips.** When a cultural fact or porteño phrase comes up in conversation that you wish you'd told students earlier, add it. The pool grows over time.
 - **Finals.** As the registrar publishes the final-exam schedule, fill in `final_date` and `final_time` on each row of the Classes tab. The TBD pills update to concrete dates the next time the app refreshes. If finals get reshuffled, just update the cells; the FinalsCard and Today tile re-render automatically. To force-refresh ahead of the 1-hour cache window for a high-stakes update, hit the Apps Script URL with `?bust=1` once.
+- **Roster maintenance** *(separate sheet).* Late-add students get a new row. Withdrawn students get their `program_status` flipped from `active` to `withdrawn` — this prevents them from signing back in mid-cohort but preserves their history. Birthday/CWID typos can be fixed in place; no cache to bust, the auth script reads the sheet on every identify call. After a meaningful edit, run `validateRoster()` from the auth script editor to surface any new typos (duplicate CWIDs, malformed birthdays, etc.).
 
 ---
 
-## Tab-by-tab reference
+## The Roster spreadsheet *(separate file)*
 
-Tabs marked **(required)** must exist. Tabs marked **(optional)** can be missing without breaking anything.
+The Roster lives in its own spreadsheet ("BAP App Roster") with one tab. The auth script is bound to this file; the content script can't see it.
+
+### Roster *(required, separate spreadsheet)*
+
+| Column | Required | Notes |
+|--------|----------|-------|
+| `cwid` | Yes | 9-digit numeric, no leading zeros (e.g. `123456789`). Format the column as **Plain text** so leading zeros aren't stripped on paste. |
+| `first_name` | Yes | What the Today greeting falls back to if `preferred_name` is blank. |
+| `last_name` | Yes | Used in the ProfileModal "Logged in as" card and any future formal contexts. |
+| `preferred_name` | No | When set, used in the Today greeting and identity card *instead of* `first_name`. Useful for "Cristina goes by Cris," "James goes by Jim," etc. |
+| `pronouns` | No | Free text; e.g. `she/her`, `they/them`. Captured-but-unused in v1; reserved for future Director-facing surfaces. |
+| `birthday` | Yes | The auth second factor. Plain text. Accepts `MM-DD` (e.g. `05-12`), `M-D`, or full `YYYY-MM-DD` (year stripped at parse). |
+| `role` | Yes | One of: `student` / `staff` / `faculty`. Drives any future role-based UI gating. |
+| `email` | Yes | Pepperdine email. Displayed in the ProfileModal identity card. |
+| `whatsapp` | No | International format (e.g. `+5491144197092`). Captured-but-unused in v1; reserved for future Director-facing contact features. |
+| `housing_assignment` | No | Free text (e.g. `Homestay – Recoleta (Familia García)`). Captured-but-unused in v1. |
+| `tshirt_size` | No | `XS` / `S` / `M` / `L` / `XL` / `2XL`. Captured-but-unused in v1; reserved for future merch-coordination features. |
+| `tshirt_fit` | No | `unisex` / `women's` if you ever order both. |
+| `dietary_restrictions` | No | Free text, kept short (e.g. `vegetarian`). Reserved for future RSVP / dinner-menu features. |
+| `food_allergies` | No | Free text. Separate from `dietary_restrictions` because severity matters. |
+| `program_status` | No | `active` (default if blank) / `withdrawn` / `completed`. Non-active rows can't sign in — useful for keeping historical rosters in this sheet without the app treating them as current. |
+
+**What the Roster does NOT contain.** Tier-C fields like emergency contacts, medical notes, passport numbers, insurance IDs, and blood type are deliberately not in this sheet. They belong to Pepperdine's existing intake systems or a separately-controlled Director-only sheet, not to the app's auth-side roster. The reasoning is calibrated to the threat model: the Roster is the table the auth script reads; broader scope = broader leak surface.
+
+**Auth flow refresher** (the user-side experience this drives):
+
+1. Student opens the app, enters the cohort passcode (gate 1, content data unlocks).
+2. Student enters their CWID + birthday (gate 2, the auth script looks the row up in this sheet).
+3. App proceeds with their curated row in localStorage. Their first name powers the Today greeting; their role drives any role-gated UI; the rest is reserved for upcoming features.
+
+**Where it shows in the app:**
+
+- Today greeting: `currentUser.preferred_name || currentUser.first_name`
+- ProfileModal "Logged in as" card: name, role, email, plus Sign-out button
+
+**Privacy guidance:**
+
+- This sheet is more sensitive than the content sheet. Keep sharing **Restricted** to Director (and Assistant Director if appropriate). Do not publish to web. Do not loosen sharing for any external workflow without coordinating with the developer.
+- Don't add Tier-C PII (passport, medical, financial, FERPA-touching) to this sheet. The schema is designed around low-stakes identity data only; broadening it would change the calibration meaningfully.
+- The student app receives only the curated subset (no `birthday` echoed back, no fields outside `CURATED_FIELDS` in `AuthCode.gs`); but anyone with edit access to this sheet sees the full row.
+
+**Editor-side validators:**
+
+- Open the Roster spreadsheet → Extensions → Apps Script → function dropdown → run `validateRoster()`. Output goes to the execution log (View → Execution log). Flags duplicate CWIDs, missing required fields, unrecognized roles, malformed birthdays/emails, CWIDs that aren't 9 digits, CWIDs with leading zeros.
+- Run after any meaningful edit (cohort reset, late-add, typo fix).
+
+---
+
+## Tab-by-tab reference *(content spreadsheet)*
+
+The rest of this section is about the **content** spreadsheet (separate from the Roster above). Tabs marked **(required)** must exist. Tabs marked **(optional)** can be missing without breaking anything.
 
 ### Settings *(required)*
 
@@ -376,4 +437,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-05-03.*
+*Last updated: 2026-05-09.*
