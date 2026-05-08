@@ -116,13 +116,27 @@ function readAllTabs() {
         if (cell == null) {
           value = "";
         } else if (cell instanceof Date) {
-          // Date cells must come through as YYYY-MM-DD strings —
-          // App.jsx normalizeData does `r.date.trim().slice(0, 10)`
-          // and downstream date arithmetic assumes ISO-like input.
-          // String(dateObj) would emit "Sun May 25 2026 00:00:00
-          // GMT-0300 ..." which slices to "Sun May 25" and parses
-          // as year 2001 in V8, blowing up everywhere downstream.
-          value = Utilities.formatDate(cell, tz, "yyyy-MM-dd");
+          // Date cells must come through as the right kind of string.
+          // Two flavors live in the sheet:
+          //   (a) Date-formatted cells (Calendar.date, Classes.start_date,
+          //       etc.) → format as YYYY-MM-DD. App.jsx normalizeData does
+          //       `r.date.trim().slice(0, 10)` and downstream date math
+          //       assumes ISO-like input. String(dateObj) would emit
+          //       "Sun May 25 2026 00:00:00 GMT-0300 ..." which slices to
+          //       "Sun May 25" and parses as year 2001 in V8 — month
+          //       grouping and multi-day spans blow up from there.
+          //   (b) Time-formatted cells (Calendar.start_time/end_time,
+          //       Events.time, Classes.final_time when entered as a time)
+          //       → format as HH:mm. Google Sheets stores time-only
+          //       values as Dates anchored to its serial-date epoch of
+          //       December 30, 1899; any Date whose year is 1899 is
+          //       definitely a time, not a real date. Without this branch
+          //       every timed event renders as "1899-12-30" in the UI.
+          if (cell.getFullYear() === 1899) {
+            value = Utilities.formatDate(cell, tz, "HH:mm");
+          } else {
+            value = Utilities.formatDate(cell, tz, "yyyy-MM-dd");
+          }
         } else {
           value = String(cell);
         }
