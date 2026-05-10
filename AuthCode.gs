@@ -400,6 +400,7 @@ function buildPromptResponse(prompt, fields, responses, submittedAt) {
     surface: String(prompt.surface || "today").trim().toLowerCase(),
     start_date: String(prompt.start_date || "").trim(),
     end_date: String(prompt.end_date || "").trim(),
+    end_time: String(prompt.end_time || "").trim(),
     fields: fields,
     responses: responses || {},
     submitted_at: submittedAt || "",
@@ -435,13 +436,24 @@ function userMatchesAudience(user, prompt) {
 
 // Inclusive on both ends. Blank dates mean "no gate on that side";
 // both blank means "always active" (used by evergreen profile
-// prompts like t-shirt size).
+// prompts like t-shirt size). Optional end_time (HH:mm) tightens
+// the close on end_date down to a specific time of day — useful for
+// "RSVP closes at 8 PM" style cutoffs. Without end_time the prompt
+// stays active through end-of-day on end_date.
 function promptIsActive(prompt, todayStr) {
   const start = String(prompt.start_date || "").trim();
   const end = String(prompt.end_date || "").trim();
+  const endTime = String(prompt.end_time || "").trim();
   if (!start && !end) return true;
   if (start && todayStr < start) return false;
   if (end && todayStr > end) return false;
+  // We're inside [start, end] inclusive. If end_time is set AND
+  // today === end_date, do an additional time-of-day check so the
+  // prompt closes at that exact moment rather than end-of-day.
+  if (end && endTime && todayStr === end) {
+    const nowHm = Utilities.formatDate(new Date(), resolveTimeZone(), "HH:mm");
+    if (nowHm > endTime) return false;
+  }
   return true;
 }
 
@@ -1007,6 +1019,7 @@ function validatePrompts() {
 
     const startDate = String(p.start_date || "").trim();
     const endDate = String(p.end_date || "").trim();
+    const endTime = String(p.end_time || "").trim();
     if (startDate && !ISO_DATE_RE.test(startDate)) {
       issues.push("Prompts row " + sheetRow + " ('" + pid + "'): start_date '" + startDate + "' is not YYYY-MM-DD");
     }
@@ -1015,6 +1028,12 @@ function validatePrompts() {
     }
     if (startDate && endDate && ISO_DATE_RE.test(startDate) && ISO_DATE_RE.test(endDate) && endDate < startDate) {
       issues.push("Prompts row " + sheetRow + " ('" + pid + "'): end_date '" + endDate + "' is before start_date '" + startDate + "'");
+    }
+    if (endTime && !/^\d{1,2}:\d{2}$/.test(endTime)) {
+      issues.push("Prompts row " + sheetRow + " ('" + pid + "'): end_time '" + endTime + "' is not HH:mm (24-hour, e.g. 20:00)");
+    }
+    if (endTime && !endDate) {
+      issues.push("Prompts row " + sheetRow + " ('" + pid + "'): end_time set but end_date is blank — end_time has no effect without an end_date");
     }
 
     const audience = String(p.audience || "all").trim().toLowerCase();

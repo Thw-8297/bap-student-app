@@ -165,6 +165,7 @@ One row per data-collection question you want to ask students. A prompt can be a
 | `audience` | No | `all` (default if blank) → everyone in the cohort. Or `student` / `staff` / `faculty` (or comma-list of roles). Or a comma-list of CWIDs for narrow targeting. Mix freely. Case-insensitive. |
 | `start_date` | No | `YYYY-MM-DD`. Prompt only appears on or after this date. Blank → no start gate. |
 | `end_date` | No | `YYYY-MM-DD`. Prompt vanishes after this date and submissions become forbidden. Blank → no end gate. Both `start_date` and `end_date` blank → always active (used by evergreen profile prompts like t-shirt size). |
+| `end_time` | No | `HH:mm` (24-hour, e.g. `20:00` for 8 PM). Tightens the close on `end_date` from end-of-day to a specific time of day — useful for "RSVP closes at 8 PM the night before" style cutoffs. Blank keeps the end-of-day default. Only meaningful when `end_date` is also set; the validator flags `end_time` without `end_date` because it has no effect. The student-facing app shows a subtle "Cierra hoy a las 20:00" caption beneath the prompt title once a cutoff is set. |
 | `category` | No | `profile` / `meal` / `activity` / `feedback`. Free-form; reserved for future grouping/filtering. Helpful for your own organization. |
 | `surface` | No | `today` (default if blank) / `profile` / `both`. Drives where the prompt renders: `today` shows on the Today tab between the activity card and Finals tile (good for time-bounded prompts like RSVPs); `profile` shows inside the Profile/Settings modal (good for evergreen fields students should be able to revisit anytime); `both` shows in both places. |
 
@@ -205,7 +206,7 @@ One row per input box inside a prompt. Multiple rows joined to a single `Prompts
 
   | Tab | Key columns |
   |---|---|
-  | Prompts | `welcome_dinner_2026` · "Cena de bienvenida" · category=`meal` · start=2026-05-12 · end=2026-05-15 · surface=`today` |
+  | Prompts | `welcome_dinner_2026` · "Cena de bienvenida" · category=`meal` · start=2026-05-12 · end=2026-05-15 · end_time=`20:00` · surface=`today` |
   | PromptFields | `welcome_dinner_2026` · `appetizer` · 1 · "Entrada" · `single_select` · `Empanadas;Provoleta;Ensalada` · required=TRUE |
   | PromptFields | `welcome_dinner_2026` · `main` · 2 · "Plato" · `single_select` · `Bife de chorizo;Milanesa;Pasta;Vegetariano` · required=TRUE |
   | PromptFields | `welcome_dinner_2026` · `dessert` · 3 · "Postre" · `single_select` · `Flan;Helado;Fruta` · required=TRUE |
@@ -541,4 +542,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-05-09 (revised same day for prompts + responses).*
+*Last updated: 2026-05-09 (revised same day for prompts + responses, and again for the optional `end_time` cutoff column).*
