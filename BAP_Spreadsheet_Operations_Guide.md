@@ -62,6 +62,7 @@ When a new cohort is about to start, work through these in order. The first grou
 | **Holidays** | If switching to a new calendar year, replace with that year's feriados. Argentine national holidays change yearly because of trasladable dates and decreed días no laborables turísticos. | Drives class-cancellation logic and the Today holiday card. |
 | **FAQ** | Skim for cohort-specific outdated info (specific dates, names, deprecated policies). | Cohort-to-cohort details (housing assignments, specific orientation logistics) drift fast. |
 | **Announcements** | Clear all rows from the previous cohort; the start-date filter should already hide them, but it's cleanest to delete. | Stale program reminders shouldn't linger. |
+| **Prompts + PromptFields** *(Roster sheet)* | If you used cohort-specific `prompt_id` values last cohort (e.g. `tshirt_size_2026`, `welcome_dinner_rsvp_2026`), either rename them with the new year or clear and reseed. The `Responses` tab will continue to carry historical data keyed to old `prompt_id` values, which is what you want — historical responses stay queryable, but won't surface in the app because no `Prompts` row references them anymore. Run `validatePrompts()` from the auth script editor after seeding. | Year-stamping prompt IDs keeps cohorts cleanly separated in `Responses`. Reusing the same `prompt_id` across cohorts would commingle responses, which makes data analysis painful. |
 
 ### Tier 3 — review periodically (not necessarily per cohort)
 
@@ -90,12 +91,19 @@ These are what you'll touch *during* a cohort, not just at startup.
 - **Tips.** When a cultural fact or porteño phrase comes up in conversation that you wish you'd told students earlier, add it. The pool grows over time.
 - **Finals.** As the registrar publishes the final-exam schedule, fill in `final_date` and `final_time` on each row of the Classes tab. The TBD pills update to concrete dates the next time the app refreshes. If finals get reshuffled, just update the cells; the FinalsCard and Today tile re-render automatically. To force-refresh ahead of the 1-hour cache window for a high-stakes update, hit the Apps Script URL with `?bust=1` once.
 - **Roster maintenance** *(separate sheet).* Late-add students get a new row. Withdrawn students get their `program_status` flipped from `active` to `withdrawn` — this prevents them from signing back in mid-cohort but preserves their history. Birthday/CWID typos can be fixed in place; no cache to bust, the auth script reads the sheet on every identify call. After a meaningful edit, run `validateRoster()` from the auth script editor to surface any new typos (duplicate CWIDs, malformed birthdays, etc.).
+- **Prompts** *(Roster sheet).* Adding a new prompt is two steps: a row in `Prompts` (with `prompt_id`, titles, audience, dates, surface) plus one or more rows in `PromptFields` (one per input box, each carrying a `field_id`, `field_type`, options, etc.). Edits propagate within ~10 minutes (the front-end's `bap-prompts-cache` TTL); the auth script doesn't cache prompts itself. Use `surface=today` for time-bounded prompts (RSVPs, sign-ups), `surface=profile` for evergreen ones (t-shirt sizes, dietary preferences), `surface=both` to put a prompt in both places. Set `start_date` and `end_date` when you want a prompt to auto-vanish after a deadline. Audience-targeting via `audience` accepts `all`, role names (`student` / `staff` / `faculty`), specific CWIDs, or any comma-separated mix. Run `validatePrompts()` after a meaningful edit. **Editing live prompts** (changing labels, swapping options) is fine and propagates within minutes; **renaming a `prompt_id`** is destructive — it disconnects existing responses from the prompt and the form will appear empty to students who already submitted. Don't rename; archive (delete the `Prompts` row) and create a new one if needed.
+- **Reading responses.** Open the Roster spreadsheet → `Responses` tab. One row per `(cwid, prompt_id, field_id)`, with `value` and `submitted_at`. Easiest pattern: a pivot table grouping by `prompt_id` then `field_id` then `value` for tallying (e.g. "how many vegetarian", "most-picked dessert"). To match responses to student names, `VLOOKUP` against the `Roster` tab on `cwid`. The `Responses` tab grows linearly with cohort size × number of fields; it doesn't grow with edits (submissions upsert in place).
 
 ---
 
 ## The Roster spreadsheet *(separate file)*
 
-The Roster lives in its own spreadsheet ("BAP App Roster") with one tab. The auth script is bound to this file; the content script can't see it.
+The Roster lives in its own spreadsheet ("BAP App Roster"). The auth script is bound to this file; the content script can't see it. As of 2026-05-09c the spreadsheet contains four tabs:
+
+- **Roster** — the cohort identity table (one row per person). Required.
+- **Prompts** — Director-defined data-collection questions (one row per question). Optional but powers the prompts feature.
+- **PromptFields** — input boxes inside each prompt (one row per box). Optional; required when `Prompts` has rows.
+- **Responses** — student answers (one row per `cwid` × `prompt_id` × `field_id`). Auto-created by the auth script on first submit; you don't need to create it manually.
 
 ### Roster *(required, separate spreadsheet)*
 
@@ -140,6 +148,102 @@ The Roster lives in its own spreadsheet ("BAP App Roster") with one tab. The aut
 
 - Open the Roster spreadsheet → Extensions → Apps Script → function dropdown → run `validateRoster()`. Output goes to the execution log (View → Execution log). Flags duplicate CWIDs, missing required fields, unrecognized roles, malformed birthdays/emails, CWIDs that aren't 9 digits, CWIDs with leading zeros.
 - Run after any meaningful edit (cohort reset, late-add, typo fix).
+
+---
+
+### Prompts *(optional, separate spreadsheet — same Roster file)*
+
+One row per data-collection question you want to ask students. A prompt can be a single field (t-shirt size) or a multi-field form (a meal RSVP with appetizer + main + dessert + comments). Each row defines metadata; the actual input boxes live in the `PromptFields` tab keyed by `prompt_id`.
+
+| Column | Required | Notes |
+|--------|----------|-------|
+| `prompt_id` | Yes | Stable string you'll never change once published (e.g. `tshirt_size_2026`, `welcome_dinner_rsvp`). Used as the join key to `PromptFields` and `Responses`. |
+| `title_es` | Yes (or `title_en`) | Spanish headline shown on the card and as the form sheet title. |
+| `title_en` | Yes (or `title_es`) | English headline. At least one of `title_es` / `title_en` must be filled. |
+| `description_es` | No | Spanish blurb shown above the fields. 1-2 sentences of context. |
+| `description_en` | No | English blurb. |
+| `audience` | No | `all` (default if blank) → everyone in the cohort. Or `student` / `staff` / `faculty` (or comma-list of roles). Or a comma-list of CWIDs for narrow targeting. Mix freely. Case-insensitive. |
+| `start_date` | No | `YYYY-MM-DD`. Prompt only appears on or after this date. Blank → no start gate. |
+| `end_date` | No | `YYYY-MM-DD`. Prompt vanishes after this date and submissions become forbidden. Blank → no end gate. Both `start_date` and `end_date` blank → always active (used by evergreen profile prompts like t-shirt size). |
+| `category` | No | `profile` / `meal` / `activity` / `feedback`. Free-form; reserved for future grouping/filtering. Helpful for your own organization. |
+| `surface` | No | `today` (default if blank) / `profile` / `both`. Drives where the prompt renders: `today` shows on the Today tab between the activity card and Finals tile (good for time-bounded prompts like RSVPs); `profile` shows inside the Profile/Settings modal (good for evergreen fields students should be able to revisit anytime); `both` shows in both places. |
+
+**Where they show:**
+
+- `surface=today` or `both` → Today tab `<PromptCard>` ("For you / Pendientes" tile) when the prompt is in its active window.
+- `surface=profile` or `both` → Profile/Settings modal `<PromptProfileSection>` ("About you / Tu información"). Active-window gating still applies; evergreen prompts (no dates) appear here permanently.
+
+### PromptFields *(optional, separate spreadsheet — same Roster file)*
+
+One row per input box inside a prompt. Multiple rows joined to a single `Prompts` row by `prompt_id` form a multi-field form.
+
+| Column | Required | Notes |
+|--------|----------|-------|
+| `prompt_id` | Yes | Foreign key to `Prompts`. Must match an existing `prompt_id` in that tab. |
+| `field_id` | Yes | Stable string within the prompt (e.g. `size`, `appetizer`, `main`, `dessert`, `comments`). Combined with `prompt_id` as the upsert key in `Responses`. |
+| `field_order` | Yes (effectively) | Integer; controls render order top-to-bottom inside the form sheet. Use 1, 2, 3, … |
+| `label_es` | Yes (or `label_en`) | Spanish field label shown above the input. |
+| `label_en` | Yes (or `label_es`) | English field label. At least one of `label_es` / `label_en` must be filled. |
+| `field_type` | Yes | One of: `short_text` (single-line), `long_text` (multi-line / textarea, e.g. comments), `single_select` (radio-style picker), `multi_select` (checkbox-style picker), `number` (digit-only with decimal support), `boolean` (Yes/No toggle). |
+| `options` | Yes for select types | Semicolon-delimited list of choice values: `XS;S;M;L;XL;2XL`. The values themselves are stored in `Responses`; the labels students see come from `option_labels_es` / `option_labels_en` if set, otherwise the option value itself. |
+| `option_labels_es` | No | Semicolon-delimited Spanish labels parallel to `options`. Use when the choice value is a code but the display name should be different (e.g. `options=mediano;grande` and `option_labels_es=Mediano;Grande` — same here, but useful for things like `options=ar;us;mx` and `option_labels_es=Argentina;EE.UU.;México`). |
+| `option_labels_en` | No | Semicolon-delimited English labels parallel to `options`. Same pattern. |
+| `required` | No | TRUE/FALSE. Per field, not per prompt — a meal RSVP can require the appetizer/main/dessert fields and leave the comments optional. Defaults to FALSE. |
+| `placeholder_es` | No | Spanish hint text shown inside short_text/long_text/number inputs when empty. |
+| `placeholder_en` | No | English hint. App picks Spanish-first, falls back to English if Spanish is blank. |
+
+**Examples:**
+
+- **T-shirt size** (1 row in `Prompts`, 1 row in `PromptFields`):
+
+  | Tab | Key columns |
+  |---|---|
+  | Prompts | `tshirt_size_2026` · "Talle de remera" · category=`profile` · surface=`profile` |
+  | PromptFields | `tshirt_size_2026` · `size` · 1 · "Talle" · `single_select` · `XS;S;M;L;XL;2XL` · required=TRUE |
+
+- **Welcome dinner RSVP** (1 row in `Prompts`, 4 rows in `PromptFields`):
+
+  | Tab | Key columns |
+  |---|---|
+  | Prompts | `welcome_dinner_2026` · "Cena de bienvenida" · category=`meal` · start=2026-05-12 · end=2026-05-15 · surface=`today` |
+  | PromptFields | `welcome_dinner_2026` · `appetizer` · 1 · "Entrada" · `single_select` · `Empanadas;Provoleta;Ensalada` · required=TRUE |
+  | PromptFields | `welcome_dinner_2026` · `main` · 2 · "Plato" · `single_select` · `Bife de chorizo;Milanesa;Pasta;Vegetariano` · required=TRUE |
+  | PromptFields | `welcome_dinner_2026` · `dessert` · 3 · "Postre" · `single_select` · `Flan;Helado;Fruta` · required=TRUE |
+  | PromptFields | `welcome_dinner_2026` · `comments` · 4 · "Notas" · `long_text` · (blank) · required=FALSE |
+
+- **Tigre day-trip sign-up** (1 row each):
+
+  | Tab | Key columns |
+  |---|---|
+  | Prompts | `tigre_excursion_2026` · "Excursión a Tigre" · category=`activity` · start=2026-06-01 · end=2026-06-08 · surface=`today` |
+  | PromptFields | `tigre_excursion_2026` · `attending` · 1 · "¿Vas?" · `boolean` · (blank) · required=TRUE |
+
+### Responses *(auto-created — separate spreadsheet, same Roster file)*
+
+You don't need to create or maintain this tab manually. The auth script auto-creates it on the first submit and writes one row per `(cwid, prompt_id, field_id)`. Schema:
+
+| Column | Notes |
+|--------|-------|
+| `submitted_at` | ISO timestamp of the most recent write to this row. |
+| `cwid` | Normalized to digits-only, leading zeros stripped (matches the `Roster` row's `cwid` after normalization). |
+| `prompt_id` | Matches the `Prompts` row's `prompt_id`. |
+| `field_id` | Matches the corresponding `PromptFields` row's `field_id`. |
+| `value` | The submitted value. Strings as-is; booleans as `TRUE` / `FALSE`; multi_select stored semicolon-joined. |
+
+Submissions upsert: editing an existing answer updates `value` + `submitted_at` in place rather than appending a new row. So this tab grows linearly with cohort size × number of fields, not with edit count.
+
+**Use this tab to read responses.** A pivot table grouping by `prompt_id` then `field_id` then `value` is the easiest way to tally up "how many vegetarians" or "what's the most-picked dessert." Or use `=COUNTIFS(Responses!C:C,"meal_2026",Responses!D:D,"main",Responses!E:E,"Vegetariano")` for one-off counts. To get the student's name alongside their CWID, do a `VLOOKUP` against the `Roster` tab.
+
+**Editor-side validator for prompts:**
+
+- Open the Roster spreadsheet → Extensions → Apps Script → function dropdown → run `validatePrompts()`. Output goes to the execution log (View → Execution log). Flags duplicate `prompt_id` values, fields pointing at unknown `prompt_id`, duplicate `(prompt_id, field_id)` pairs in `PromptFields`, missing or unrecognized `field_type`, select fields with no options, mismatched `option_labels_es` / `option_labels_en` counts, malformed `start_date` / `end_date`, `end_date` before `start_date`, prompts with no fields defined (students would see an empty form), unrecognized `surface` values, and audience tokens that aren't `all` / a role / a CWID-shaped string.
+- Run after any meaningful edit to `Prompts` or `PromptFields`.
+
+**Privacy guidance for responses.**
+
+- Responses can carry sensitive student info depending on what you ask. A meal RSVP is low-stakes; a `dietary_restrictions_detail` long_text could reveal medical info; an `allergies_severity` field could be FERPA-touching. Calibrate prompt design to what you're comfortable storing in this Director-restricted spreadsheet, and remember that the Roster sharing settings apply to `Responses` too.
+- Don't ask for anything you wouldn't be comfortable seeing on a screen with another Director-level colleague looking over your shoulder.
+- Submissions are authenticated by cohort token + CWID + birthday; within the cohort, a student who knows another student's CWID + birthday could submit on their behalf. For the use cases the prompts feature is calibrated to (sizes, RSVPs, sign-ups), this is fine. For anything individually sensitive, hold off until the auth model is upgraded to Google sign-in.
 
 ---
 
@@ -437,4 +541,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-05-09.*
+*Last updated: 2026-05-09 (revised same day for prompts + responses).*

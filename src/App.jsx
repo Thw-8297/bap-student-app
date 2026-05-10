@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-09b — 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
+const BUILD_VERSION = "2026-05-09c — Per-student data collection via prompts + responses. Generalized 'Director defines a prompt in a sheet → app surfaces it to the right students → students submit → responses land back in a sheet' primitive — once it exists, every future use case (t-shirt sizes, meal RSVPs, activity sign-ups, evaluation surveys, weekly check-ins) is just a row in the Prompts tab, no code change. Two new tabs in the existing Roster spreadsheet (extends the auth permission boundary that already protected PII; avoids spinning up a third spreadsheet/script): `Prompts` (one row per logical question with prompt_id, title_es/en, description_es/en, audience, start_date, end_date, category, surface) and `PromptFields` (one row per input box, joined to Prompts by prompt_id; carries field_id, field_order, label_es/en, field_type, options [semicolon-delimited], option_labels_es/en, required, placeholder_es/en). The Responses tab (auto-created on first submit) is one row per (cwid, prompt_id, field_id) plus value + submitted_at. The two-tab split handles multi-field prompts cleanly — a meal RSVP with appetizer/main/dessert/comments is 1 Prompts row + 4 PromptFields rows; a t-shirt size is 1 + 1. Surface column ('today' / 'profile' / 'both') chooses where each prompt renders: time-bounded prompts on Today, evergreen ones inside ProfileModal. AuthCode.gs gains two new actions: GET ?action=prompts (re-validates identity, returns active prompts for the user with responses pre-filled, audience-filtered, date-window-gated) and POST submit (text/plain JSON body to avoid CORS preflight against Apps Script — application/json would trigger preflight and Apps Script doesn't implement doOptions). Submit re-validates identity on every call, runs each field through validateSubmissionValues against its declared type + required flag, upserts under a LockService script lock keyed on (cwid, prompt_id, field_id), and returns the refreshed prompt object so the front end can update local state without a follow-up fetch. Field types in v1: short_text, long_text, single_select, multi_select, number, boolean (date deferred until a concrete need shows up). Editor helper validatePrompts() in AuthCode.gs flags duplicate prompt_ids, fields pointing at unknown prompts, missing field_types, select fields with no options, malformed start_date/end_date, audience tokens that aren't 'all'/role/CWID, mismatched option_labels counts, etc. — same shape and Logger.log output as the existing validateRoster(). New App.jsx machinery: class SubmitError extends Error (carries .code + .details so PromptForm can branch on validation_failed / prompt_inactive / audience_mismatch / lock_failed for inline error copy); fetchPrompts and submitResponse async functions next to identifyUser, mirroring its AuthError/NoMatchError throw conventions; PROMPTS_CACHE_KEY ('bap-prompts-cache') with a 10-min TTL keyed by cwid (so a sign-out / sign-in on the same device doesn't surface the previous user's pending forms); filterPromptsBySurface and isPromptPending helpers. Birthday now lives in the bap-user envelope alongside the rest of the curated user record (small expansion of the threat-model trade — birthday on-device matches what's already stored: cwid, name, role, email — and the prompts/submit endpoints re-validate identity on every call so the credential is needed in localStorage; legacy records without birthday force a one-time re-prompt at the user gate, which loadUser handles by returning null when the birthday field is missing). New components: PromptFieldInput (renders one field per field_type — selects as tappable cards with ✓ for multi / • for single and bilingual EB Garamond labels, boolean as Sí/Yes vs No pill pair, number with inputMode='decimal' and digit-only sanitization, short_text/long_text as styled inputs with placeholder support); PromptForm (bottom-sheet wrapper, sticky-ref pattern preserves the prompt object across the BottomSheet's 260ms close animation so the form doesn't flash an empty fallback during exit, useEffect deps include only promptKey so a background prompts refresh while editing doesn't wipe in-progress edits, maps SubmitError.code to bilingual inline error panels); PromptCard (Today tile listing pending/answered prompts with surface=today/both, Pep Orange left stripe + 'Pendientes / For you' header, per-row: Pep Orange dot + Parchment bg for unanswered required-fields prompts, calmer Ocean dot + Ice bg for fully-answered, CTA shifts 'Responder →' / 'Completar →' / 'Editar →' based on state); PromptProfileSection (renders inside ProfileModal after the Logged-in-as card, lists profile/both prompts with a comma-joined preview of saved values for at-a-glance recall, italic 'Sin respuesta / No answer yet' fallback). Form sheet is rendered at App level (above ProfileModal in the JSX so it stacks correctly), state held in App as selectedPrompt; PromptCard and PromptProfileSection both bubble taps up via onOpenPrompt → setSelectedPrompt. handleSubmitPrompt updates prompts state in place after a successful submit (the script returns the refreshed prompt with new responses + submitted_at) and rewrites the per-cwid cache so both surfaces re-render in sync. Background prompts fetch effect runs once both gates are clear and the user has cwid + birthday, populating prompts state from the server and refreshing the cache. AuthError on any prompts call clears cohort token + user + prompts cache in lockstep (matches the existing sheet-data AuthError handler — same root cause, same response). NoMatchError on prompts/submit clears just the user (their roster row was likely removed mid-cohort). Sign out now also wipes the prompts cache and any open form. Two-spreadsheet permission isolation preserved: content script still has no read access to the Roster, auth script still has no read access to the content sheet, prompts/responses live entirely on the Roster side under the same auth boundary as the per-user identity check. CACHE_VERSION stays at 6 — content data shape unchanged; the prompts payload is its own cache layer. Manual cutover after this lands: (a) add Prompts and PromptFields tabs to the Roster spreadsheet (Responses auto-creates on first submit), (b) re-deploy AuthCode.gs (Apps Script editor → Deploy → Manage deployments → pencil icon → New version), (c) seed at least one Prompts row + its matching PromptFields rows (e.g. tshirt_size_2026 as a single-field profile-surface single_select with options 'XS;S;M;L;XL;2XL'), (d) run validatePrompts() from the editor to confirm no warnings, (e) commit + push, (f) existing students get a one-time CWID + birthday re-prompt on next open as legacy user records without birthday are discarded. Earlier this day: 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -31,7 +31,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZUxnUtb39W_Lt
 //     → { error: "unauthorized" | "no_match" | "bad_request" }
 // Same COHORT_TOKEN value as APPS_SCRIPT_URL; one cohort code,
 // two homes (one Script Property in each script).
-const AUTH_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCA5tLOB2DdOPLSNwkDSVigSXIvlcCIyhM_-c7CwOe1Oqkdce55VeRboyI4pza9Eaa/exec";
+const AUTH_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxpBDFtPQpJ-tZ5ap-G8UvJ7K9OJGu2eZI0xcCI_ib1A9brq3uR5idKHMUter6RxXFP/exec";
 
 // ============================================================
 // DEFAULT DATA — Used when no Google Sheet is connected
@@ -463,6 +463,76 @@ async function identifyUser({ token, cwid, birthday }) {
   return body.user;
 }
 
+// Thrown by submitResponse() when the auth script rejects a payload
+// for a reason other than auth — typically validation_failed (a
+// required field was empty, or a select value isn't in the options
+// list) or audience_mismatch / prompt_inactive (the prompt closed
+// out from under the student between page load and submit). Carries
+// the script's machine-readable error code so the form can surface
+// the right copy. Distinct from AuthError so the gate flow isn't
+// triggered on a normal validation failure.
+class SubmitError extends Error {
+  constructor(code, details) {
+    super(code || "submit_failed");
+    this.name = "SubmitError";
+    this.code = code || "submit_failed";
+    this.details = details || "";
+  }
+}
+
+// Pull the active prompts for a user from the auth script's
+// /prompts endpoint. Returns the array as-is. The script does the
+// audience filtering and active-window check, and pre-fills any
+// existing responses for this user, so the front end mostly just
+// renders. Errors mirror identifyUser: AuthError on stale cohort
+// token (caller clears state and bounces to the cohort gate),
+// NoMatchError on a stale stored user (caller clears the user and
+// bounces to the user gate), generic Error on anything else.
+async function fetchPrompts({ token, cwid, birthday }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  const params = new URLSearchParams({ action: "prompts", token, cwid, birthday });
+  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error) throw new Error(`Auth script error: ${body.error}`);
+  return Array.isArray(body && body.prompts) ? body.prompts : [];
+}
+
+// Submit a single prompt's field values back to the auth script.
+// POSTed as text/plain with a JSON body — text/plain avoids the
+// CORS preflight that application/json would trigger against an
+// Apps Script Web App (Apps Script doesn't implement doOptions, so
+// preflight requests fail). The script re-validates identity on
+// every submit so a stolen cohort token alone can't write
+// submissions on behalf of someone else. Returns the refreshed
+// prompt object (same shape as fetchPrompts entries) so the caller
+// can update its local state without a follow-up fetch.
+async function submitResponse({ token, cwid, birthday, prompt_id, fields }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  if (!prompt_id) throw new Error("missing prompt_id");
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "submit", token, cwid, birthday, prompt_id, fields: fields || {},
+    }),
+  });
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error) throw new SubmitError(body.error, body.details);
+  if (!body || !body.prompt) throw new Error("Auth script returned no prompt");
+  return body.prompt;
+}
+
 // ============================================================
 // LOCAL CACHE — Stale-while-revalidate
 // Renders cached data instantly on repeat opens, then refreshes
@@ -604,14 +674,21 @@ function loadUser() {
       if (Date.now() - parsed.savedAt > AUTH_TTL_MS) return null;
       const u = parsed.value;
       if (!u || typeof u !== "object" || !u.cwid) return null;
+      // Birthday must be present on-device so the prompts/submit
+      // endpoints can re-validate identity without re-prompting.
+      // Records saved before the prompts feature landed don't have
+      // it; treat as missing so the student passes the user gate
+      // once and the next save includes it.
+      if (!u.birthday) return null;
       return u;
     }
 
     // Legacy flat format from before 2026-05-09b (the bare user
-    // record at the top level). Accept as still-valid; the next
-    // save upgrades to the envelope format, after which the TTL
-    // applies. Sanity floor: must carry identity primitives.
-    if (parsed.cwid) return parsed;
+    // record at the top level). Same birthday requirement applies;
+    // legacy records never carried it, so this branch effectively
+    // forces a one-time re-prompt for any pre-prompts deploy that
+    // saved in the flat shape.
+    if (parsed.cwid && parsed.birthday) return parsed;
 
     return null;
   } catch (e) {
@@ -720,6 +797,87 @@ function filterClassesByProfile(classes, profile) {
   if (!shouldFilterClasses(profile)) return classes;
   const set = new Set(profile.enrolledClasses);
   return (classes || []).filter((c) => set.has(c.code));
+}
+
+// ============================================================
+// PROMPTS CACHE — Per-student form definitions + responses
+// Lives at its own localStorage key (bap-prompts-cache), separate
+// from the content-data cache and the user record. The cache is
+// keyed by cwid so a sign-out / sign-in on the same device doesn't
+// surface the previous user's prompts to the next one.
+//
+// Short TTL (10 min) is intentional: prompts are Director-edited
+// in Sheets and need to propagate fast — half an hour from "I added
+// a meal RSVP question" to "students see it" is the goal. The
+// content-data cache uses a 1-hour TTL on the script side; prompts
+// trade a bit of API chatter for snappier visibility into Director
+// edits.
+// ============================================================
+
+const PROMPTS_CACHE_KEY = "bap-prompts-cache";
+const PROMPTS_CACHE_TTL = 10 * 60 * 1000;
+
+function loadPromptsCache(cwid) {
+  try {
+    const raw = localStorage.getItem(PROMPTS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.cwid !== cwid) return null;
+    if (typeof parsed.ts !== "number") return null;
+    if (Date.now() - parsed.ts > PROMPTS_CACHE_TTL) return null;
+    return Array.isArray(parsed.prompts) ? parsed.prompts : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function savePromptsCache(cwid, prompts) {
+  try {
+    localStorage.setItem(PROMPTS_CACHE_KEY, JSON.stringify({
+      cwid,
+      prompts: Array.isArray(prompts) ? prompts : [],
+      ts: Date.now(),
+    }));
+  } catch (e) {
+    // Quota exceeded or storage disabled; silently skip
+  }
+}
+
+function clearPromptsCache() {
+  try {
+    localStorage.removeItem(PROMPTS_CACHE_KEY);
+  } catch (e) {
+    // Storage disabled; silently skip
+  }
+}
+
+// Returns prompts whose surface matches the requested target. The
+// surface column accepts "today" / "profile" / "both"; defaults to
+// "today" when blank. Used by TodayView and ProfileModal to filter
+// the global prompts array down to the slice each surface should
+// render.
+function filterPromptsBySurface(prompts, target) {
+  if (!Array.isArray(prompts)) return [];
+  return prompts.filter((p) => {
+    const s = String(p.surface || "today").toLowerCase();
+    return s === target || s === "both";
+  });
+}
+
+// True when at least one required field on the prompt has no
+// stored response. Drives the orange "needs answering" dot on the
+// Today PromptCard rows — a fully-answered prompt fades to "Editar"
+// while a still-pending one keeps the attention-getting dot.
+function isPromptPending(prompt) {
+  if (!prompt || !Array.isArray(prompt.fields)) return false;
+  const responses = prompt.responses || {};
+  for (let i = 0; i < prompt.fields.length; i++) {
+    const f = prompt.fields[i];
+    if (!f.required) continue;
+    const v = responses[f.field_id];
+    if (v == null || String(v).trim() === "") return true;
+  }
+  return false;
 }
 
 // ── Class date-gating helpers ──
@@ -2723,7 +2881,7 @@ function DolarSheet({ open, onClose, dolar }) {
 }
 
 // ─── Today View ───
-function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData }) {
+function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, prompts, onOpenPrompt }) {
   // Clock tick. Updates every minute so the Próximo countdown stays
   // accurate and the greeting/gradient shifts as the day progresses.
   const [now, setNow] = useState(() => new Date());
@@ -3519,6 +3677,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData }) {
         <BirthdayCard birthdays={data.birthdays} />
         {holidayCard}
         {activityCard}
+        <PromptCard prompts={prompts} onOpenPrompt={onOpenPrompt} />
         <TodayFinalsTile data={data} profile={profile} now={now} onJumpToTab={onJumpToTab} />
         <EventsTodayTile data={data} onJumpToTab={onJumpToTab} />
         {tipCard}
@@ -5024,6 +5183,528 @@ function EventsTodayTile({ data, onJumpToTab }) {
   );
 }
 
+// ============================================================
+// PROMPTS — Per-student data collection
+// Three components:
+//   <PromptForm>       — bottom-sheet form for one prompt's fields
+//   <PromptCard>       — Today-tab tile listing pending/answered prompts
+//   <PromptProfileSection> — block inside <ProfileModal> for evergreen prompts
+// All three operate on the prompt shape returned by AuthCode.gs's
+// /prompts endpoint:
+//   { prompt_id, title_es, title_en, description_es, description_en,
+//     category, surface, start_date, end_date,
+//     fields: [{ field_id, field_order, label_es, label_en,
+//                field_type, options[], option_labels_es[],
+//                option_labels_en[], required, placeholder_es,
+//                placeholder_en }, ...],
+//     responses: { field_id: storedValue, ... },
+//     submitted_at: "2026-05-09T...Z" }
+// ============================================================
+
+// Build the local form-state object from a prompt's stored
+// responses. Ensures every field has a sensible blank value
+// (empty string / [] / false) so React inputs stay controlled.
+function initFormFromPrompt(prompt) {
+  if (!prompt || !Array.isArray(prompt.fields)) return {};
+  const responses = prompt.responses || {};
+  const out = {};
+  for (let i = 0; i < prompt.fields.length; i++) {
+    const f = prompt.fields[i];
+    const stored = responses[f.field_id];
+    if (f.field_type === "multi_select") {
+      out[f.field_id] = stored ? String(stored).split(";").map((x) => x.trim()).filter(Boolean) : [];
+    } else if (f.field_type === "boolean") {
+      out[f.field_id] = String(stored == null ? "" : stored).trim().toUpperCase() === "TRUE";
+    } else {
+      out[f.field_id] = stored == null ? "" : String(stored);
+    }
+  }
+  return out;
+}
+
+// Compact bilingual "last saved" label for the form footer. Shows
+// relative time within 24h ("hace 5 min / 5m ago") and falls back
+// to a date label after that.
+function formatPromptSavedAt(iso) {
+  if (!iso) return "";
+  let d;
+  try {
+    d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+  } catch (e) {
+    return "";
+  }
+  const diff = Date.now() - d.getTime();
+  if (diff < 0) return "";
+  if (diff < 60 * 1000) return "ahora / just now";
+  if (diff < 60 * 60 * 1000) {
+    const m = Math.max(1, Math.round(diff / 60000));
+    return `hace ${m} min / ${m}m ago`;
+  }
+  if (diff < 24 * 60 * 60 * 1000) {
+    const h = Math.round(diff / 3600000);
+    return `hace ${h} h / ${h}h ago`;
+  }
+  try {
+    return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  } catch (e) {
+    return iso.slice(0, 10);
+  }
+}
+
+// One field's renderer. Branches on field_type so the form
+// reads as native for each kind of input. Selects are rendered
+// as tappable cards (vs. a native <select>) because they're easier
+// to scan and tap on a phone, and they let us show bilingual
+// labels per option without the cramped feel of <select> options.
+function PromptFieldInput({ field, value, onChange }) {
+  const labelEs = field.label_es || "";
+  const labelEn = field.label_en || "";
+  const sameLabel = labelEs && labelEn && labelEs === labelEn;
+  const placeholder = field.placeholder_es || field.placeholder_en || "";
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box",
+    background: C.white, border: `1px solid ${C.fog}`, borderRadius: 10,
+    padding: "12px 14px",
+    fontFamily: "'Roboto', sans-serif", fontSize: 14, color: C.pepBlack,
+    lineHeight: 1.4, outline: "none",
+  };
+
+  const labelBlock = (
+    <div style={{
+      marginBottom: 8, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap",
+    }}>
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+        letterSpacing: 1.5, color: C.ocean, lineHeight: 1.2,
+      }}>
+        {labelEs || labelEn}
+      </div>
+      {!sameLabel && labelEn && labelEs && (
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13,
+          color: C.mountain, lineHeight: 1.2,
+        }}>
+          / {labelEn}
+        </div>
+      )}
+      {field.required && (
+        <span aria-label="Required" title="Required" style={{
+          width: 6, height: 6, borderRadius: "50%", background: C.pepOrange,
+          display: "inline-block", marginLeft: 2,
+        }} />
+      )}
+    </div>
+  );
+
+  const t = field.field_type;
+
+  if (t === "short_text") {
+    return (
+      <div>
+        {labelBlock}
+        <input
+          type="text" value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder} style={inputStyle}
+        />
+      </div>
+    );
+  }
+
+  if (t === "long_text") {
+    return (
+      <div>
+        {labelBlock}
+        <textarea
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={3}
+          style={{ ...inputStyle, resize: "vertical", minHeight: 80 }}
+        />
+      </div>
+    );
+  }
+
+  if (t === "number") {
+    return (
+      <div>
+        {labelBlock}
+        <input
+          type="text" inputMode="decimal" value={value || ""}
+          onChange={(e) => onChange(e.target.value.replace(/[^\d.,-]/g, ""))}
+          placeholder={placeholder} style={inputStyle}
+        />
+      </div>
+    );
+  }
+
+  if (t === "boolean") {
+    const isTrue = value === true || value === "TRUE";
+    const isFalse = value === false || value === "FALSE";
+    const pillStyle = (active) => ({
+      flex: 1, padding: "12px 0", borderRadius: 10, cursor: "pointer",
+      background: active ? C.ocean : C.white,
+      color: active ? C.white : C.mountain,
+      border: `1px solid ${active ? C.ocean : C.fog}`,
+      fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500,
+      letterSpacing: 0.5,
+    });
+    return (
+      <div>
+        {labelBlock}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="bap-press" style={pillStyle(isTrue)}
+                  onClick={() => onChange(true)}>Sí / Yes</button>
+          <button type="button" className="bap-press" style={pillStyle(isFalse)}
+                  onClick={() => onChange(false)}>No</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (t === "single_select" || t === "multi_select") {
+    const isMulti = t === "multi_select";
+    const arr = isMulti ? (Array.isArray(value) ? value : []) : null;
+    const optionLabels = (idx) => {
+      const opt = field.options[idx];
+      const es = field.option_labels_es[idx] || opt;
+      const en = field.option_labels_en[idx] || "";
+      return { opt, es, en, sameLabel: es && en && es === en };
+    };
+    return (
+      <div>
+        {labelBlock}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {field.options.map((opt, i) => {
+            const meta = optionLabels(i);
+            const checked = isMulti ? arr.indexOf(opt) >= 0 : value === opt;
+            const onTap = () => {
+              if (isMulti) {
+                const next = checked ? arr.filter((x) => x !== opt) : arr.concat([opt]);
+                onChange(next);
+              } else {
+                onChange(opt);
+              }
+            };
+            return (
+              <button
+                type="button"
+                key={opt}
+                onClick={onTap}
+                className="bap-press"
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, textAlign: "left",
+                  background: checked ? C.ice : C.white,
+                  border: `1px solid ${checked ? C.ocean : C.fog}`,
+                  borderRadius: 10, padding: "10px 12px", cursor: "pointer", width: "100%",
+                }}
+              >
+                <span style={{
+                  width: 22, height: 22, flexShrink: 0,
+                  borderRadius: isMulti ? 6 : "50%",
+                  border: `1.5px solid ${checked ? C.ocean : C.stone}`,
+                  background: checked ? C.ocean : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: C.white, fontSize: 14, fontWeight: 700, lineHeight: 1,
+                }}>{checked ? (isMulti ? "✓" : "•") : ""}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15,
+                    color: C.pepBlack, lineHeight: 1.2,
+                  }}>{meta.es}</div>
+                  {!meta.sameLabel && meta.en && (
+                    <div style={{
+                      fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12.5,
+                      color: C.mountain, lineHeight: 1.2, marginTop: 1,
+                    }}>{meta.en}</div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Unknown / unsupported types render a placeholder rather than
+  // crashing the form. validatePrompts() in AuthCode.gs catches
+  // this case at edit time, but a defensive renderer keeps the rest
+  // of the form usable if a sheet edit slips through.
+  return (
+    <div>
+      {labelBlock}
+      <div style={{
+        background: C.ice, border: `1px dashed ${C.fog}`, borderRadius: 10,
+        padding: "10px 12px", fontFamily: "'Roboto', sans-serif", fontSize: 12,
+        color: C.stone, fontStyle: "italic",
+      }}>
+        Tipo de campo no soportado: {t}
+      </div>
+    </div>
+  );
+}
+
+// Bottom-sheet form for one prompt. Local form state is initialized
+// from the prompt's stored responses (so editing pre-fills) and
+// re-initializes whenever the prompt's id changes (so opening a
+// different prompt resets the form). Submit calls onSubmit with
+// { promptId, fields }; the parent is responsible for the actual
+// network call and state update — we only handle local form state,
+// validation feedback, and submit-in-flight UI.
+function PromptForm({ open, onClose, prompt, onSubmit }) {
+  // Sticky-ref pattern: parents typically clear the selected prompt
+  // synchronously when onClose fires, but BottomSheet plays a 260 ms
+  // close animation. Without this ref the form would flash an empty
+  // fallback during the close. lastPromptRef holds the most recent
+  // non-null prompt so the closing sheet still has something to
+  // render against.
+  const lastPromptRef = useRef(null);
+  if (prompt) lastPromptRef.current = prompt;
+  const displayPrompt = prompt || lastPromptRef.current;
+
+  // Use the displayed prompt's id as the dependency key so we
+  // re-initialize when the parent swaps prompts. submitted_at is
+  // intentionally NOT a dep — a background prompts refresh while
+  // the form is open (rare) shouldn't wipe the student's in-progress
+  // edits.
+  const promptKey = displayPrompt ? displayPrompt.prompt_id : "";
+
+  const [values, setValues] = useState(() => initFormFromPrompt(displayPrompt));
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    setValues(initFormFromPrompt(displayPrompt));
+    setErrorMsg("");
+    setSubmitting(false);
+  }, [promptKey]);
+
+  if (!displayPrompt) {
+    // Render an empty sheet as a safety net; the parent shouldn't
+    // open this without a prompt, but if it does the user can dismiss.
+    return (
+      <BottomSheet open={open} onClose={onClose} titleEs="Formulario" titleEn="Form">
+        <div style={{ color: C.stone, fontStyle: "italic", padding: 8 }}>
+          No hay formulario seleccionado.
+        </div>
+      </BottomSheet>
+    );
+  }
+
+  const fields = displayPrompt.fields || [];
+  const titleEs = displayPrompt.title_es || displayPrompt.title_en || "";
+  const titleEn = displayPrompt.title_en || displayPrompt.title_es || "";
+  const sameTitle = displayPrompt.title_es && displayPrompt.title_en && displayPrompt.title_es === displayPrompt.title_en;
+  const descEs = displayPrompt.description_es || "";
+  const descEn = displayPrompt.description_en || "";
+  const sameDesc = descEs && descEn && descEs === descEn;
+  const hasPriorSubmission = !!displayPrompt.submitted_at;
+
+  const setField = (fid, v) => setValues((prev) => ({ ...prev, [fid]: v }));
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setErrorMsg("");
+    setSubmitting(true);
+    try {
+      await onSubmit({ promptId: displayPrompt.prompt_id, fields: values });
+      onClose();
+    } catch (err) {
+      const code = err && err.code ? err.code : "";
+      if (code === "validation_failed") {
+        const m = String((err && err.details) || "").match(/^(missing_field|bad_value):(.+)$/);
+        if (m) {
+          const f = fields.find((x) => x.field_id === m[2]);
+          const lbl = f ? (f.label_es || f.label_en || m[2]) : m[2];
+          setErrorMsg(m[1] === "missing_field"
+            ? `Falta completar: ${lbl} / Missing: ${lbl}`
+            : `Valor inválido: ${lbl} / Invalid value: ${lbl}`);
+        } else {
+          setErrorMsg("Hay datos inválidos en el formulario. / The form has invalid data.");
+        }
+      } else if (code === "prompt_inactive") {
+        setErrorMsg("Este formulario ya cerró. / This form has closed.");
+      } else if (code === "audience_mismatch") {
+        setErrorMsg("No tenés acceso a este formulario. / You don't have access to this form.");
+      } else if (code === "lock_failed") {
+        setErrorMsg("La planilla está ocupada. Reintentá. / The sheet is busy. Please try again.");
+      } else if (err && err.name === "AuthError") {
+        setErrorMsg("Sesión expirada. Cerrá y volvé a abrir la app. / Session expired. Close and re-open the app.");
+      } else if (err && err.name === "NoMatchError") {
+        setErrorMsg("Tu usuario ya no es reconocido. Cerrá sesión y volvé a entrar. / Your account isn't recognized. Sign out and back in.");
+      } else {
+        setErrorMsg("No se pudo guardar. Reintentá. / Couldn't save. Try again.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <BottomSheet open={open} onClose={onClose} titleEs={titleEs} titleEn={sameTitle ? "" : titleEn}>
+      {(descEs || descEn) && (
+        <div style={{ marginBottom: 18 }}>
+          {descEs && (
+            <div style={{
+              fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
+              lineHeight: 1.45,
+            }}>{descEs}</div>
+          )}
+          {!sameDesc && descEn && (
+            <div style={{
+              fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12.5,
+              color: C.mountain, lineHeight: 1.45, marginTop: 4,
+            }}>{descEn}</div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {fields.map((f) => (
+          <PromptFieldInput
+            key={f.field_id}
+            field={f}
+            value={values[f.field_id]}
+            onChange={(v) => setField(f.field_id, v)}
+          />
+        ))}
+      </div>
+
+      {errorMsg && (
+        <div style={{
+          marginTop: 16,
+          background: C.parchment,
+          borderLeft: `3px solid ${C.pepOrange}`,
+          borderRadius: 6,
+          padding: "10px 12px",
+          fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.pepBlack,
+          lineHeight: 1.4,
+        }}>{errorMsg}</div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={submitting}
+        className="bap-press"
+        style={{
+          marginTop: 20, width: "100%", padding: "13px 0", borderRadius: 10,
+          background: submitting ? C.stone : C.pepBlue, color: C.white,
+          border: "none", cursor: submitting ? "wait" : "pointer",
+          fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500,
+          letterSpacing: 0.5,
+        }}
+      >
+        {submitting
+          ? "Guardando…"
+          : hasPriorSubmission
+            ? "Actualizar / Update"
+            : "Enviar / Submit"}
+      </button>
+
+      {hasPriorSubmission && (
+        <div style={{
+          marginTop: 8, textAlign: "center",
+          fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.stone,
+        }}>
+          Guardado {formatPromptSavedAt(displayPrompt.submitted_at)}
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+// Today-tab tile listing prompts that surface on Today (surface =
+// "today" or "both"). One row per prompt; tapping opens
+// <PromptForm> for that prompt. Renders nothing when there are no
+// today-surface prompts so the Today layout stays clean for
+// students whose Director hasn't queued anything up.
+//
+// Visual identity matches <TodayFinalsTile> and <EventsTodayTile>:
+// white card, fog border, header with bilingual section label,
+// stripe of rows underneath. Pep Orange dot beside any prompt with
+// an unanswered required field; calmer "Editar" affordance once
+// the student has saved.
+function PromptCard({ prompts, onOpenPrompt }) {
+  const todayPrompts = filterPromptsBySurface(prompts, "today");
+  if (todayPrompts.length === 0) return null;
+
+  return (
+    <div style={{
+      background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
+      borderLeft: `4px solid ${C.pepOrange}`,
+      padding: "12px 14px 14px", marginBottom: 14,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 10,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.pepOrange, marginBottom: 2,
+          }}>Pendientes</div>
+          <div style={{
+            fontFamily: "'EB Garamond', serif", fontSize: 17, fontWeight: 700,
+            color: C.pepBlack, lineHeight: 1.1,
+          }}>For you</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {todayPrompts.map((p) => {
+          const pending = isPromptPending(p);
+          const submitted = !!p.submitted_at;
+          const cta = submitted ? (pending ? "Completar →" : "Editar →") : "Responder →";
+          return (
+            <button
+              key={p.prompt_id}
+              type="button"
+              onClick={() => onOpenPrompt(p)}
+              className="bap-press"
+              style={{
+                display: "flex", alignItems: "stretch", textAlign: "left",
+                background: pending ? C.parchment : C.ice,
+                border: `1px solid ${C.fog}`,
+                borderRadius: 10, padding: 0, cursor: "pointer", width: "100%",
+              }}
+            >
+              <div style={{ width: 4, background: pending ? C.pepOrange : C.ocean, flexShrink: 0 }} />
+              <div style={{
+                flex: 1, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8,
+                minWidth: 0,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14.5,
+                    color: C.pepBlack, lineHeight: 1.2,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{p.title_es || p.title_en}</div>
+                  {p.title_en && p.title_es && p.title_en !== p.title_es && (
+                    <div style={{
+                      fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12,
+                      color: C.mountain, lineHeight: 1.2, marginTop: 1,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>{p.title_en}</div>
+                  )}
+                </div>
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: pending ? C.pepOrange : C.ocean,
+                  whiteSpace: "nowrap", flexShrink: 0,
+                }}>{cta}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Local ───
 function LocalView({ data }) {
   // Default to the events sub-tab when at least one event is upcoming
@@ -5502,12 +6183,104 @@ function GearIcon({ size = 20, color = "#FFFFFF" }) {
   );
 }
 
+// ─── Prompt list block for ProfileModal (evergreen prompts) ───
+//
+// Renders inside <ProfileModal> after the "Logged in as" card. Lists
+// prompts whose surface is "profile" or "both" — typically evergreen
+// fields the student should be able to revisit anytime (t-shirt size,
+// dietary preferences, contact info corrections). Each row tap opens
+// the same <PromptForm> bottom sheet that PromptCard uses, so the two
+// surfaces share validation and submit behavior.
+//
+// Renders nothing when there are no profile-surface prompts, so the
+// settings modal stays clean for cohorts where the Director hasn't
+// queued evergreen forms.
+function PromptProfileSection({ prompts, onOpenPrompt }) {
+  const profilePrompts = filterPromptsBySurface(prompts, "profile");
+  if (profilePrompts.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{
+        fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+        letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+      }}>About you / Tu información</div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {profilePrompts.map((p) => {
+          const pending = isPromptPending(p);
+          const submitted = !!p.submitted_at;
+          const cta = submitted ? (pending ? "Completar →" : "Editar →") : "Responder →";
+          // Compact preview of saved values: comma-joined, truncated.
+          // Lets the student see at a glance what they previously
+          // saved without opening the form.
+          const previewParts = [];
+          for (let i = 0; i < (p.fields || []).length; i++) {
+            const f = p.fields[i];
+            const v = (p.responses || {})[f.field_id];
+            if (v == null || String(v).trim() === "") continue;
+            // For multi_select stored as semicolon-joined, swap to commas
+            const display = String(v).split(";").map((x) => x.trim()).filter(Boolean).join(", ");
+            previewParts.push(display);
+          }
+          const preview = previewParts.join(" · ");
+
+          return (
+            <button
+              key={p.prompt_id}
+              type="button"
+              onClick={() => onOpenPrompt(p)}
+              className="bap-press"
+              style={{
+                display: "flex", alignItems: "stretch", textAlign: "left",
+                background: C.white,
+                border: `1px solid ${C.fog}`,
+                borderRadius: 10, padding: 0, cursor: "pointer", width: "100%",
+              }}
+            >
+              <div style={{ width: 4, background: pending ? C.pepOrange : C.ocean, flexShrink: 0 }} />
+              <div style={{
+                flex: 1, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8,
+                minWidth: 0,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14.5,
+                    color: C.pepBlack, lineHeight: 1.2,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{p.title_es || p.title_en}</div>
+                  {preview ? (
+                    <div style={{
+                      fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.mountain,
+                      marginTop: 2, lineHeight: 1.3,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>{preview}</div>
+                  ) : (
+                    <div style={{
+                      fontFamily: "'Roboto', sans-serif", fontStyle: "italic", fontSize: 12,
+                      color: C.stone, marginTop: 2, lineHeight: 1.3,
+                    }}>Sin respuesta / No answer yet</div>
+                  )}
+                </div>
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: pending ? C.pepOrange : C.ocean,
+                  whiteSpace: "nowrap", flexShrink: 0,
+                }}>{cta}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Profile / settings modal ───
 // Full-screen overlay (within the 480px column) where a student sets
 // their first name, ticks the courses they're enrolled in, and toggles
 // "Show only my classes". Reads/writes the profile via the onChange
 // callback so the App owns the source of truth.
-function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut }) {
+function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut, prompts, onOpenPrompt }) {
   if (!open) return null;
 
   const sortedClasses = [...(classes || [])].sort((a, b) => a.code.localeCompare(b.code));
@@ -5640,6 +6413,12 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
               </button>
             </div>
           )}
+
+          {/* Director-defined evergreen prompts (t-shirt size,
+              dietary preferences, contact info corrections, etc.).
+              Renders nothing when the Director hasn't queued any
+              profile-surface prompts. */}
+          <PromptProfileSection prompts={prompts} onOpenPrompt={onOpenPrompt} />
 
           {/* My classes toggle */}
           <div style={{
@@ -5998,7 +6777,13 @@ function UserGate({ cohortToken, onAuth, onCohortReset }) {
     const birthday = `${month}-${String(day).padStart(2, "0")}`;
     try {
       const user = await identifyUser({ token: cohortToken, cwid: trimmedCwid, birthday });
-      onAuth(user);
+      // Pass birthday up to the App alongside the user so it can
+      // be tucked into the stored envelope. The auth script's
+      // prompts/submit endpoints re-validate identity on every
+      // call (cwid + birthday → roster row), so the birthday
+      // needs to live on-device too. Same threat-model trade as
+      // the rest of the user record: low-stakes within cohort.
+      onAuth(user, birthday);
     } catch (err) {
       if (err && err.name === "AuthError") {
         // Cohort token rotated since this student entered it.
@@ -6264,6 +7049,26 @@ export default function App() {
     saveProfile(next);
   }, []);
 
+  // Prompts state. Lazy-init from the per-cwid cache so a returning
+  // student sees their pending forms instantly; refreshed in the
+  // background by the effect below. Lives at its own localStorage
+  // key (PROMPTS_CACHE_KEY) with a 10-min TTL so Director edits to
+  // the Prompts/PromptFields tabs propagate within a few minutes.
+  const initialUser = currentUser; // capture at mount so the lazy init isn't tied to the live ref
+  const [prompts, setPrompts] = useState(() => {
+    if (!initialUser || !initialUser.cwid) return [];
+    return loadPromptsCache(initialUser.cwid) || [];
+  });
+
+  // The prompt currently being edited in the bottom-sheet form.
+  // Set when the student taps a row in <PromptCard> or
+  // <PromptProfileSection>; cleared when the form closes. Form sheet
+  // renders at App level (rather than inside Today or ProfileModal)
+  // so it stacks above either surface and shares one state.
+  const [selectedPrompt, setSelectedPrompt] = useState(null);
+  const handleOpenPrompt = useCallback((p) => setSelectedPrompt(p), []);
+  const handleClosePrompt = useCallback(() => setSelectedPrompt(null), []);
+
   // Bottom-nav pill positioning. The pill slides under whichever tab is
   // active; its color adopts the active tab's color identity. We measure
   // each button via a ref-keyed map so re-positioning works on layout
@@ -6404,11 +7209,15 @@ export default function App() {
           // Clear it AND the cached user so a rotated cohort code
           // resets both gates in lockstep — otherwise the student
           // would re-enter the cohort code and skip straight to a
-          // possibly-stale identity from a previous cohort.
+          // possibly-stale identity from a previous cohort. Also
+          // drop the prompts cache for the same reason.
           clearCohortToken();
           setCohortToken("");
           clearUser();
           setCurrentUser(null);
+          clearPromptsCache();
+          setPrompts([]);
+          setSelectedPrompt(null);
           return;
         }
         console.error("Sheet fetch failed:", err);
@@ -6432,14 +7241,19 @@ export default function App() {
   }, []);
 
   // Called by <UserGate> on successful identification. Stash the
-  // curated user record and dismount the gate. No data priming
-  // needed here — the cohort gate already fetched and primed the
-  // full content payload, so the main UI renders immediately with
-  // the cached data alongside the freshly known identity. No
-  // justAuthed ref needed for the same reason.
-  const handleUserAuth = useCallback((user) => {
-    saveUser(user);
-    setCurrentUser(user);
+  // curated user record and dismount the gate. The birthday is
+  // passed through alongside the user so it can ride in the
+  // envelope — the prompts/submit endpoints re-validate identity
+  // on every call (cwid + birthday), so birthday needs to live
+  // on-device too. No data priming needed here — the cohort gate
+  // already fetched and primed the full content payload, so the
+  // main UI renders immediately with the cached data alongside
+  // the freshly known identity. No justAuthed ref needed for the
+  // same reason.
+  const handleUserAuth = useCallback((user, birthday) => {
+    const augmented = { ...user, birthday: birthday || "" };
+    saveUser(augmented);
+    setCurrentUser(augmented);
   }, []);
 
   // Called by <UserGate> when its identify call returns AuthError —
@@ -6466,6 +7280,12 @@ export default function App() {
   const handleSignOut = useCallback(() => {
     clearUser();
     setCurrentUser(null);
+    // Drop the prompts cache so the next user signing in on this
+    // device doesn't see the previous user's pending forms in the
+    // brief window before fetchPrompts repopulates state.
+    clearPromptsCache();
+    setPrompts([]);
+    setSelectedPrompt(null);
   }, []);
 
   // Manual refresh path used by the Today pull-to-refresh gesture.
@@ -6487,16 +7307,124 @@ export default function App() {
       if (err && err.name === "AuthError") {
         // Match the data-fetch AuthError handler: cohort token
         // rotation should reset both gates, not just the cohort one.
+        // Prompts cache too — see the data-fetch handler comment.
         clearCohortToken();
         setCohortToken("");
         clearUser();
         setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSelectedPrompt(null);
         return;
       }
       console.error("Manual refresh failed:", err);
       setStatus((prev) => (prev === "refreshing" ? "cached" : "fallback"));
     }
   }, [cohortToken]);
+
+  // Background prompts fetch. Fires once both gates are clear, and
+  // again whenever the user changes (sign out + new sign in on the
+  // same device). The lazy-init in useState already primed prompts
+  // from cache, so this just refreshes silently — no loading state
+  // surfaced to the UI. AuthError clears both credentials in lockstep
+  // (matches the data-fetch handler); NoMatchError clears just the
+  // user (the row was deleted from the Roster, e.g. after withdraw).
+  useEffect(() => {
+    if (!SHEET_ID) return;
+    if (!cohortToken || !currentUser || !currentUser.cwid || !currentUser.birthday) return;
+    let cancelled = false;
+    fetchPrompts({
+      token: cohortToken,
+      cwid: currentUser.cwid,
+      birthday: currentUser.birthday,
+    })
+      .then((list) => {
+        if (cancelled) return;
+        setPrompts(list);
+        savePromptsCache(currentUser.cwid, list);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err && err.name === "AuthError") {
+          clearCohortToken();
+          setCohortToken("");
+          clearUser();
+          setCurrentUser(null);
+          clearPromptsCache();
+          setPrompts([]);
+          setSelectedPrompt(null);
+          return;
+        }
+        if (err && err.name === "NoMatchError") {
+          // The student's row was removed from the Roster (or
+          // program_status changed away from active). Clear the
+          // stored user so they hit the user gate; cohort token
+          // stays intact.
+          clearUser();
+          setCurrentUser(null);
+          clearPromptsCache();
+          setPrompts([]);
+          setSelectedPrompt(null);
+          return;
+        }
+        // Network failures, transient script errors, etc. — keep
+        // whatever is in state (the cache, or []) and try again on
+        // the next mount. No user-visible error: prompts are
+        // best-effort, the rest of the app keeps working.
+        console.warn("Prompts fetch failed:", err);
+      });
+    return () => { cancelled = true; };
+  }, [cohortToken, currentUser && currentUser.cwid, currentUser && currentUser.birthday]);
+
+  // Submit one prompt's field values back to the auth script. On
+  // success, the script returns the refreshed prompt object (with
+  // the updated responses + submitted_at); we splice it into local
+  // state and rewrite the cache so the surfaces re-render with the
+  // new values. Throws on failure so <PromptForm> can branch on
+  // SubmitError.code (validation_failed, prompt_inactive, etc.) to
+  // show a useful inline message. AuthError / NoMatchError follow
+  // the same lockstep-clear pattern as the other auth flows.
+  const handleSubmitPrompt = useCallback(async ({ promptId, fields }) => {
+    if (!cohortToken || !currentUser || !currentUser.cwid || !currentUser.birthday) {
+      throw new AuthError("missing identity");
+    }
+    try {
+      const refreshed = await submitResponse({
+        token: cohortToken,
+        cwid: currentUser.cwid,
+        birthday: currentUser.birthday,
+        prompt_id: promptId,
+        fields,
+      });
+      setPrompts((prev) => {
+        const next = (prev || []).map((p) => p.prompt_id === refreshed.prompt_id ? refreshed : p);
+        // If the prompt wasn't in the previous list (rare — e.g. the
+        // form was opened from a cached snapshot that the server has
+        // since dropped), append it so the surfaces still reflect
+        // the just-saved state.
+        if (!next.some((p) => p.prompt_id === refreshed.prompt_id)) next.push(refreshed);
+        savePromptsCache(currentUser.cwid, next);
+        return next;
+      });
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        clearCohortToken();
+        setCohortToken("");
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSelectedPrompt(null);
+      } else if (err && err.name === "NoMatchError") {
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSelectedPrompt(null);
+      }
+      throw err;
+    }
+  }, [cohortToken, currentUser]);
 
   // Position the bottom-nav pill under the active tab. Re-runs on tab
   // change and on window resize so the pill stays anchored when the
@@ -6608,7 +7536,7 @@ export default function App() {
         ) : (
           <>
             {tab !== "today" && <SectionTitle tabKey={tab} />}
-            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} currentUser={currentUser} onRefreshData={refreshAllData} />}
+            {tab === "today" && <TodayView data={data} onJumpToTab={setTab} profile={profile} currentUser={currentUser} onRefreshData={refreshAllData} prompts={prompts} onOpenPrompt={handleOpenPrompt} />}
             {tab === "schedule" && <ScheduleView data={data} profile={profile} onOpenSettings={() => setProfileOpen(true)} />}
             {tab === "calendar" && <CalendarView data={data} />}
             {tab === "local" && <LocalView data={data} />}
@@ -6670,6 +7598,21 @@ export default function App() {
         classes={data.classes}
         currentUser={currentUser}
         onSignOut={handleSignOut}
+        prompts={prompts}
+        onOpenPrompt={handleOpenPrompt}
+      />
+
+      {/* Prompts form bottom sheet. Rendered at App level (rather
+          than inside Today or ProfileModal) so it shares one state
+          across both surfaces and stacks cleanly above either.
+          When opened from inside ProfileModal, the modal stays open
+          beneath the sheet — closing the sheet returns to the
+          settings page. */}
+      <PromptForm
+        open={!!selectedPrompt}
+        onClose={handleClosePrompt}
+        prompt={selectedPrompt}
+        onSubmit={handleSubmitPrompt}
       />
     </div>
   );
