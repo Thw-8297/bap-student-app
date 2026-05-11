@@ -48,7 +48,7 @@ When a new cohort is about to start, work through these in order. The first grou
 |-----|------------|-----|
 | **Settings** | Update the `semester` value (e.g., "Summer 2026" → "Fall 2026"). Set `finals_window_start` and `finals_window_end` to the program-wide finals window for the new term (a single day for Summer; 2-3 days for Fall and Spring). | The semester label appears in the app header and elsewhere as program identity. The finals window drives when the Finals UI surfaces on Today and Schedule (14 days ahead) and the "TBD · {window}" copy on classes whose individual `final_date` hasn't been assigned yet. |
 | **Classes** | Replace the entire course catalog with the new cohort's offerings. Update `code`, `title`, `professor`, `honorific`, `firstname`, `days`, `time`, `location`, `email`, plus `start_date` and `end_date` per course. Leave `final_date` and `final_time` blank until the registrar publishes the exam schedule, then fill them in row-by-row as they're assigned. | Powers the Schedule tab's Class Schedule and Courses views; also drives the personalization filter (students tick the courses they're enrolled in). `start_date` and `end_date` keep the Today and Weekly Overview views from showing classes outside the regular meeting window. |
-| **Calendar** | Replace all program-specific events with the new semester's dates: arrival, orientation, classes-begin, study tours, excursions, milestones, classes-end, departure. | Powers the Calendar tab and the Schedule tab's Weekly Overview. Old dates are misleading. |
+| **Calendar** | Replace all program-specific events with the new semester's dates: arrival, orientation, classes-begin, study tours, excursions, classes-end, departure. | Powers the Calendar tab and the Schedule tab's Weekly Overview. Old dates are misleading. |
 | **Contacts** | Verify program director, assistant director, on-call phone, and any staff-turnover entries. Update `whatsapp` numbers in particular. | The Contacts tab is the emergency reference. Out-of-date numbers are dangerous. |
 | **Birthdays** | Clear the previous cohort's student rows and add the new cohort. Only include students who've affirmatively opted in. Staff and faculty rows can typically remain. | The Today tab birthday card matches by MM-DD; old students from a past cohort would still appear if not removed. |
 | **Roster** *(separate sheet)* | Open the **BAP App Roster** spreadsheet (this is a different file from the content sheet). Clear the previous cohort's rows and paste in the new cohort with: `cwid` (9-digit numeric, no leading zeros), `first_name`, `last_name`, `preferred_name` (optional), `pronouns` (optional), `birthday` (MM-DD), `role` (`student` / `staff` / `faculty`), `email`, `whatsapp`, `housing_assignment`, `tshirt_size`, `tshirt_fit` (optional), `dietary_restrictions`, `food_allergies`, `program_status` (default `active`). Add yourself + assistant director + any other staff/faculty too. Then run `validateRoster()` from the auth script's editor (Roster sheet → Extensions → Apps Script → function dropdown → validateRoster → Run) and confirm no warnings. | Without a Roster row, a student can't get past the user gate. Late-adds and corrections are immediate (no cache); they'll work the next time the student opens the app. |
@@ -305,14 +305,14 @@ The course catalog for the current semester.
 
 ### Calendar *(required)*
 
-Semester-wide events: arrival, orientation, classes-begin, study tours, excursions, milestones, classes-end, departure.
+Semester-wide events: arrival, orientation, classes-begin, study tours, excursions, classes-end, departure.
 
 | Column | Required | Notes |
 |--------|----------|-------|
 | `date` | Yes | Start date in YYYY-MM-DD format. |
 | `end_date` | No | End date (for multi-day events). Leave blank for single-day. |
 | `title` | Yes | Event name. |
-| `type` | No | One of: `milestone`, `academic`, `excursion`, `holiday`, `program`, `orientation`. Defaults to `academic`. Each gets a distinct color. |
+| `type` | No | One of: `program`, `academic`, `excursion`, `holiday`, `orientation`. Defaults to `academic`. Each gets a distinct color. `program` carries the most prominent visual (Parchment-orange + Pep Orange + ★) and should be used for Director-curated entries like arrival days, asados, faculty visits, and other program-office-organized moments. The legacy `milestone` type was retired on 2026-05-11b — its visual was reassigned to `program`; rows still typed `milestone` in the sheet render as Academic cards until relabeled. |
 | `description` | No | One or two sentences of context. Renders inside the event card. |
 | `start_time` | No | Time of day (e.g., "10:00"). Untimed events render at the top of a day. |
 | `end_time` | No | End time. |
@@ -542,4 +542,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-05-09 (revised same day for prompts + responses, and again for the optional `end_time` cutoff column).*
+*Last updated: 2026-05-11b (Calendar event types consolidated: `milestone` retired; its visual treatment reassigned to `program`).*
