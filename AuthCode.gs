@@ -142,11 +142,15 @@ function doGet(e) {
     // Catch-all so a runtime exception comes back as JSON with
     // CORS headers (vs Apps Script's default HTML error page that
     // strips CORS and confuses the browser as a cross-origin
-    // failure). Carries the message + stack for diagnosis.
+    // failure). Carries just the error message — the stack trace
+    // used to be echoed back too, but that leaked function names
+    // and internal logic to anyone who could trigger an error.
+    // Full stack still goes to the Apps Script execution log
+    // (Logger.log), which only the Director can read.
+    Logger.log("doGet error: " + ((err && err.stack) || err));
     return jsonResponse({
       error: "internal_error",
       message: String((err && err.message) || err),
-      stack: String((err && err.stack) || ""),
     });
   }
 }
@@ -168,10 +172,13 @@ function doPost(e) {
 
     return jsonResponse({ error: "bad_request" });
   } catch (err) {
+    // Mirrors doGet's catch — stack stays in the Apps Script
+    // execution log (Director-only) instead of riding back in the
+    // response body.
+    Logger.log("doPost error: " + ((err && err.stack) || err));
     return jsonResponse({
       error: "internal_error",
       message: String((err && err.message) || err),
-      stack: String((err && err.stack) || ""),
     });
   }
 }
