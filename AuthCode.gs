@@ -134,8 +134,9 @@ function doGet(e) {
     if (tokenError) return tokenError;
 
     const action = params.action || "";
-    if (action === "identify") return handleIdentify(params);
-    if (action === "prompts")  return handlePrompts(params);
+    if (action === "identify")        return handleIdentify(params);
+    if (action === "prompts")         return handlePrompts(params);
+    if (action === "admin_responses") return handleAdminResponses(params);
 
     return jsonResponse({ error: "bad_request" });
   } catch (err) {
@@ -482,6 +483,156 @@ function resolveTimeZone(ssMaybe) {
   try { tz = Session.getScriptTimeZone() || ""; } catch (e) { tz = ""; }
   if (tz) return tz;
   return "America/Argentina/Buenos_Aires";
+}
+
+// =========================================================
+// admin_responses
+// =========================================================
+//
+// Director-only endpoint for reading every prompt's submissions
+// across the cohort. Returns:
+//   {
+//     prompts: [ { prompt_id, title_es/en, description_es/en, audience,
+//                  start_date, end_date, end_time, category, surface,
+//                  is_active, fields: [...], expected_cwids: [...],
+//                  responses: [ { cwid, field_id, value, submitted_at } ] } ],
+//     roster:  { cwid: { preferred_name, first_name, last_name, role } }
+//   }
+//
+// Gated on role: only users whose Roster row is `staff` can hit
+// this endpoint; `faculty`, `student`, or anything else gets
+// `forbidden`. Faculty are visiting professors who teach in BA
+// and don't need to read other students' RSVP / dietary / size
+// submissions, so this is a strict staff-only gate. The cohort
+// token + CWID + birthday check is the same triple the rest of
+// the user-auth surface uses, so a stolen cohort token alone
+// can't read responses — the requester also has to be a Director-
+// level account on the roster.
+//
+// Returns ALL prompts (active and expired) so the Director can look at
+// historical submissions inside the app instead of opening the
+// spreadsheet. expected_cwids carries the active-roster CWIDs that
+// match the prompt's audience expression, so the front end can render
+// "X of Y responded" and a non-responder list without reimplementing
+// the audience-matching logic. roster carries the curated subset
+// (preferred_name + first_name + last_name + role) used to render
+// submitter names; the keys are CWIDs to make front-end lookup O(1).
+function handleAdminResponses(params) {
+  const idResult = verifyUserIdentity(params);
+  if (idResult.error) return jsonResponse({ error: idResult.error });
+
+  const user = idResult.user;
+  const role = String(user.role || "").trim().toLowerCase();
+  if (role !== "staff") {
+    return jsonResponse({ error: "forbidden" });
+  }
+
+  const today = todayInSpreadsheetTz();
+  const promptRows = readTabAsObjects(PROMPTS_TAB_NAME);
+  const fieldRows = readTabAsObjects(PROMPT_FIELDS_TAB_NAME);
+  const responseRows = readTabAsObjects(RESPONSES_TAB_NAME);
+  const rosterRows = readTabAsObjects(ROSTER_TAB_NAME);
+
+  // Build the active roster (program_status = active or blank).
+  // Withdrawn / completed students don't appear in expected_cwids
+  // so the Director's "missing responses" view doesn't nag about
+  // people who can't actually respond anymore.
+  const activeRoster = [];
+  const rosterByCwid = {};
+  for (let i = 0; i < rosterRows.length; i++) {
+    const r = rosterRows[i];
+    const status = String(r.program_status || "active").trim().toLowerCase();
+    if (status && status !== "active") continue;
+    const cwid = normalizeCwid(r.cwid);
+    if (!cwid) continue;
+    const curated = {
+      cwid: cwid,
+      preferred_name: String(r.preferred_name || ""),
+      first_name: String(r.first_name || ""),
+      last_name: String(r.last_name || ""),
+      role: String(r.role || "").trim().toLowerCase(),
+    };
+    activeRoster.push(curated);
+    rosterByCwid[cwid] = curated;
+  }
+
+  // Group fields by prompt_id, sorted by field_order. Same logic as
+  // loadPromptsForUser — split out into a local because we don't
+  // want to call that function (it would re-read the tabs and apply
+  // the student audience filter).
+  const fieldsByPrompt = {};
+  for (let i = 0; i < fieldRows.length; i++) {
+    const f = fieldRows[i];
+    const pid = String(f.prompt_id || "").trim();
+    if (!pid) continue;
+    if (!fieldsByPrompt[pid]) fieldsByPrompt[pid] = [];
+    fieldsByPrompt[pid].push(parseFieldRow(f));
+  }
+  for (const pid in fieldsByPrompt) {
+    fieldsByPrompt[pid].sort(function (a, b) {
+      return a.field_order - b.field_order;
+    });
+  }
+
+  // Group responses by prompt_id. Unlike loadPromptsForUser (which
+  // collapses to a per-field { fid: value } map for one user), we
+  // keep the full row list so the front end can render per-user
+  // submissions and per-option tallies.
+  const responsesByPrompt = {};
+  for (let i = 0; i < responseRows.length; i++) {
+    const r = responseRows[i];
+    const pid = String(r.prompt_id || "").trim();
+    const fid = String(r.field_id || "").trim();
+    if (!pid || !fid) continue;
+    if (!responsesByPrompt[pid]) responsesByPrompt[pid] = [];
+    responsesByPrompt[pid].push({
+      cwid: normalizeCwid(r.cwid),
+      field_id: fid,
+      value: String(r.value == null ? "" : r.value),
+      submitted_at: String(r.submitted_at || ""),
+    });
+  }
+
+  // Build the prompts array — every prompt with a prompt_id, no
+  // audience or active-window filter. expected_cwids is computed
+  // by walking the active roster against the prompt's audience.
+  const out = [];
+  for (let i = 0; i < promptRows.length; i++) {
+    const p = promptRows[i];
+    const pid = String(p.prompt_id || "").trim();
+    if (!pid) continue;
+    const fields = fieldsByPrompt[pid] || [];
+
+    const expectedCwids = [];
+    for (let j = 0; j < activeRoster.length; j++) {
+      if (userMatchesAudience(activeRoster[j], p)) {
+        expectedCwids.push(activeRoster[j].cwid);
+      }
+    }
+
+    out.push({
+      prompt_id: pid,
+      title_es: String(p.title_es || ""),
+      title_en: String(p.title_en || ""),
+      description_es: String(p.description_es || ""),
+      description_en: String(p.description_en || ""),
+      category: String(p.category || "").trim().toLowerCase(),
+      surface: String(p.surface || "today").trim().toLowerCase(),
+      audience: String(p.audience || "all"),
+      start_date: String(p.start_date || "").trim(),
+      end_date: String(p.end_date || "").trim(),
+      end_time: String(p.end_time || "").trim(),
+      is_active: promptIsActive(p, today),
+      fields: fields,
+      expected_cwids: expectedCwids,
+      responses: responsesByPrompt[pid] || [],
+    });
+  }
+
+  return jsonResponse({
+    prompts: out,
+    roster: rosterByCwid,
+  });
 }
 
 // =========================================================

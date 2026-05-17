@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "rea
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-05-16c hotfix — repair the blank Schedule tab. The 2026-05-16 performance pass wrapped WeeklyOverviewView's per-week pipeline (event overlap, per-day grouping, personalized class filter, finals lookup) in a useMemo, but two locals inside that closure — showClasses (= shouldFilterClasses(profile)) and visibleClasses (= filterClassesByProfile(data.classes, profile)) — were still referenced from the per-day render block outside the memo (dayClasses guard, dayFinals filter). Those names lived only inside the useMemo callback, so at render time visibleClasses.filter(...) threw a ReferenceError. The error bubbled past the implicit boundary inside <ScheduleView> and the entire Schedule tab unmounted to a blank white screen. Same shape of regression as the 2026-04-28b hotfix (a memoization pass moved variables into a closure but the render still reached for them). Fix: include showClasses and visibleClasses in the useMemo return object and destructure them alongside the other pre-computed locals (weekDates, eventsByDate, activeClassesByDate, finalsByDate). No data-shape change; no CACHE_VERSION bump; no sheet edits required; no Apps Script cutover. Mechanism check on why this didn't surface earlier in the dev parser pass: showClasses and visibleClasses are plain identifier references inside a function body — JavaScript treats those as runtime ReferenceErrors, not parse errors, so the build was clean and the regression only fired the first time a user with personalization actually clicked Schedule. ============= 2026-05-16b — Semester Calendar now anchors the student in time: a thin BAP Blue divider rule with a centered DM Mono 'Hoy · Today' pill renders before the first not-past event in the filtered, chronologically-sorted, month-grouped list, and every past event dims to opacity 0.55 (same treatment Today's activity card already uses for items earlier in the day). 'Not-past' is defined as (e.end_date || e.date) >= todayStr so an ongoing multi-day event reads as current rather than past — and the divider lands before it rather than after the last fully-past event, which matters when today falls inside a multi-day run. Implementation: new firstNotPastKey useMemo keyed on grouped + todayStr walks the per-month arrays in order and returns the first matching `${date}|${title}` key; the per-event render compares its own key against that and renders the divider via a Fragment wrapper above the event row. When no events are upcoming (everything past, or empty filter), firstNotPastKey is null and no divider renders. Fragment added to the React import. No data-shape change; no CACHE_VERSION bump; no sheet edits required. ============= 2026-05-16 — Performance audit pass: three concrete wins. (1) The 160×160 BAP header logo (previously inlined as a ~63KB base64 string in App.jsx as LOGO_URI) moved to public/logo.png and is now served as a static asset. The base64 blob was adding ~63KB to the JS the phone had to parse before first paint; pulling it out drops the bundled JS by the same amount and lets the asset cache independently (the SW precache picks it up alongside the rest of the shell). LOGO_URI is still the constant referenced at the three header sites; only its value changed from data:image/png;base64,... to '/logo.png'. (2) Memoized the clock-tick-driven derivations on the Today tab. The 1-minute setInterval in TodayView previously caused getTodayItems (eventOverlaps over every calendar event, holiday lookup, class day-of-week filter, finals merge, time-sort), TodayFinalsTile (shouldShowFinalsUI + getStudentFinals + formatFinalsWindow), EventsTodayTile (getThisWeekEvents = filter + chronological sort), and computeWeatherAlert (48-hour hourly scan) to all re-run on every tick — even though none of them produce different output until the calendar day rolls over or the underlying data changes. Each is now wrapped in useMemo keyed on the actual inputs (data/profile/todayStr or data/profile/weather). EventsTodayTile gained a todayStr prop from TodayView so its memo key matches the rest of the tile family. Also lifted the loadTodayCache() call from a per-render JSON.parse to a lazy useState initializer. (3) Memoized the filter/sort pipelines in WeeklyOverviewView (the per-day eventsByDate / activeClassesByDate / finalsByDate compute that previously ran 7-day-deep nested filters on every render including each chevron tap), CalendarView (filter → sort → group-by-month pipeline that previously ran on every filter-pill tap), and EventsView (upcoming → category filter → split-by-week pipeline that previously ran on every filter tap plus a JSON.parse of the dólar cache just to read one number). EventsView also got the same lazy-init treatment for its loadTodayCache call. Net effect: the most-trafficked re-render paths (Today every minute, WeeklyOverview/Calendar/Events filter taps) collapse from full pipeline recompute per render to nearly free after the first paint, and the bundle shrinks by ~63KB. Hooks-rule check: TodayFinalsTile's early returns now sit AFTER the useMemo calls (was: returns first, then helpers) so hooks are called unconditionally on every render. Added useMemo to the React imports (was using useState/useEffect/useRef/useCallback). No data-shape change; no CACHE_VERSION bump; no sheet edits required; no new dependencies; no manual Apps Script cutover. ============= 2026-05-15 — Three small security hardening passes from the audit. (1) AuthCode.gs's doGet and doPost catch-all error responses now drop the `stack` field — runtime exceptions still come back as { error: 'internal_error', message } so the front end has something to log, but the full stack trace (function names, line numbers, internal logic) no longer rides back to the client. Full stack still gets Logger.log'd, which the Director can read in the Apps Script execution log. (2) New safeExternalUrl(url) helper near AddressLink in App.jsx returns the URL unchanged when its scheme is one of http: / https: / tel: / mailto: / sms:, and returns '' for anything else (javascript:, data:, file:, vbscript:, custom schemes). Applied as a guard at every spreadsheet-sourced <a href> site: LinkButton (Health/Churches/Explore/Events link columns), AddressLink (Contacts.maps override), ActionBtn (Contacts.maps, Contacts.whatsapp, Resources.url), AnnouncementBanner CTA (Announcements.link), Apps cards (Apps.ios_url, android_url, web_url), FAQ accordion (FAQ.link). React does NOT sanitize href attributes, so without this guard a Director paste-mishap or a malicious URL accidentally landed in the sheet would fire as script when a student taps the button. Internally-constructed schemes (tel:\${o.phone}, mailto:\${o.email}) trivially pass the allowlist so the change is invisible for those. (3) New vercel.json at the repo root sets Referrer-Policy: strict-origin-when-cross-origin (tightens the small risk of leaking the SPA's referrer when a student taps an external link), X-Frame-Options: DENY (prevents clickjacking by iframing the app on a hostile page), X-Content-Type-Options: nosniff (denies MIME sniffing), and Permissions-Policy denying camera/microphone/geolocation/payment/usb/midi/magnetometer/gyroscope (the app uses none of these powerful browser APIs). CSP was considered but deferred — needs careful tuning against script.google.com, fonts.googleapis.com, open-meteo, dolarapi. Manual cutover: re-paste AuthCode.gs into the Apps Script editor and re-deploy as New Version (only the script change requires a manual re-deploy; the front-end and Vercel-config changes ship with the next push to main). No CACHE_VERSION bump. ============= 2026-05-14 — Weekly Overview day cards now interleave events, finals, and personal classes chronologically by start time instead of always bucketing classes below events. Previously each day rendered three sequential blocks (dayEvents.map → dayFinals.map → dayClasses.map), so a 9 AM class always appeared below an untimed program event or an afternoon excursion, which made the day card read in stacking order rather than time order. Implementation in <WeeklyOverviewView>'s per-day render: after dayEvents, dayFinals, and dayClasses are computed (filters unchanged — class-personalization gate, holiday-cancels-classes gate, per-class start_date/end_date window, and the final-on-this-date class-replacement still apply), they're flattened into a single dayItems array where each entry carries kind ('event' / 'final' / 'class'), sortMin (minutes since midnight, null for untimed), a stable key, and the original payload. Sort uses the same untimed-first-then-chronological pattern as getTodayItems on Today (a.sortMin === null sorts before b.sortMin === null; otherwise ascending number). Final-time and class-time strings are split on dash so a range like '9:00–11:00' or '9:00–10:50' yields the start half for sorting. The three render blocks collapsed into one map over dayItems with a kind-switch — event cards keep their EVENT_STYLES type-driven bg/border + multi-day range badge, final cards keep the Pep Orange Final pill treatment + location line, class rows keep the thinner secondary row with Fog left border. The legacy-holiday-event skip (drop calendar holiday events when a Holidays-tab row is already driving the banner) moved up from the events render-time filter to the dayItems build step so the unified pipeline never carries the duplicate. hasContent is now dayItems.length > 0 || !!holidayContext, matching the simplification. No data-shape change; no CACHE_VERSION bump. ============= 2026-05-11b — Calendar event types consolidated: 'milestone' removed and its visual treatment (Parchment-orange #FFF3E0 bg, Pep Orange border, ★ icon) reassigned to 'program'. Rationale: the two categories had drifted into near-overlap operationally — both surfaced program-office-curated date entries (arrival days, asados, faculty visits, etc.) and students never reliably distinguished the two when filtering. Collapsing them removes a filter pill, simplifies sheet-side decisions for the Director (one fewer 'which type does this belong to?' judgment call per row), and frees the eye-catching Pep Orange treatment to flag program-curated entries broadly rather than just the calendar's marquee moments. The 'program' pill also moved to the first slot after 'All' in the CalendarView filter row, since it's now the largest and most prominent category. Implementation: EVENT_STYLES literal in App.jsx had its 'milestone' key deleted and 'program' restyled in place (bg, border, icon swap; label stays 'Program'); 'program' was hoisted to the first key in the object so Object.keys(EVENT_STYLES) iteration order puts it right after 'all' in the filter pills (the iteration order is the source of truth for pill order, not a separate constant). The legacy 'milestone' seed row in DEFAULT_DATA.calendarEvents was rewritten to type:'program' so the preview mode (no SHEET_ID) still renders the arrival-day card with the now-correct styling. No CACHE_VERSION bump — the data shape is unchanged; the type field is still a string, just with one fewer accepted value. The fallback in CalendarView and WeeklyOverviewView already routes unknown types through EVENT_STYLES.academic, so any legacy rows still typed 'milestone' in the live sheet render as Academic-styled cards until the Director relabels them (separate operations-side cleanup; not blocking). Earlier this day: Weekly Overview navigation now bounded to a tight personal window: one week prior, current week, and up to two weeks ahead. Default lands on the current week as before. Prev/next chevron buttons render disabled (40% opacity, stone color, not-allowed cursor) at the bounds and the click handler is a no-op so a stuck tap can't push past the bounds. Implementation: two consts MIN_WEEK_OFFSET (-1) and MAX_WEEK_OFFSET (+2) inside WeeklyOverviewView, plus canGoBack/canGoForward booleans derived from the current weekOffset; setWeekOffset calls wrap in Math.max / Math.min as a belt-and-suspenders clamp. Earlier this day: optional per-prompt end_time cutoff. New `end_time` column on the Prompts sheet (HH:mm 24h, e.g. `20:00`) tightens the close on `end_date` from end-of-day to a specific time of day — useful for 'RSVP closes at 8 PM' style cutoffs on dinners and excursions. Blank end_time keeps the prior end-of-day-on-end_date behavior. Server side: `promptIsActive` adds a same-day time-of-day check (`Utilities.formatDate(new Date(), tz, 'HH:mm') > end_time` → not active); `buildPromptResponse` projects the new field; `validatePrompts` flags malformed end_times (must be `HH:mm`) and end_time set without end_date. Front side: new `formatPromptCutoff(prompt, now)` helper renders bilingual closes-at copy with three proximity tiers — 'Cierra hoy a las 20:00' when end_date is today, 'Cierra mañana a las 20:00' when it's tomorrow, 'Cierra el 15 de mayo a las 20:00' otherwise; degrades to 'Cerrado / Closed' once the cutoff has passed (so a stale cached entry doesn't claim the form is still open in the brief window before the next prompts fetch drops it). PromptCard rows on Today and PromptProfileSection rows in the gear modal both show the cutoff as a small DM Mono caption (`fontSize: 10`, `C.stone`) beneath the title; rows without an end_time render unchanged. Import xlsx regenerated with the new column populated for the welcome_dinner and tigre_excursion examples ('20:00' on welcome_dinner, '18:00' on tigre_excursion) so the demo data showcases the feature out of the box. Manual cutover: (a) add an `end_time` column to the existing `Prompts` tab in the Roster spreadsheet (just type the header in the next blank column; no row data needed unless you want to set cutoffs), (b) re-paste AuthCode.gs into the Apps Script editor and re-deploy as New Version. CACHE_VERSION stays at 6; PROMPTS_CACHE_TTL stays at 10 min so a Director-edited end_time propagates fast. Earlier this day: Per-student data collection via prompts + responses. Generalized 'Director defines a prompt in a sheet → app surfaces it to the right students → students submit → responses land back in a sheet' primitive — once it exists, every future use case (t-shirt sizes, meal RSVPs, activity sign-ups, evaluation surveys, weekly check-ins) is just a row in the Prompts tab, no code change. Two new tabs in the existing Roster spreadsheet (extends the auth permission boundary that already protected PII; avoids spinning up a third spreadsheet/script): `Prompts` (one row per logical question with prompt_id, title_es/en, description_es/en, audience, start_date, end_date, category, surface) and `PromptFields` (one row per input box, joined to Prompts by prompt_id; carries field_id, field_order, label_es/en, field_type, options [semicolon-delimited], option_labels_es/en, required, placeholder_es/en). The Responses tab (auto-created on first submit) is one row per (cwid, prompt_id, field_id) plus value + submitted_at. The two-tab split handles multi-field prompts cleanly — a meal RSVP with appetizer/main/dessert/comments is 1 Prompts row + 4 PromptFields rows; a t-shirt size is 1 + 1. Surface column ('today' / 'profile' / 'both') chooses where each prompt renders: time-bounded prompts on Today, evergreen ones inside ProfileModal. AuthCode.gs gains two new actions: GET ?action=prompts (re-validates identity, returns active prompts for the user with responses pre-filled, audience-filtered, date-window-gated) and POST submit (text/plain JSON body to avoid CORS preflight against Apps Script — application/json would trigger preflight and Apps Script doesn't implement doOptions). Submit re-validates identity on every call, runs each field through validateSubmissionValues against its declared type + required flag, upserts under a LockService script lock keyed on (cwid, prompt_id, field_id), and returns the refreshed prompt object so the front end can update local state without a follow-up fetch. Field types in v1: short_text, long_text, single_select, multi_select, number, boolean (date deferred until a concrete need shows up). Editor helper validatePrompts() in AuthCode.gs flags duplicate prompt_ids, fields pointing at unknown prompts, missing field_types, select fields with no options, malformed start_date/end_date, audience tokens that aren't 'all'/role/CWID, mismatched option_labels counts, etc. — same shape and Logger.log output as the existing validateRoster(). New App.jsx machinery: class SubmitError extends Error (carries .code + .details so PromptForm can branch on validation_failed / prompt_inactive / audience_mismatch / lock_failed for inline error copy); fetchPrompts and submitResponse async functions next to identifyUser, mirroring its AuthError/NoMatchError throw conventions; PROMPTS_CACHE_KEY ('bap-prompts-cache') with a 10-min TTL keyed by cwid (so a sign-out / sign-in on the same device doesn't surface the previous user's pending forms); filterPromptsBySurface and isPromptPending helpers. Birthday now lives in the bap-user envelope alongside the rest of the curated user record (small expansion of the threat-model trade — birthday on-device matches what's already stored: cwid, name, role, email — and the prompts/submit endpoints re-validate identity on every call so the credential is needed in localStorage; legacy records without birthday force a one-time re-prompt at the user gate, which loadUser handles by returning null when the birthday field is missing). New components: PromptFieldInput (renders one field per field_type — selects as tappable cards with ✓ for multi / • for single and bilingual EB Garamond labels, boolean as Sí/Yes vs No pill pair, number with inputMode='decimal' and digit-only sanitization, short_text/long_text as styled inputs with placeholder support); PromptForm (bottom-sheet wrapper, sticky-ref pattern preserves the prompt object across the BottomSheet's 260ms close animation so the form doesn't flash an empty fallback during exit, useEffect deps include only promptKey so a background prompts refresh while editing doesn't wipe in-progress edits, maps SubmitError.code to bilingual inline error panels); PromptCard (Today tile listing pending/answered prompts with surface=today/both, Pep Orange left stripe + 'Pendientes / For you' header, per-row: Pep Orange dot + Parchment bg for unanswered required-fields prompts, calmer Ocean dot + Ice bg for fully-answered, CTA shifts 'Responder →' / 'Completar →' / 'Editar →' based on state); PromptProfileSection (renders inside ProfileModal after the Logged-in-as card, lists profile/both prompts with a comma-joined preview of saved values for at-a-glance recall, italic 'Sin respuesta / No answer yet' fallback). Form sheet is rendered at App level (above ProfileModal in the JSX so it stacks correctly), state held in App as selectedPrompt; PromptCard and PromptProfileSection both bubble taps up via onOpenPrompt → setSelectedPrompt. handleSubmitPrompt updates prompts state in place after a successful submit (the script returns the refreshed prompt with new responses + submitted_at) and rewrites the per-cwid cache so both surfaces re-render in sync. Background prompts fetch effect runs once both gates are clear and the user has cwid + birthday, populating prompts state from the server and refreshing the cache. AuthError on any prompts call clears cohort token + user + prompts cache in lockstep (matches the existing sheet-data AuthError handler — same root cause, same response). NoMatchError on prompts/submit clears just the user (their roster row was likely removed mid-cohort). Sign out now also wipes the prompts cache and any open form. Two-spreadsheet permission isolation preserved: content script still has no read access to the Roster, auth script still has no read access to the content sheet, prompts/responses live entirely on the Roster side under the same auth boundary as the per-user identity check. CACHE_VERSION stays at 6 — content data shape unchanged; the prompts payload is its own cache layer. Manual cutover after this lands: (a) add Prompts and PromptFields tabs to the Roster spreadsheet (Responses auto-creates on first submit), (b) re-deploy AuthCode.gs (Apps Script editor → Deploy → Manage deployments → pencil icon → New version), (c) seed at least one Prompts row + its matching PromptFields rows (e.g. tshirt_size_2026 as a single-field profile-surface single_select with options 'XS;S;M;L;XL;2XL'), (d) run validatePrompts() from the editor to confirm no warnings, (e) commit + push, (f) existing students get a one-time CWID + birthday re-prompt on next open as legacy user records without birthday are discarded. Earlier this day: 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code. ============= 2026-05-11 — Weekly Overview navigation now bounded to a tight personal window: one week prior, current week, and up to two weeks ahead. Default lands on the current week as before. Prev/next chevron buttons render disabled (40% opacity, stone color, not-allowed cursor) at the bounds and the click handler is a no-op so a stuck tap can't push past the bounds. Implementation: two consts MIN_WEEK_OFFSET (-1) and MAX_WEEK_OFFSET (+2) inside WeeklyOverviewView, plus canGoBack/canGoForward booleans derived from the current weekOffset; setWeekOffset calls wrap in Math.max / Math.min as a belt-and-suspenders clamp. Earlier this day: optional per-prompt end_time cutoff. New `end_time` column on the Prompts sheet (HH:mm 24h, e.g. `20:00`) tightens the close on `end_date` from end-of-day to a specific time of day — useful for 'RSVP closes at 8 PM' style cutoffs on dinners and excursions. Blank end_time keeps the prior end-of-day-on-end_date behavior. Server side: `promptIsActive` adds a same-day time-of-day check (`Utilities.formatDate(new Date(), tz, 'HH:mm') > end_time` → not active); `buildPromptResponse` projects the new field; `validatePrompts` flags malformed end_times (must be `HH:mm`) and end_time set without end_date. Front side: new `formatPromptCutoff(prompt, now)` helper renders bilingual closes-at copy with three proximity tiers — 'Cierra hoy a las 20:00' when end_date is today, 'Cierra mañana a las 20:00' when it's tomorrow, 'Cierra el 15 de mayo a las 20:00' otherwise; degrades to 'Cerrado / Closed' once the cutoff has passed (so a stale cached entry doesn't claim the form is still open in the brief window before the next prompts fetch drops it). PromptCard rows on Today and PromptProfileSection rows in the gear modal both show the cutoff as a small DM Mono caption (`fontSize: 10`, `C.stone`) beneath the title; rows without an end_time render unchanged. Import xlsx regenerated with the new column populated for the welcome_dinner and tigre_excursion examples ('20:00' on welcome_dinner, '18:00' on tigre_excursion) so the demo data showcases the feature out of the box. Manual cutover: (a) add an `end_time` column to the existing `Prompts` tab in the Roster spreadsheet (just type the header in the next blank column; no row data needed unless you want to set cutoffs), (b) re-paste AuthCode.gs into the Apps Script editor and re-deploy as New Version. CACHE_VERSION stays at 6; PROMPTS_CACHE_TTL stays at 10 min so a Director-edited end_time propagates fast. Earlier this day: Per-student data collection via prompts + responses. Generalized 'Director defines a prompt in a sheet → app surfaces it to the right students → students submit → responses land back in a sheet' primitive — once it exists, every future use case (t-shirt sizes, meal RSVPs, activity sign-ups, evaluation surveys, weekly check-ins) is just a row in the Prompts tab, no code change. Two new tabs in the existing Roster spreadsheet (extends the auth permission boundary that already protected PII; avoids spinning up a third spreadsheet/script): `Prompts` (one row per logical question with prompt_id, title_es/en, description_es/en, audience, start_date, end_date, category, surface) and `PromptFields` (one row per input box, joined to Prompts by prompt_id; carries field_id, field_order, label_es/en, field_type, options [semicolon-delimited], option_labels_es/en, required, placeholder_es/en). The Responses tab (auto-created on first submit) is one row per (cwid, prompt_id, field_id) plus value + submitted_at. The two-tab split handles multi-field prompts cleanly — a meal RSVP with appetizer/main/dessert/comments is 1 Prompts row + 4 PromptFields rows; a t-shirt size is 1 + 1. Surface column ('today' / 'profile' / 'both') chooses where each prompt renders: time-bounded prompts on Today, evergreen ones inside ProfileModal. AuthCode.gs gains two new actions: GET ?action=prompts (re-validates identity, returns active prompts for the user with responses pre-filled, audience-filtered, date-window-gated) and POST submit (text/plain JSON body to avoid CORS preflight against Apps Script — application/json would trigger preflight and Apps Script doesn't implement doOptions). Submit re-validates identity on every call, runs each field through validateSubmissionValues against its declared type + required flag, upserts under a LockService script lock keyed on (cwid, prompt_id, field_id), and returns the refreshed prompt object so the front end can update local state without a follow-up fetch. Field types in v1: short_text, long_text, single_select, multi_select, number, boolean (date deferred until a concrete need shows up). Editor helper validatePrompts() in AuthCode.gs flags duplicate prompt_ids, fields pointing at unknown prompts, missing field_types, select fields with no options, malformed start_date/end_date, audience tokens that aren't 'all'/role/CWID, mismatched option_labels counts, etc. — same shape and Logger.log output as the existing validateRoster(). New App.jsx machinery: class SubmitError extends Error (carries .code + .details so PromptForm can branch on validation_failed / prompt_inactive / audience_mismatch / lock_failed for inline error copy); fetchPrompts and submitResponse async functions next to identifyUser, mirroring its AuthError/NoMatchError throw conventions; PROMPTS_CACHE_KEY ('bap-prompts-cache') with a 10-min TTL keyed by cwid (so a sign-out / sign-in on the same device doesn't surface the previous user's pending forms); filterPromptsBySurface and isPromptPending helpers. Birthday now lives in the bap-user envelope alongside the rest of the curated user record (small expansion of the threat-model trade — birthday on-device matches what's already stored: cwid, name, role, email — and the prompts/submit endpoints re-validate identity on every call so the credential is needed in localStorage; legacy records without birthday force a one-time re-prompt at the user gate, which loadUser handles by returning null when the birthday field is missing). New components: PromptFieldInput (renders one field per field_type — selects as tappable cards with ✓ for multi / • for single and bilingual EB Garamond labels, boolean as Sí/Yes vs No pill pair, number with inputMode='decimal' and digit-only sanitization, short_text/long_text as styled inputs with placeholder support); PromptForm (bottom-sheet wrapper, sticky-ref pattern preserves the prompt object across the BottomSheet's 260ms close animation so the form doesn't flash an empty fallback during exit, useEffect deps include only promptKey so a background prompts refresh while editing doesn't wipe in-progress edits, maps SubmitError.code to bilingual inline error panels); PromptCard (Today tile listing pending/answered prompts with surface=today/both, Pep Orange left stripe + 'Pendientes / For you' header, per-row: Pep Orange dot + Parchment bg for unanswered required-fields prompts, calmer Ocean dot + Ice bg for fully-answered, CTA shifts 'Responder →' / 'Completar →' / 'Editar →' based on state); PromptProfileSection (renders inside ProfileModal after the Logged-in-as card, lists profile/both prompts with a comma-joined preview of saved values for at-a-glance recall, italic 'Sin respuesta / No answer yet' fallback). Form sheet is rendered at App level (above ProfileModal in the JSX so it stacks correctly), state held in App as selectedPrompt; PromptCard and PromptProfileSection both bubble taps up via onOpenPrompt → setSelectedPrompt. handleSubmitPrompt updates prompts state in place after a successful submit (the script returns the refreshed prompt with new responses + submitted_at) and rewrites the per-cwid cache so both surfaces re-render in sync. Background prompts fetch effect runs once both gates are clear and the user has cwid + birthday, populating prompts state from the server and refreshing the cache. AuthError on any prompts call clears cohort token + user + prompts cache in lockstep (matches the existing sheet-data AuthError handler — same root cause, same response). NoMatchError on prompts/submit clears just the user (their roster row was likely removed mid-cohort). Sign out now also wipes the prompts cache and any open form. Two-spreadsheet permission isolation preserved: content script still has no read access to the Roster, auth script still has no read access to the content sheet, prompts/responses live entirely on the Roster side under the same auth boundary as the per-user identity check. CACHE_VERSION stays at 6 — content data shape unchanged; the prompts payload is its own cache layer. Manual cutover after this lands: (a) add Prompts and PromptFields tabs to the Roster spreadsheet (Responses auto-creates on first submit), (b) re-deploy AuthCode.gs (Apps Script editor → Deploy → Manage deployments → pencil icon → New version), (c) seed at least one Prompts row + its matching PromptFields rows (e.g. tshirt_size_2026 as a single-field profile-surface single_select with options 'XS;S;M;L;XL;2XL'), (d) run validatePrompts() from the editor to confirm no warnings, (e) commit + push, (f) existing students get a one-time CWID + birthday re-prompt on next open as legacy user records without birthday are discarded. Earlier this day: 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
+const BUILD_VERSION = "2026-05-17b — Director response dashboard. New strictly-staff-gated surface for reading every prompt's submissions across the cohort, closing the loop on the prompts/responses primitive that shipped 2026-05-09c. Reached via a 'Ver respuestas / View responses' button inside <ProfileModal> that only renders when isStaff(currentUser) is true. Faculty are intentionally excluded — visiting professors who teach in BA don't need to read other students' RSVP / dietary / size submissions — so the gate is strict role === 'staff' rather than the more permissive isStaffOrFaculty helper. The new isStaff helper sits next to isStaffOrFaculty as a separate single-source-of-truth for any staff-only surface added later. Tapping the button closes the gear modal and opens <DirectorResponsesView> — a full-screen overlay matching ProfileModal's visual identity (parchment bg, Pep Blue header gradient, Spanish-primary copy, EB Garamond headlines). Two internal screens: (1) prompt list with response counts ('12 / 18'), per-prompt active/closed pill, and the prompt's window dates; sorting puts active prompts first then closed, descending by end_date within each band so the freshest live data leads. (2) drill-in detail view with per-field sections — select fields render a horizontal tally bar (Ocean fill on Ice background, fontSize 12 Roboto label sitting on the bar) followed by individual responses with names and values; non-select fields skip the tally and just list responses. A 'Falta responder / Awaiting response' section at the bottom of the detail view lists who's expected to respond but hasn't, pulled from expected_cwids minus the set of CWIDs with at least one stored value. A small 'Fuera de la audiencia / Outside audience' section appears only when there are responders whose CWID isn't in the current expected audience (happens when the Director narrows audience after some students have already submitted — surfaces the data instead of quietly dropping it). Names render as 'Preferred-or-first Last-initial.' to match the rest of the app's first-names-only default. New auth-script action ?action=admin_responses — verifyUserIdentity gate + strict staff-only role check (role !== 'staff' returns { error: 'forbidden' }), returns { prompts: [...with fields/expected_cwids/responses/is_active...], roster: { cwid: { preferred_name, first_name, last_name, role } } }. All prompts (active and expired) are returned so the Director can look at historical submissions; expected_cwids is computed server-side by walking the active roster against each prompt's audience expression so the front end doesn't reimplement userMatchesAudience. The Roster (program_status=active) is sent in full because the Director already has full Roster access via the spreadsheet; sending it makes name lookup O(1) on the client without duplicating the audience-matching logic. New App.jsx machinery: class ForbiddenError extends Error (so a stolen cohort token + non-staff CWID+birthday triple gets a clear inline message instead of bouncing through the gates); fetchAdminResponses({ token, cwid, birthday }) async function next to fetchPrompts; loadDirectorResponses callback (sets directorLoading, swallows error into directorError with bilingual copy), handleOpenDirector (closes ProfileModal first so the dashboard doesn't stack under it) and handleCloseDirector. App-level state: directorOpen / directorPayload / directorLoading / directorError. Helpers: isStaff (strict staff-only gate, sits next to isStaffOrFaculty), sortDirectorPrompts (active-first + recency), groupResponsesByCwid (response array → { cwid: { field_id: value } }), respondedCwidSet (set of CWIDs that have at least one stored value), tallySelectField (counts per declared option preserving order + appends 'other' values that don't match any declared option), directorPromptTitle/Alt/Description, directorFieldLabel, directorResponderName. No localStorage cache: the dashboard is opened a handful of times per week and staleness is more confusing than a 1-second loading state on each open. AuthError on any admin call clears cohort token + user + prompts cache in lockstep (matches the existing sheet-data AuthError handler — same root cause, same response) AND closes the dashboard so the next render goes to the cohort gate. NoMatchError closes the dashboard and bounces to the user gate. ForbiddenError keeps the dashboard open with an inline error. Manual cutover after this commit: re-deploy AuthCode.gs (Apps Script editor → Deploy → Manage deployments → pencil icon → New version) so the new ?action=admin_responses endpoint is live. No data-shape change to the content side; no CACHE_VERSION bump; no sheet schema change. Earlier this day: Two calendar views now auto-anchor on today when the student opens them. Semester Calendar (Calendar tab) scrolls to the 'Hoy · Today' divider that shipped 2026-05-16b on mount, and again whenever the active filter pill changes — a filtered list has its own first-not-past event, so re-anchoring keeps the upcoming-events part of the list in view rather than leaving the student looking at past events from a different filter. Weekly Overview (Schedule tab) scrolls to today's day card on mount, and again whenever the student taps '← Back to This Week' (weekOffset returns to 0 from a neighboring week). Navigating to a different week via the chevrons does NOT pull the student back to today — the effect gates on weekOffset === 0, so a deliberate look-ahead or look-back stays put. Implementation: new todayRef (WeeklyOverviewView) and todayDividerRef (CalendarView) both threaded through the existing useRef import; useEffect deps are weekOffset and firstNotPastKey respectively, so the scroll re-fires on the specific state changes that should re-anchor and is a no-op on unrelated re-renders. Both effects wrap the scrollIntoView call in requestAnimationFrame — calling it the same paint as the mount can miss its target on iOS Safari when the parent scroll container is still being sized — and return a cancelAnimationFrame cleanup. Both targets carry scrollMarginTop: 12 so the anchor lands with a small breathing space below the section title rather than flush to the viewport top. CalendarView's effect also gates on firstNotPastKey being truthy: a filter pill where everything is past (e.g. an old 'orientation' filter mid-semester) leaves firstNotPastKey null, no divider renders, and the effect no-ops so the student lands at the natural top of the list rather than getting an awkward jump-to-bottom. Retires the explicit '↓ TODAY' scroll-to-today button motif from the perspective of Calendar/Schedule tabs — the dedicated Today tab is still the canonical entry point for today-of-day context, but the calendar views now do the right thing on open without requiring a tap. No data-shape change; no CACHE_VERSION bump; no sheet edits required; no Apps Script cutover; no new dependencies. ============= 2026-05-16c hotfix — repair the blank Schedule tab. The 2026-05-16 performance pass wrapped WeeklyOverviewView's per-week pipeline (event overlap, per-day grouping, personalized class filter, finals lookup) in a useMemo, but two locals inside that closure — showClasses (= shouldFilterClasses(profile)) and visibleClasses (= filterClassesByProfile(data.classes, profile)) — were still referenced from the per-day render block outside the memo (dayClasses guard, dayFinals filter). Those names lived only inside the useMemo callback, so at render time visibleClasses.filter(...) threw a ReferenceError. The error bubbled past the implicit boundary inside <ScheduleView> and the entire Schedule tab unmounted to a blank white screen. Same shape of regression as the 2026-04-28b hotfix (a memoization pass moved variables into a closure but the render still reached for them). Fix: include showClasses and visibleClasses in the useMemo return object and destructure them alongside the other pre-computed locals (weekDates, eventsByDate, activeClassesByDate, finalsByDate). No data-shape change; no CACHE_VERSION bump; no sheet edits required; no Apps Script cutover. Mechanism check on why this didn't surface earlier in the dev parser pass: showClasses and visibleClasses are plain identifier references inside a function body — JavaScript treats those as runtime ReferenceErrors, not parse errors, so the build was clean and the regression only fired the first time a user with personalization actually clicked Schedule. ============= 2026-05-16b — Semester Calendar now anchors the student in time: a thin BAP Blue divider rule with a centered DM Mono 'Hoy · Today' pill renders before the first not-past event in the filtered, chronologically-sorted, month-grouped list, and every past event dims to opacity 0.55 (same treatment Today's activity card already uses for items earlier in the day). 'Not-past' is defined as (e.end_date || e.date) >= todayStr so an ongoing multi-day event reads as current rather than past — and the divider lands before it rather than after the last fully-past event, which matters when today falls inside a multi-day run. Implementation: new firstNotPastKey useMemo keyed on grouped + todayStr walks the per-month arrays in order and returns the first matching `${date}|${title}` key; the per-event render compares its own key against that and renders the divider via a Fragment wrapper above the event row. When no events are upcoming (everything past, or empty filter), firstNotPastKey is null and no divider renders. Fragment added to the React import. No data-shape change; no CACHE_VERSION bump; no sheet edits required. ============= 2026-05-16 — Performance audit pass: three concrete wins. (1) The 160×160 BAP header logo (previously inlined as a ~63KB base64 string in App.jsx as LOGO_URI) moved to public/logo.png and is now served as a static asset. The base64 blob was adding ~63KB to the JS the phone had to parse before first paint; pulling it out drops the bundled JS by the same amount and lets the asset cache independently (the SW precache picks it up alongside the rest of the shell). LOGO_URI is still the constant referenced at the three header sites; only its value changed from data:image/png;base64,... to '/logo.png'. (2) Memoized the clock-tick-driven derivations on the Today tab. The 1-minute setInterval in TodayView previously caused getTodayItems (eventOverlaps over every calendar event, holiday lookup, class day-of-week filter, finals merge, time-sort), TodayFinalsTile (shouldShowFinalsUI + getStudentFinals + formatFinalsWindow), EventsTodayTile (getThisWeekEvents = filter + chronological sort), and computeWeatherAlert (48-hour hourly scan) to all re-run on every tick — even though none of them produce different output until the calendar day rolls over or the underlying data changes. Each is now wrapped in useMemo keyed on the actual inputs (data/profile/todayStr or data/profile/weather). EventsTodayTile gained a todayStr prop from TodayView so its memo key matches the rest of the tile family. Also lifted the loadTodayCache() call from a per-render JSON.parse to a lazy useState initializer. (3) Memoized the filter/sort pipelines in WeeklyOverviewView (the per-day eventsByDate / activeClassesByDate / finalsByDate compute that previously ran 7-day-deep nested filters on every render including each chevron tap), CalendarView (filter → sort → group-by-month pipeline that previously ran on every filter-pill tap), and EventsView (upcoming → category filter → split-by-week pipeline that previously ran on every filter tap plus a JSON.parse of the dólar cache just to read one number). EventsView also got the same lazy-init treatment for its loadTodayCache call. Net effect: the most-trafficked re-render paths (Today every minute, WeeklyOverview/Calendar/Events filter taps) collapse from full pipeline recompute per render to nearly free after the first paint, and the bundle shrinks by ~63KB. Hooks-rule check: TodayFinalsTile's early returns now sit AFTER the useMemo calls (was: returns first, then helpers) so hooks are called unconditionally on every render. Added useMemo to the React imports (was using useState/useEffect/useRef/useCallback). No data-shape change; no CACHE_VERSION bump; no sheet edits required; no new dependencies; no manual Apps Script cutover. ============= 2026-05-15 — Three small security hardening passes from the audit. (1) AuthCode.gs's doGet and doPost catch-all error responses now drop the `stack` field — runtime exceptions still come back as { error: 'internal_error', message } so the front end has something to log, but the full stack trace (function names, line numbers, internal logic) no longer rides back to the client. Full stack still gets Logger.log'd, which the Director can read in the Apps Script execution log. (2) New safeExternalUrl(url) helper near AddressLink in App.jsx returns the URL unchanged when its scheme is one of http: / https: / tel: / mailto: / sms:, and returns '' for anything else (javascript:, data:, file:, vbscript:, custom schemes). Applied as a guard at every spreadsheet-sourced <a href> site: LinkButton (Health/Churches/Explore/Events link columns), AddressLink (Contacts.maps override), ActionBtn (Contacts.maps, Contacts.whatsapp, Resources.url), AnnouncementBanner CTA (Announcements.link), Apps cards (Apps.ios_url, android_url, web_url), FAQ accordion (FAQ.link). React does NOT sanitize href attributes, so without this guard a Director paste-mishap or a malicious URL accidentally landed in the sheet would fire as script when a student taps the button. Internally-constructed schemes (tel:\${o.phone}, mailto:\${o.email}) trivially pass the allowlist so the change is invisible for those. (3) New vercel.json at the repo root sets Referrer-Policy: strict-origin-when-cross-origin (tightens the small risk of leaking the SPA's referrer when a student taps an external link), X-Frame-Options: DENY (prevents clickjacking by iframing the app on a hostile page), X-Content-Type-Options: nosniff (denies MIME sniffing), and Permissions-Policy denying camera/microphone/geolocation/payment/usb/midi/magnetometer/gyroscope (the app uses none of these powerful browser APIs). CSP was considered but deferred — needs careful tuning against script.google.com, fonts.googleapis.com, open-meteo, dolarapi. Manual cutover: re-paste AuthCode.gs into the Apps Script editor and re-deploy as New Version (only the script change requires a manual re-deploy; the front-end and Vercel-config changes ship with the next push to main). No CACHE_VERSION bump. ============= 2026-05-14 — Weekly Overview day cards now interleave events, finals, and personal classes chronologically by start time instead of always bucketing classes below events. Previously each day rendered three sequential blocks (dayEvents.map → dayFinals.map → dayClasses.map), so a 9 AM class always appeared below an untimed program event or an afternoon excursion, which made the day card read in stacking order rather than time order. Implementation in <WeeklyOverviewView>'s per-day render: after dayEvents, dayFinals, and dayClasses are computed (filters unchanged — class-personalization gate, holiday-cancels-classes gate, per-class start_date/end_date window, and the final-on-this-date class-replacement still apply), they're flattened into a single dayItems array where each entry carries kind ('event' / 'final' / 'class'), sortMin (minutes since midnight, null for untimed), a stable key, and the original payload. Sort uses the same untimed-first-then-chronological pattern as getTodayItems on Today (a.sortMin === null sorts before b.sortMin === null; otherwise ascending number). Final-time and class-time strings are split on dash so a range like '9:00–11:00' or '9:00–10:50' yields the start half for sorting. The three render blocks collapsed into one map over dayItems with a kind-switch — event cards keep their EVENT_STYLES type-driven bg/border + multi-day range badge, final cards keep the Pep Orange Final pill treatment + location line, class rows keep the thinner secondary row with Fog left border. The legacy-holiday-event skip (drop calendar holiday events when a Holidays-tab row is already driving the banner) moved up from the events render-time filter to the dayItems build step so the unified pipeline never carries the duplicate. hasContent is now dayItems.length > 0 || !!holidayContext, matching the simplification. No data-shape change; no CACHE_VERSION bump. ============= 2026-05-11b — Calendar event types consolidated: 'milestone' removed and its visual treatment (Parchment-orange #FFF3E0 bg, Pep Orange border, ★ icon) reassigned to 'program'. Rationale: the two categories had drifted into near-overlap operationally — both surfaced program-office-curated date entries (arrival days, asados, faculty visits, etc.) and students never reliably distinguished the two when filtering. Collapsing them removes a filter pill, simplifies sheet-side decisions for the Director (one fewer 'which type does this belong to?' judgment call per row), and frees the eye-catching Pep Orange treatment to flag program-curated entries broadly rather than just the calendar's marquee moments. The 'program' pill also moved to the first slot after 'All' in the CalendarView filter row, since it's now the largest and most prominent category. Implementation: EVENT_STYLES literal in App.jsx had its 'milestone' key deleted and 'program' restyled in place (bg, border, icon swap; label stays 'Program'); 'program' was hoisted to the first key in the object so Object.keys(EVENT_STYLES) iteration order puts it right after 'all' in the filter pills (the iteration order is the source of truth for pill order, not a separate constant). The legacy 'milestone' seed row in DEFAULT_DATA.calendarEvents was rewritten to type:'program' so the preview mode (no SHEET_ID) still renders the arrival-day card with the now-correct styling. No CACHE_VERSION bump — the data shape is unchanged; the type field is still a string, just with one fewer accepted value. The fallback in CalendarView and WeeklyOverviewView already routes unknown types through EVENT_STYLES.academic, so any legacy rows still typed 'milestone' in the live sheet render as Academic-styled cards until the Director relabels them (separate operations-side cleanup; not blocking). Earlier this day: Weekly Overview navigation now bounded to a tight personal window: one week prior, current week, and up to two weeks ahead. Default lands on the current week as before. Prev/next chevron buttons render disabled (40% opacity, stone color, not-allowed cursor) at the bounds and the click handler is a no-op so a stuck tap can't push past the bounds. Implementation: two consts MIN_WEEK_OFFSET (-1) and MAX_WEEK_OFFSET (+2) inside WeeklyOverviewView, plus canGoBack/canGoForward booleans derived from the current weekOffset; setWeekOffset calls wrap in Math.max / Math.min as a belt-and-suspenders clamp. Earlier this day: optional per-prompt end_time cutoff. New `end_time` column on the Prompts sheet (HH:mm 24h, e.g. `20:00`) tightens the close on `end_date` from end-of-day to a specific time of day — useful for 'RSVP closes at 8 PM' style cutoffs on dinners and excursions. Blank end_time keeps the prior end-of-day-on-end_date behavior. Server side: `promptIsActive` adds a same-day time-of-day check (`Utilities.formatDate(new Date(), tz, 'HH:mm') > end_time` → not active); `buildPromptResponse` projects the new field; `validatePrompts` flags malformed end_times (must be `HH:mm`) and end_time set without end_date. Front side: new `formatPromptCutoff(prompt, now)` helper renders bilingual closes-at copy with three proximity tiers — 'Cierra hoy a las 20:00' when end_date is today, 'Cierra mañana a las 20:00' when it's tomorrow, 'Cierra el 15 de mayo a las 20:00' otherwise; degrades to 'Cerrado / Closed' once the cutoff has passed (so a stale cached entry doesn't claim the form is still open in the brief window before the next prompts fetch drops it). PromptCard rows on Today and PromptProfileSection rows in the gear modal both show the cutoff as a small DM Mono caption (`fontSize: 10`, `C.stone`) beneath the title; rows without an end_time render unchanged. Import xlsx regenerated with the new column populated for the welcome_dinner and tigre_excursion examples ('20:00' on welcome_dinner, '18:00' on tigre_excursion) so the demo data showcases the feature out of the box. Manual cutover: (a) add an `end_time` column to the existing `Prompts` tab in the Roster spreadsheet (just type the header in the next blank column; no row data needed unless you want to set cutoffs), (b) re-paste AuthCode.gs into the Apps Script editor and re-deploy as New Version. CACHE_VERSION stays at 6; PROMPTS_CACHE_TTL stays at 10 min so a Director-edited end_time propagates fast. Earlier this day: Per-student data collection via prompts + responses. Generalized 'Director defines a prompt in a sheet → app surfaces it to the right students → students submit → responses land back in a sheet' primitive — once it exists, every future use case (t-shirt sizes, meal RSVPs, activity sign-ups, evaluation surveys, weekly check-ins) is just a row in the Prompts tab, no code change. Two new tabs in the existing Roster spreadsheet (extends the auth permission boundary that already protected PII; avoids spinning up a third spreadsheet/script): `Prompts` (one row per logical question with prompt_id, title_es/en, description_es/en, audience, start_date, end_date, category, surface) and `PromptFields` (one row per input box, joined to Prompts by prompt_id; carries field_id, field_order, label_es/en, field_type, options [semicolon-delimited], option_labels_es/en, required, placeholder_es/en). The Responses tab (auto-created on first submit) is one row per (cwid, prompt_id, field_id) plus value + submitted_at. The two-tab split handles multi-field prompts cleanly — a meal RSVP with appetizer/main/dessert/comments is 1 Prompts row + 4 PromptFields rows; a t-shirt size is 1 + 1. Surface column ('today' / 'profile' / 'both') chooses where each prompt renders: time-bounded prompts on Today, evergreen ones inside ProfileModal. AuthCode.gs gains two new actions: GET ?action=prompts (re-validates identity, returns active prompts for the user with responses pre-filled, audience-filtered, date-window-gated) and POST submit (text/plain JSON body to avoid CORS preflight against Apps Script — application/json would trigger preflight and Apps Script doesn't implement doOptions). Submit re-validates identity on every call, runs each field through validateSubmissionValues against its declared type + required flag, upserts under a LockService script lock keyed on (cwid, prompt_id, field_id), and returns the refreshed prompt object so the front end can update local state without a follow-up fetch. Field types in v1: short_text, long_text, single_select, multi_select, number, boolean (date deferred until a concrete need shows up). Editor helper validatePrompts() in AuthCode.gs flags duplicate prompt_ids, fields pointing at unknown prompts, missing field_types, select fields with no options, malformed start_date/end_date, audience tokens that aren't 'all'/role/CWID, mismatched option_labels counts, etc. — same shape and Logger.log output as the existing validateRoster(). New App.jsx machinery: class SubmitError extends Error (carries .code + .details so PromptForm can branch on validation_failed / prompt_inactive / audience_mismatch / lock_failed for inline error copy); fetchPrompts and submitResponse async functions next to identifyUser, mirroring its AuthError/NoMatchError throw conventions; PROMPTS_CACHE_KEY ('bap-prompts-cache') with a 10-min TTL keyed by cwid (so a sign-out / sign-in on the same device doesn't surface the previous user's pending forms); filterPromptsBySurface and isPromptPending helpers. Birthday now lives in the bap-user envelope alongside the rest of the curated user record (small expansion of the threat-model trade — birthday on-device matches what's already stored: cwid, name, role, email — and the prompts/submit endpoints re-validate identity on every call so the credential is needed in localStorage; legacy records without birthday force a one-time re-prompt at the user gate, which loadUser handles by returning null when the birthday field is missing). New components: PromptFieldInput (renders one field per field_type — selects as tappable cards with ✓ for multi / • for single and bilingual EB Garamond labels, boolean as Sí/Yes vs No pill pair, number with inputMode='decimal' and digit-only sanitization, short_text/long_text as styled inputs with placeholder support); PromptForm (bottom-sheet wrapper, sticky-ref pattern preserves the prompt object across the BottomSheet's 260ms close animation so the form doesn't flash an empty fallback during exit, useEffect deps include only promptKey so a background prompts refresh while editing doesn't wipe in-progress edits, maps SubmitError.code to bilingual inline error panels); PromptCard (Today tile listing pending/answered prompts with surface=today/both, Pep Orange left stripe + 'Pendientes / For you' header, per-row: Pep Orange dot + Parchment bg for unanswered required-fields prompts, calmer Ocean dot + Ice bg for fully-answered, CTA shifts 'Responder →' / 'Completar →' / 'Editar →' based on state); PromptProfileSection (renders inside ProfileModal after the Logged-in-as card, lists profile/both prompts with a comma-joined preview of saved values for at-a-glance recall, italic 'Sin respuesta / No answer yet' fallback). Form sheet is rendered at App level (above ProfileModal in the JSX so it stacks correctly), state held in App as selectedPrompt; PromptCard and PromptProfileSection both bubble taps up via onOpenPrompt → setSelectedPrompt. handleSubmitPrompt updates prompts state in place after a successful submit (the script returns the refreshed prompt with new responses + submitted_at) and rewrites the per-cwid cache so both surfaces re-render in sync. Background prompts fetch effect runs once both gates are clear and the user has cwid + birthday, populating prompts state from the server and refreshing the cache. AuthError on any prompts call clears cohort token + user + prompts cache in lockstep (matches the existing sheet-data AuthError handler — same root cause, same response). NoMatchError on prompts/submit clears just the user (their roster row was likely removed mid-cohort). Sign out now also wipes the prompts cache and any open form. Two-spreadsheet permission isolation preserved: content script still has no read access to the Roster, auth script still has no read access to the content sheet, prompts/responses live entirely on the Roster side under the same auth boundary as the per-user identity check. CACHE_VERSION stays at 6 — content data shape unchanged; the prompts payload is its own cache layer. Manual cutover after this lands: (a) add Prompts and PromptFields tabs to the Roster spreadsheet (Responses auto-creates on first submit), (b) re-deploy AuthCode.gs (Apps Script editor → Deploy → Manage deployments → pencil icon → New version), (c) seed at least one Prompts row + its matching PromptFields rows (e.g. tshirt_size_2026 as a single-field profile-surface single_select with options 'XS;S;M;L;XL;2XL'), (d) run validatePrompts() from the editor to confirm no warnings, (e) commit + push, (f) existing students get a one-time CWID + birthday re-prompt on next open as legacy user records without birthday are discarded. Earlier this day: 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code. ============= 2026-05-11 — Weekly Overview navigation now bounded to a tight personal window: one week prior, current week, and up to two weeks ahead. Default lands on the current week as before. Prev/next chevron buttons render disabled (40% opacity, stone color, not-allowed cursor) at the bounds and the click handler is a no-op so a stuck tap can't push past the bounds. Implementation: two consts MIN_WEEK_OFFSET (-1) and MAX_WEEK_OFFSET (+2) inside WeeklyOverviewView, plus canGoBack/canGoForward booleans derived from the current weekOffset; setWeekOffset calls wrap in Math.max / Math.min as a belt-and-suspenders clamp. Earlier this day: optional per-prompt end_time cutoff. New `end_time` column on the Prompts sheet (HH:mm 24h, e.g. `20:00`) tightens the close on `end_date` from end-of-day to a specific time of day — useful for 'RSVP closes at 8 PM' style cutoffs on dinners and excursions. Blank end_time keeps the prior end-of-day-on-end_date behavior. Server side: `promptIsActive` adds a same-day time-of-day check (`Utilities.formatDate(new Date(), tz, 'HH:mm') > end_time` → not active); `buildPromptResponse` projects the new field; `validatePrompts` flags malformed end_times (must be `HH:mm`) and end_time set without end_date. Front side: new `formatPromptCutoff(prompt, now)` helper renders bilingual closes-at copy with three proximity tiers — 'Cierra hoy a las 20:00' when end_date is today, 'Cierra mañana a las 20:00' when it's tomorrow, 'Cierra el 15 de mayo a las 20:00' otherwise; degrades to 'Cerrado / Closed' once the cutoff has passed (so a stale cached entry doesn't claim the form is still open in the brief window before the next prompts fetch drops it). PromptCard rows on Today and PromptProfileSection rows in the gear modal both show the cutoff as a small DM Mono caption (`fontSize: 10`, `C.stone`) beneath the title; rows without an end_time render unchanged. Import xlsx regenerated with the new column populated for the welcome_dinner and tigre_excursion examples ('20:00' on welcome_dinner, '18:00' on tigre_excursion) so the demo data showcases the feature out of the box. Manual cutover: (a) add an `end_time` column to the existing `Prompts` tab in the Roster spreadsheet (just type the header in the next blank column; no row data needed unless you want to set cutoffs), (b) re-paste AuthCode.gs into the Apps Script editor and re-deploy as New Version. CACHE_VERSION stays at 6; PROMPTS_CACHE_TTL stays at 10 min so a Director-edited end_time propagates fast. Earlier this day: Per-student data collection via prompts + responses. Generalized 'Director defines a prompt in a sheet → app surfaces it to the right students → students submit → responses land back in a sheet' primitive — once it exists, every future use case (t-shirt sizes, meal RSVPs, activity sign-ups, evaluation surveys, weekly check-ins) is just a row in the Prompts tab, no code change. Two new tabs in the existing Roster spreadsheet (extends the auth permission boundary that already protected PII; avoids spinning up a third spreadsheet/script): `Prompts` (one row per logical question with prompt_id, title_es/en, description_es/en, audience, start_date, end_date, category, surface) and `PromptFields` (one row per input box, joined to Prompts by prompt_id; carries field_id, field_order, label_es/en, field_type, options [semicolon-delimited], option_labels_es/en, required, placeholder_es/en). The Responses tab (auto-created on first submit) is one row per (cwid, prompt_id, field_id) plus value + submitted_at. The two-tab split handles multi-field prompts cleanly — a meal RSVP with appetizer/main/dessert/comments is 1 Prompts row + 4 PromptFields rows; a t-shirt size is 1 + 1. Surface column ('today' / 'profile' / 'both') chooses where each prompt renders: time-bounded prompts on Today, evergreen ones inside ProfileModal. AuthCode.gs gains two new actions: GET ?action=prompts (re-validates identity, returns active prompts for the user with responses pre-filled, audience-filtered, date-window-gated) and POST submit (text/plain JSON body to avoid CORS preflight against Apps Script — application/json would trigger preflight and Apps Script doesn't implement doOptions). Submit re-validates identity on every call, runs each field through validateSubmissionValues against its declared type + required flag, upserts under a LockService script lock keyed on (cwid, prompt_id, field_id), and returns the refreshed prompt object so the front end can update local state without a follow-up fetch. Field types in v1: short_text, long_text, single_select, multi_select, number, boolean (date deferred until a concrete need shows up). Editor helper validatePrompts() in AuthCode.gs flags duplicate prompt_ids, fields pointing at unknown prompts, missing field_types, select fields with no options, malformed start_date/end_date, audience tokens that aren't 'all'/role/CWID, mismatched option_labels counts, etc. — same shape and Logger.log output as the existing validateRoster(). New App.jsx machinery: class SubmitError extends Error (carries .code + .details so PromptForm can branch on validation_failed / prompt_inactive / audience_mismatch / lock_failed for inline error copy); fetchPrompts and submitResponse async functions next to identifyUser, mirroring its AuthError/NoMatchError throw conventions; PROMPTS_CACHE_KEY ('bap-prompts-cache') with a 10-min TTL keyed by cwid (so a sign-out / sign-in on the same device doesn't surface the previous user's pending forms); filterPromptsBySurface and isPromptPending helpers. Birthday now lives in the bap-user envelope alongside the rest of the curated user record (small expansion of the threat-model trade — birthday on-device matches what's already stored: cwid, name, role, email — and the prompts/submit endpoints re-validate identity on every call so the credential is needed in localStorage; legacy records without birthday force a one-time re-prompt at the user gate, which loadUser handles by returning null when the birthday field is missing). New components: PromptFieldInput (renders one field per field_type — selects as tappable cards with ✓ for multi / • for single and bilingual EB Garamond labels, boolean as Sí/Yes vs No pill pair, number with inputMode='decimal' and digit-only sanitization, short_text/long_text as styled inputs with placeholder support); PromptForm (bottom-sheet wrapper, sticky-ref pattern preserves the prompt object across the BottomSheet's 260ms close animation so the form doesn't flash an empty fallback during exit, useEffect deps include only promptKey so a background prompts refresh while editing doesn't wipe in-progress edits, maps SubmitError.code to bilingual inline error panels); PromptCard (Today tile listing pending/answered prompts with surface=today/both, Pep Orange left stripe + 'Pendientes / For you' header, per-row: Pep Orange dot + Parchment bg for unanswered required-fields prompts, calmer Ocean dot + Ice bg for fully-answered, CTA shifts 'Responder →' / 'Completar →' / 'Editar →' based on state); PromptProfileSection (renders inside ProfileModal after the Logged-in-as card, lists profile/both prompts with a comma-joined preview of saved values for at-a-glance recall, italic 'Sin respuesta / No answer yet' fallback). Form sheet is rendered at App level (above ProfileModal in the JSX so it stacks correctly), state held in App as selectedPrompt; PromptCard and PromptProfileSection both bubble taps up via onOpenPrompt → setSelectedPrompt. handleSubmitPrompt updates prompts state in place after a successful submit (the script returns the refreshed prompt with new responses + submitted_at) and rewrites the per-cwid cache so both surfaces re-render in sync. Background prompts fetch effect runs once both gates are clear and the user has cwid + birthday, populating prompts state from the server and refreshing the cache. AuthError on any prompts call clears cohort token + user + prompts cache in lockstep (matches the existing sheet-data AuthError handler — same root cause, same response). NoMatchError on prompts/submit clears just the user (their roster row was likely removed mid-cohort). Sign out now also wipes the prompts cache and any open form. Two-spreadsheet permission isolation preserved: content script still has no read access to the Roster, auth script still has no read access to the content sheet, prompts/responses live entirely on the Roster side under the same auth boundary as the per-user identity check. CACHE_VERSION stays at 6 — content data shape unchanged; the prompts payload is its own cache layer. Manual cutover after this lands: (a) add Prompts and PromptFields tabs to the Roster spreadsheet (Responses auto-creates on first submit), (b) re-deploy AuthCode.gs (Apps Script editor → Deploy → Manage deployments → pencil icon → New version), (c) seed at least one Prompts row + its matching PromptFields rows (e.g. tshirt_size_2026 as a single-field profile-surface single_select with options 'XS;S;M;L;XL;2XL'), (d) run validatePrompts() from the editor to confirm no warnings, (e) commit + push, (f) existing students get a one-time CWID + birthday re-prompt on next open as legacy user records without birthday are discarded. Earlier this day: 60-day expiry on stored auth credentials. Both `bap-cohort-token` and `bap-user` localStorage entries now wrap their value in a `{ value/token, savedAt }` envelope; loadCohortToken and loadUser treat anything older than AUTH_TTL_MS (60 days) as missing and the student gets re-prompted at the appropriate gate. Soft floor against a phone passed to someone else who never signs out, and stays well outside the typical 'I forgot my code' window. Backward-compatible: the legacy plain-string cohort token and the legacy flat user record (both shipped before this commit) are accepted as still-valid on load; the next save upgrades each to the envelope format, after which the TTL kicks in. Detection heuristic for cohort token: `raw.charAt(0) === '{'` flags the envelope so we don't pay JSON.parse on plain-string legacy values. New constant: AUTH_TTL_MS. No new dependencies; no schema versioning needed (the envelope shape is content-detected, not version-keyed). Earlier this day: per-user identification via CWID + birthday gate. ============= 2026-05-09 — Per-user identification via CWID + birthday gate. New <UserGate> component renders after <PasscodeGate> succeeds, before any per-user features. Probes a separate Apps Script (AuthCode.gs, bound to a new 'BAP App Roster' spreadsheet — physically distinct from the content spreadsheet for permission isolation) with the entered CWID + birthday; on match returns a curated user record, on mismatch returns no_match. The two-spreadsheet split is the load-bearing security design: the content script literally has no read access to the Roster, and the auth script literally has no read access to the content sheet, so a bug in either can't leak data from the other. New AUTH_SCRIPT_URL constant alongside APPS_SCRIPT_URL; the same COHORT_TOKEN value lives in both Script Properties (one cohort code, two homes; rotation is two 30-second copies). Identify endpoint shape: ?action=identify&token=...&cwid=...&birthday=... → { user: { cwid, first_name, last_name, preferred_name, pronouns, role, email, whatsapp, housing_assignment, tshirt_size, tshirt_fit, dietary_restrictions, food_allergies, program_status } } or { error: 'no_match' | 'unauthorized' | 'bad_request' }. Birthday is intentionally omitted from the response — the student already knows it; echoing back is a small leak surface for nothing. Tier-C fields (medical, passport, emergency contacts) deliberately stay out of the Roster sheet. CWID normalization is lenient on input variation (strips non-digits and leading zeros so '123456789', '0123456789', '123-456-789', and ' 123456789 ' all collapse to the same canonical form for comparison) but does not pad short values, so '12345' and '123456789' remain distinct. Birthday is canonicalized to MM-DD on both sides via parseBirthdayMD; sheet rows entered as MM-DD, M-D, or full YYYY-MM-DD all match a front-end submission. Roster row's program_status defaults to 'active' if blank; non-active rows return no_match so a withdrawn or completed student can't sign in. <UserGate> follows <PasscodeGate>'s visual identity (gradient, logo, EB Garamond title pair, DM Mono caption, error panel, button) with two fields: a 9-digit CWID input (inputMode=numeric for the iOS keypad, maxLength=9, onChange strips non-digits so a paste like '123-456-789' cleans up automatically) and a birthday two-dropdown row (Spanish-primary month labels via MONTH_OPTIONS, day options re-cap when month changes via daysInMonthMD — Feb=29 for leap-year support, Apr/Jun/Sep/Nov=30, others=31). Title pair shifts to '¡Hola! / Hello!' with caption 'Decinos quién sos / Tell us who you are'; microline reads 'Buenos Aires Program' to signal continuation from the cohort gate. NoMatchError → 'We couldn't find you. Verify CWID and birthday' panel; AuthError (cohort token rotated mid-session) → calls onCohortReset to bounce back to <PasscodeGate> without showing a misleading wrong-credentials message; other errors → 'Couldn't connect' panel. Helper line at the bottom with a mailto link to buenosaires@pepperdine.edu. New currentUser state in <App>, lazy-init from localStorage at key bap-user, separate from cohort token (bap-cohort-token) and profile (bap-profile) so each piece can be cleared independently. Three-state gate flow: no SHEET_ID → preview mode; cohort token missing → <PasscodeGate>; cohort token present + currentUser missing → <UserGate>; both present → main UI. Returning students who have both keys skip both gates and land on Today instantly. Cohort code rotation clears both gates in lockstep — the data-fetch and refreshAllData AuthError handlers now clear the user alongside the cohort token, so a rotated code resets both gates rather than letting a stale identity from a previous cohort silently persist. New helpers: NoMatchError class; identifyUser() async function next to fetchAllData; loadUser/saveUser/clearUser at USER_KEY ('bap-user'); isStaffOrFaculty(user) for future role-gating (no callers yet); MONTH_OPTIONS constant; daysInMonthMD(monthStr); SELECT_CHEVRON inline SVG. Today greeting now reads from currentUser.preferred_name || currentUser.first_name (the authoritative roster identity) instead of profile.name (student-typed string); falls back to the bare greeting in preview mode or for users whose roster row has no first/preferred name. ProfileModal's 'Name' input replaced with a read-only 'Logged in as' card showing preferred-or-first name + last name, role (capitalized), email, and a confirmed 'Cerrar sesión / Sign out' button below. handleSignOut callback clears currentUser only — leaves cohort token AND profile (enrolledClasses, filterEnabled) intact, so signing back in restores everything. PROFILE_VERSION bumped 1 → 2 because the profile shape lost its name field; loadProfile gains a v1 → v2 migration that salvages enrolledClasses and filterEnabled rather than nuking the profile, so a student who already personalized doesn't lose their course selections on this deploy. CACHE_VERSION stays at 6 — content data shape unchanged. AuthCode.gs ships with two editor helpers: testReadRoster() to authorize the spreadsheet read scope, and validateRoster() to flag duplicate CWIDs (raw and normalized), missing required fields (cwid, birthday, first_name, role), unrecognized roles, malformed birthdays, malformed emails, CWIDs with non-digit characters, CWIDs that aren't exactly 9 digits, and CWIDs starting with leading zeros. Manual cutover steps after this lands: (a) populate the Roster sheet with the actual cohort, (b) confirm AUTH script's COHORT_TOKEN matches the content script's value, (c) run validateRoster() once to confirm no warnings, (d) commit + push, (e) announce to students that the app now asks for CWID and birthday after the access code.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -480,6 +480,21 @@ class SubmitError extends Error {
   }
 }
 
+// Thrown by fetchAdminResponses when the auth script returns
+// { error: "forbidden" } — i.e. the requesting user's roster row
+// has a role other than staff/faculty. Distinct from AuthError
+// (cohort token bad) and NoMatchError (CWID/birthday wrong) so the
+// caller can show a useful inline message instead of bouncing the
+// student back to the gates. In practice this should only fire if
+// a student finds the endpoint by accident; the gear-modal button
+// that triggers the fetch is already hidden for non-staff/faculty.
+class ForbiddenError extends Error {
+  constructor() {
+    super("forbidden");
+    this.name = "ForbiddenError";
+  }
+}
+
 // Pull the active prompts for a user from the auth script's
 // /prompts endpoint. Returns the array as-is. The script does the
 // audience filtering and active-window check, and pre-fills any
@@ -531,6 +546,34 @@ async function submitResponse({ token, cwid, birthday, prompt_id, fields }) {
   if (body && body.error) throw new SubmitError(body.error, body.details);
   if (!body || !body.prompt) throw new Error("Auth script returned no prompt");
   return body.prompt;
+}
+
+// Pull every prompt + every response across the cohort, plus the
+// curated roster lookup needed to render submitter names. Director-
+// only endpoint; the auth script gates it on the requester's role
+// being staff or faculty. Returns the raw shape from the script:
+//   { prompts: [...], roster: { cwid: { preferred_name, ... } } }
+// AuthError / NoMatchError mirror fetchPrompts' conventions so the
+// App's existing gate-clearing handlers apply unchanged; the new
+// ForbiddenError covers the role check failing (a student finding
+// the endpoint, the requester's role changing mid-session, etc.).
+async function fetchAdminResponses({ token, cwid, birthday }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  const params = new URLSearchParams({ action: "admin_responses", token, cwid, birthday });
+  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error === "forbidden") throw new ForbiddenError();
+  if (body && body.error) throw new Error(`Auth script error: ${body.error}`);
+  return {
+    prompts: Array.isArray(body && body.prompts) ? body.prompts : [],
+    roster: (body && body.roster && typeof body.roster === "object") ? body.roster : {},
+  };
 }
 
 // ============================================================
@@ -724,6 +767,16 @@ function isStaffOrFaculty(user) {
   if (!user || !user.role) return false;
   const r = String(user.role).trim().toLowerCase();
   return r === "staff" || r === "faculty";
+}
+
+// Strict staff-only gate. Used by the Director response dashboard,
+// which intentionally excludes faculty (visiting professors who
+// teach in BA) — they shouldn't see other students' submissions
+// to t-shirt RSVPs, dietary preferences, etc. Same null/missing-
+// user safety as isStaffOrFaculty so preview mode stays locked.
+function isStaff(user) {
+  if (!user || !user.role) return false;
+  return String(user.role).trim().toLowerCase() === "staff";
 }
 
 // ============================================================
@@ -4083,6 +4136,28 @@ function BirthdayCard({ birthdays }) {
 // ─── Weekly Overview ───
 function WeeklyOverviewView({ data, profile }) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const todayRef = useRef(null);
+
+  // Anchor the student on today's day card whenever this view mounts on
+  // the current week, and again whenever the student taps "← Back to
+  // This Week." The dep is weekOffset rather than a one-shot mount-only
+  // effect because the same scroll behavior is wanted in both paths and
+  // the condition guards against scrolling-on-other-weeks. Days of the
+  // week sit ABOVE today (Mon→Sun layout, so Wed/Thu/Fri lands mid-list);
+  // landing at the top of today's card maximizes how much of "what's
+  // happening today" is on screen on first paint.
+  useEffect(() => {
+    if (weekOffset !== 0) return;
+    const node = todayRef.current;
+    if (!node) return;
+    // Wait a frame so the layout has settled — scrollIntoView called
+    // during the same paint pass as the mount can miss its target on
+    // iOS Safari when the parent scroll container is still being sized.
+    const id = requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [weekOffset]);
 
   // The whole per-week pipeline (event overlap scan, per-day grouping +
   // sort, personalized class filter, finals lookup) only depends on
@@ -4297,10 +4372,11 @@ function WeeklyOverviewView({ data, profile }) {
           const hasContent = dayItems.length > 0 || !!holidayContext;
 
           return (
-            <div key={ds} style={{
+            <div key={ds} ref={isToday ? todayRef : null} style={{
               background: isToday ? "#F0F7FF" : C.white,
               borderRadius: 12, padding: "12px 14px",
               border: isToday ? `2px solid ${C.bapBlue}` : `1px solid ${C.fog}`,
+              scrollMarginTop: 12,
             }}>
               {/* Day header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: hasContent ? 10 : 0 }}>
@@ -4632,6 +4708,7 @@ function ScheduleView({ data, profile, onOpenSettings }) {
 function CalendarView({ data }) {
   const [filter, setFilter] = useState("all");
   const types = ["all", ...Object.keys(EVENT_STYLES)];
+  const todayDividerRef = useRef(null);
 
   // Memoize the filter → sort → group-by-month pipeline so a filter-pill
   // tap doesn't redo the same work as the immediately-following render
@@ -4666,6 +4743,26 @@ function CalendarView({ data }) {
     }
     return null;
   }, [grouped, todayStr]);
+
+  // Anchor the student on the "Hoy · Today" divider on open and whenever
+  // the active filter changes (a filtered list has its own first-not-past
+  // event, so re-anchoring keeps the upcoming-events part of the list in
+  // view rather than leaving the student looking at past events from a
+  // different filter). If every event in the active filter is past,
+  // firstNotPastKey is null and no divider renders; the effect no-ops
+  // and the student lands at the natural top of the list. Wait a frame
+  // so the layout has settled — scrollIntoView called during the same
+  // paint pass as the mount can miss its target on iOS Safari when the
+  // parent scroll container is still being sized.
+  useEffect(() => {
+    if (!firstNotPastKey) return;
+    const node = todayDividerRef.current;
+    if (!node) return;
+    const id = requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [firstNotPastKey]);
 
   return (
     <div>
@@ -4710,7 +4807,10 @@ function CalendarView({ data }) {
                 return (
                   <Fragment key={i}>
                     {isFirstNotPast && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
+                      <div ref={todayDividerRef} style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        margin: "6px 0 2px", scrollMarginTop: 12,
+                      }}>
                         <div style={{ flex: 1, height: 1, background: C.bapBlue }} />
                         <div style={{
                           fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500,
@@ -6533,7 +6633,7 @@ function PromptProfileSection({ prompts, onOpenPrompt }) {
 // their first name, ticks the courses they're enrolled in, and toggles
 // "Show only my classes". Reads/writes the profile via the onChange
 // callback so the App owns the source of truth.
-function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut, prompts, onOpenPrompt }) {
+function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut, prompts, onOpenPrompt, onOpenDirector }) {
   if (!open) return null;
 
   const sortedClasses = [...(classes || [])].sort((a, b) => a.code.localeCompare(b.code));
@@ -6652,6 +6752,20 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
                   </span>
                 )}
               </div>
+              {typeof onOpenDirector === "function" && (
+                <button
+                  onClick={onOpenDirector}
+                  className="bap-press"
+                  style={{
+                    marginTop: 12, marginRight: 8,
+                    background: C.ocean, border: `1px solid ${C.ocean}`, borderRadius: 8,
+                    padding: "8px 14px", cursor: "pointer",
+                    fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.white, letterSpacing: 0.5,
+                  }}
+                >
+                  Ver respuestas&nbsp;/&nbsp;View responses
+                </button>
+              )}
               <button
                 onClick={handleSignOutClick}
                 className="bap-press"
@@ -6794,6 +6908,605 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
           >Done</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// DIRECTOR RESPONSE DASHBOARD
+// ============================================================
+// Director-only surface for reading every prompt's submissions
+// across the cohort. Reached via a "Ver respuestas / View
+// responses" button inside <ProfileModal> that only renders when
+// isStaff(currentUser) — strict staff-only, faculty are excluded
+// (visiting professors shouldn't read other students' RSVP /
+// dietary / size submissions). The data comes from a separate
+// auth-script endpoint (?action=admin_responses) that re-validates
+// identity and role on every call, so the gate is enforced on the
+// server side too — hiding the button on the client is just UX.
+//
+// Two internal screens stacked behind one open/close prop:
+//   1. List view (selectedPromptId === null) — all prompts with
+//      response counts and an Active/Closed pill. Active prompts
+//      sit above closed ones; within each band, recently-edited
+//      prompts surface first by simple date ordering.
+//   2. Detail view — per-field breakdown for one prompt, with
+//      per-option tallies on select fields, individual responses
+//      grouped by responder, and a non-responder list pulled from
+//      expected_cwids minus actual responders.
+//
+// All names render preferred-or-first plus last initial to match the
+// rest of the app's first-names-only default; full names are
+// available in the spreadsheet for any deeper drill-down.
+
+// ─── Helpers ───
+
+// Bilingual title pair with sensible fallbacks. Mirrors the
+// patterns in PromptForm / PromptCard.
+function directorPromptTitle(p) {
+  return p.title_es || p.title_en || p.prompt_id;
+}
+function directorPromptTitleAlt(p) {
+  if (p.title_es && p.title_en && p.title_es !== p.title_en) return p.title_en;
+  return "";
+}
+function directorPromptDescription(p) {
+  return p.description_es || p.description_en || "";
+}
+function directorFieldLabel(f) {
+  return f.label_es || f.label_en || f.field_id;
+}
+
+// Display name for a responder. Falls back through the curated
+// roster columns; if nothing populated, shows the CWID.
+function directorResponderName(rosterEntry, cwid) {
+  if (!rosterEntry) return cwid || "—";
+  const first = rosterEntry.preferred_name || rosterEntry.first_name || "";
+  const last = rosterEntry.last_name || "";
+  if (first && last) return `${first} ${last.charAt(0)}.`;
+  if (first) return first;
+  if (last) return last;
+  return cwid || "—";
+}
+
+// Active prompts above closed ones; within each band, most recent
+// end_date first so the freshest live data leads. Prompts with no
+// end_date (evergreen profile prompts like t-shirt size) sort last
+// inside the active band — those don't have a deadline, so they're
+// less time-sensitive than something with a close date next week.
+function sortDirectorPrompts(prompts) {
+  const list = [...(prompts || [])];
+  list.sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+    // Within the same band, descending by end_date (blanks last).
+    const ae = a.end_date || "";
+    const be = b.end_date || "";
+    if (!ae && !be) return (a.prompt_id || "").localeCompare(b.prompt_id || "");
+    if (!ae) return 1;
+    if (!be) return -1;
+    return be.localeCompare(ae);
+  });
+  return list;
+}
+
+// Group a prompt's response rows by cwid → field_id → value.
+function groupResponsesByCwid(responses) {
+  const out = {};
+  (responses || []).forEach((r) => {
+    if (!r || !r.cwid) return;
+    if (!out[r.cwid]) out[r.cwid] = {};
+    out[r.cwid][r.field_id] = r.value;
+  });
+  return out;
+}
+
+// Set of cwids that have at least one stored value for this prompt.
+// Used both for the "X of Y responded" count and for splitting the
+// expected audience into responders vs non-responders.
+function respondedCwidSet(responses) {
+  const s = new Set();
+  (responses || []).forEach((r) => { if (r && r.cwid) s.add(r.cwid); });
+  return s;
+}
+
+// For a select field, count how many submissions chose each
+// option. multi_select values are stored semicolon-joined so we
+// split before counting. Returns an array of { value, label, count }
+// preserving the field's declared option order, with any "other"
+// values (submissions that don't match a declared option) appended
+// at the end. The bilingual label picks Spanish first then English
+// to match the field's option_labels arrays.
+function tallySelectField(field, responses) {
+  const isMulti = field.field_type === "multi_select";
+  const values = (responses || [])
+    .filter((r) => r.field_id === field.field_id && r.value != null && r.value !== "")
+    .flatMap((r) => isMulti
+      ? String(r.value).split(";").map((v) => v.trim()).filter(Boolean)
+      : [String(r.value).trim()]
+    );
+  const counts = {};
+  values.forEach((v) => { counts[v] = (counts[v] || 0) + 1; });
+
+  const declared = (field.options || []).map((opt, i) => {
+    const lab = (field.option_labels_es && field.option_labels_es[i])
+      || (field.option_labels_en && field.option_labels_en[i])
+      || opt;
+    return { value: opt, label: lab, count: counts[opt] || 0 };
+  });
+  const declaredSet = new Set((field.options || []).map((o) => o));
+  const extras = Object.keys(counts)
+    .filter((v) => !declaredSet.has(v))
+    .map((v) => ({ value: v, label: v, count: counts[v] }));
+  return declared.concat(extras);
+}
+
+// ─── DirectorResponsesView ───
+
+function DirectorResponsesView({ open, onClose, loading, error, payload, onRefresh }) {
+  const [selectedPromptId, setSelectedPromptId] = useState(null);
+
+  // When the modal opens, reset the drilldown so we always land on
+  // the list. Closing and reopening the modal feels like "starting
+  // over"; remembering the previously-selected prompt would be a
+  // small surprise.
+  useEffect(() => {
+    if (!open) setSelectedPromptId(null);
+  }, [open]);
+
+  if (!open) return null;
+
+  const prompts = (payload && payload.prompts) || [];
+  const roster = (payload && payload.roster) || {};
+  const selectedPrompt = selectedPromptId
+    ? prompts.find((p) => p.prompt_id === selectedPromptId)
+    : null;
+  const sorted = sortDirectorPrompts(prompts);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(29, 37, 45, 0.55)",
+        zIndex: 220, display: "flex", justifyContent: "center", alignItems: "stretch",
+        padding: 0,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.parchment, width: "100%", maxWidth: 480,
+          margin: "0 auto", display: "flex", flexDirection: "column",
+          maxHeight: "100vh",
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px",
+          background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
+          color: C.white, display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            {selectedPrompt && (
+              <button
+                onClick={() => setSelectedPromptId(null)}
+                aria-label="Back to prompt list"
+                className="bap-press"
+                style={{
+                  background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
+                  width: 32, height: 32, borderRadius: 16, cursor: "pointer",
+                  fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >‹</button>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+                letterSpacing: 2, color: C.bapBlue, marginBottom: 2,
+              }}>
+                Director · Solo personal
+              </div>
+              <div style={{
+                fontFamily: "'EB Garamond', serif", fontSize: 22, fontWeight: 700,
+                letterSpacing: -0.3, lineHeight: 1.1,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {selectedPrompt ? directorPromptTitle(selectedPrompt) : "Respuestas"}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
+              width: 36, height: 36, borderRadius: 18, cursor: "pointer",
+              fontSize: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 24px" }}>
+          {/* Loading / error states pinned to the top of the body.
+              They sit above whatever cached content we already have
+              so the Director still sees yesterday's data while a
+              refresh is in flight. */}
+          {loading && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10, marginBottom: 14,
+              background: C.ice, border: `1px solid ${C.fog}`,
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <div className="bap-spin" style={{
+                width: 14, height: 14, borderRadius: "50%",
+                border: `2px solid ${C.fog}`, borderTopColor: C.ocean,
+              }} />
+              Cargando&nbsp;/&nbsp;Loading…
+            </div>
+          )}
+          {error && !loading && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10, marginBottom: 14,
+              background: "#FFF3E0", borderLeft: `3px solid ${C.pepOrange}`,
+              fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.pepBlack,
+            }}>
+              {error}
+            </div>
+          )}
+
+          {selectedPrompt
+            ? <DirectorPromptDetail prompt={selectedPrompt} roster={roster} />
+            : <DirectorPromptList prompts={sorted} roster={roster}
+                onSelect={setSelectedPromptId} loading={loading} error={error} />}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: "12px 16px 18px", background: C.white, borderTop: `1px solid ${C.fog}`,
+          display: "flex", gap: 10,
+        }}>
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="bap-press"
+            style={{
+              flex: 1, padding: "12px 0", borderRadius: 10,
+              background: C.white, color: C.ocean,
+              border: `1px solid ${C.fog}`, cursor: loading ? "wait" : "pointer",
+              fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: 0.5,
+              opacity: loading ? 0.6 : 1,
+            }}
+          >↻ Actualizar&nbsp;/&nbsp;Refresh</button>
+          <button
+            onClick={onClose}
+            className="bap-press"
+            style={{
+              flex: 1, padding: "12px 0", borderRadius: 10,
+              background: C.pepBlue, color: C.white, border: "none", cursor: "pointer",
+              fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: 0.5,
+            }}
+          >Cerrar&nbsp;/&nbsp;Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DirectorPromptList({ prompts, roster, onSelect, loading, error }) {
+  if (prompts.length === 0 && !loading && !error) {
+    return (
+      <div style={{
+        padding: "30px 14px", textAlign: "center",
+        fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.stone,
+      }}>
+        No hay formularios definidos.<br />
+        <span style={{ fontSize: 13 }}>No prompts defined yet.</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {prompts.map((p) => {
+        const responders = respondedCwidSet(p.responses);
+        const expected = (p.expected_cwids || []).length;
+        const responded = responders.size;
+        const allDone = expected > 0 && responded >= expected;
+        const accent = p.is_active ? C.ocean : C.stone;
+        const titleAlt = directorPromptTitleAlt(p);
+        return (
+          <button
+            key={p.prompt_id}
+            onClick={() => onSelect(p.prompt_id)}
+            className="bap-press"
+            style={{
+              display: "block", textAlign: "left", width: "100%",
+              padding: "12px 14px", background: C.white,
+              border: `1px solid ${C.fog}`, borderLeft: `4px solid ${accent}`,
+              borderRadius: 10, cursor: "pointer",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{
+                  fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16,
+                  color: C.pepBlack, lineHeight: 1.2,
+                }}>
+                  {directorPromptTitle(p)}
+                </div>
+                {titleAlt && (
+                  <div style={{
+                    fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+                    fontSize: 12.5, color: C.stone, marginTop: 1, lineHeight: 1.25,
+                  }}>{titleAlt}</div>
+                )}
+              </div>
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700,
+                color: C.white, background: accent,
+                padding: "2px 7px", borderRadius: 8,
+                textTransform: "uppercase", letterSpacing: 1, whiteSpace: "nowrap", flexShrink: 0,
+              }}>{p.is_active ? "Activa" : "Cerrada"}</span>
+            </div>
+            <div style={{
+              marginTop: 8, display: "flex", alignItems: "center", gap: 10,
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain,
+            }}>
+              <span style={{
+                fontWeight: 700, color: allDone ? "#1E8E3E" : C.pepBlue,
+              }}>{responded} / {expected || "—"}</span>
+              <span style={{ color: C.stone, fontSize: 11 }}>
+                {expected ? "respondieron" : "sin audiencia activa"}
+              </span>
+            </div>
+            {(p.start_date || p.end_date) && (
+              <div style={{
+                marginTop: 4, fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                color: C.stone,
+              }}>
+                {p.start_date || "—"} → {p.end_date || "∞"}
+                {p.end_time ? ` · ${p.end_time}` : ""}
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DirectorPromptDetail({ prompt, roster }) {
+  const responders = respondedCwidSet(prompt.responses);
+  const expected = prompt.expected_cwids || [];
+  const expectedSet = new Set(expected);
+  const nonResponders = expected.filter((c) => !responders.has(c));
+  const responseByCwid = groupResponsesByCwid(prompt.responses);
+
+  // Surface any responders whose cwid is not in the expected audience.
+  // Can happen when the Director changes a prompt's audience after
+  // some students have already submitted; surfaces these as a small
+  // "outside audience" note so the data isn't quietly dropped.
+  const outsideResponders = [...responders].filter((c) => !expectedSet.has(c));
+
+  const description = directorPromptDescription(prompt);
+  const titleAlt = directorPromptTitleAlt(prompt);
+
+  return (
+    <div>
+      {/* Description + window */}
+      {titleAlt && (
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 14, color: C.stone, marginBottom: 8, lineHeight: 1.3,
+        }}>{titleAlt}</div>
+      )}
+      {description && (
+        <div style={{
+          fontFamily: "'Roboto', sans-serif", fontSize: 13.5, color: C.mountain,
+          marginBottom: 10, lineHeight: 1.45, whiteSpace: "pre-line",
+        }}>{description}</div>
+      )}
+
+      <div style={{
+        padding: "10px 12px", background: C.white,
+        border: `1px solid ${C.fog}`, borderRadius: 10, marginBottom: 16,
+        fontFamily: "'DM Mono', monospace", fontSize: 11.5, color: C.mountain,
+      }}>
+        <div>
+          <span style={{ color: C.stone }}>Audiencia · Audience:&nbsp;</span>
+          <span>{prompt.audience || "all"}</span>
+        </div>
+        <div style={{ marginTop: 3 }}>
+          <span style={{ color: C.stone }}>Ventana · Window:&nbsp;</span>
+          <span>
+            {prompt.start_date || "—"} → {prompt.end_date || "∞"}
+            {prompt.end_time ? ` · ${prompt.end_time}` : ""}
+          </span>
+        </div>
+        <div style={{ marginTop: 3 }}>
+          <span style={{ color: C.stone }}>Respondieron · Responded:&nbsp;</span>
+          <span style={{ fontWeight: 700, color: C.pepBlue }}>
+            {responders.size} / {expected.length || "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* Per-field breakdown */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {(prompt.fields || []).map((f) => (
+          <DirectorFieldSection
+            key={f.field_id}
+            field={f}
+            responses={prompt.responses}
+            roster={roster}
+            responseByCwid={responseByCwid}
+            respondedCwids={[...responders]}
+          />
+        ))}
+      </div>
+
+      {/* Non-responders */}
+      {expected.length > 0 && (
+        <div style={{ marginTop: 22 }}>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+          }}>
+            Falta responder&nbsp;/&nbsp;Awaiting response · {nonResponders.length}
+          </div>
+          {nonResponders.length === 0 ? (
+            <div style={{
+              padding: "10px 12px", background: "#E8F5E9",
+              border: `1px solid #C8E6C9`, borderLeft: `3px solid #1E8E3E`,
+              borderRadius: 8,
+              fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
+            }}>
+              ¡Listo! Todos respondieron.&nbsp;<span style={{ fontStyle: "italic", color: C.stone }}>All in.</span>
+            </div>
+          ) : (
+            <div style={{
+              padding: "10px 12px", background: C.white,
+              border: `1px solid ${C.fog}`, borderRadius: 8,
+              fontFamily: "'Roboto', sans-serif", fontSize: 13.5, color: C.mountain,
+              lineHeight: 1.7,
+            }}>
+              {nonResponders.map((cwid, i) => (
+                <span key={cwid}>
+                  {directorResponderName(roster[cwid], cwid)}
+                  {i < nonResponders.length - 1 ? <span style={{ color: C.stone }}>, </span> : null}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Out-of-audience submissions (rare; happens when the
+          Director narrows audience after some students submitted) */}
+      {outsideResponders.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+          }}>
+            Fuera de la audiencia&nbsp;/&nbsp;Outside audience · {outsideResponders.length}
+          </div>
+          <div style={{
+            padding: "10px 12px", background: C.parchment,
+            border: `1px solid ${C.fog}`, borderRadius: 8,
+            fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.mountain,
+            lineHeight: 1.5,
+          }}>
+            {outsideResponders.map((cwid) => directorResponderName(roster[cwid], cwid)).join(", ")}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DirectorFieldSection({ field, responses, roster, responseByCwid, respondedCwids }) {
+  const label = directorFieldLabel(field);
+  const isSelect = field.field_type === "single_select" || field.field_type === "multi_select";
+  const tally = isSelect ? tallySelectField(field, responses) : null;
+  const totalForBar = tally
+    ? Math.max(1, tally.reduce((acc, t) => acc + t.count, 0))
+    : 0;
+
+  // Rows: one per responder, showing their value for THIS field.
+  // Skip responders who haven't submitted this particular field
+  // (a partial submission on a multi-field prompt).
+  const rows = respondedCwids
+    .map((cwid) => ({
+      cwid,
+      name: directorResponderName(roster[cwid], cwid),
+      value: responseByCwid[cwid] ? responseByCwid[cwid][field.field_id] : undefined,
+    }))
+    .filter((r) => r.value != null && r.value !== "");
+
+  return (
+    <div style={{
+      padding: "12px 14px", background: C.white,
+      border: `1px solid ${C.fog}`, borderRadius: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack,
+        }}>{label}</div>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.stone,
+          textTransform: "uppercase", letterSpacing: 1,
+        }}>{field.field_type}</div>
+      </div>
+
+      {/* Tally bars for select fields */}
+      {tally && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+          {tally.map((t) => {
+            const pct = (t.count / totalForBar) * 100;
+            return (
+              <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  flex: 1, height: 22, background: C.ice, borderRadius: 6,
+                  position: "relative", overflow: "hidden",
+                }}>
+                  <div style={{
+                    position: "absolute", inset: 0, width: `${pct}%`,
+                    background: t.count > 0 ? C.ocean : "transparent",
+                    transition: "width 0.3s ease-out",
+                  }} />
+                  <div style={{
+                    position: "relative", padding: "0 8px", height: "100%",
+                    display: "flex", alignItems: "center",
+                    fontFamily: "'Roboto', sans-serif", fontSize: 12,
+                    color: t.count > 0 && pct > 30 ? C.white : C.pepBlack,
+                    fontWeight: 500,
+                  }}>
+                    {t.label}
+                  </div>
+                </div>
+                <div style={{
+                  width: 28, textAlign: "right",
+                  fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
+                  color: t.count > 0 ? C.pepBlue : C.stone,
+                }}>{t.count}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Individual responses */}
+      {rows.length === 0 ? (
+        <div style={{
+          marginTop: 10, fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 13, color: C.stone,
+        }}>Sin respuestas todavía&nbsp;/&nbsp;No responses yet</div>
+      ) : (
+        <div style={{
+          marginTop: tally ? 14 : 10,
+          display: "flex", flexDirection: "column", gap: 4,
+        }}>
+          {rows.map((r) => (
+            <div key={r.cwid} style={{
+              display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10,
+              padding: "5px 0", borderTop: `1px solid ${C.fog}`,
+            }}>
+              <span style={{
+                fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain,
+                minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{r.name}</span>
+              <span style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.pepBlack,
+                textAlign: "right", maxWidth: "60%",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{String(r.value).replace(/;/g, ", ")}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -7322,6 +8035,17 @@ export default function App() {
   const handleOpenPrompt = useCallback((p) => setSelectedPrompt(p), []);
   const handleClosePrompt = useCallback(() => setSelectedPrompt(null), []);
 
+  // Director response dashboard state. Lazy by design — the
+  // payload only loads when the Director taps "Ver respuestas"
+  // inside <ProfileModal>, and a refresh only fires when the
+  // dashboard's own refresh button is tapped. No localStorage
+  // cache: this view is opened a handful of times per week and
+  // staleness is more confusing than a 1-second loading state.
+  const [directorOpen, setDirectorOpen] = useState(false);
+  const [directorPayload, setDirectorPayload] = useState(null);
+  const [directorLoading, setDirectorLoading] = useState(false);
+  const [directorError, setDirectorError] = useState("");
+
   // Bottom-nav pill positioning. The pill slides under whichever tab is
   // active; its color adopts the active tab's color identity. We measure
   // each button via a ref-keyed map so re-positioning works on layout
@@ -7679,6 +8403,63 @@ export default function App() {
     }
   }, [cohortToken, currentUser]);
 
+  // Director response dashboard fetch. Called when the Director
+  // taps "Ver respuestas" inside ProfileModal (which also opens
+  // the dashboard) and again whenever they tap the dashboard's
+  // own refresh button. AuthError / NoMatchError mirror the rest
+  // of the auth flow: clear the relevant credentials, bounce
+  // through the gates. ForbiddenError shouldn't fire in practice
+  // (the button that triggers this only renders for staff/faculty)
+  // but surfaces a clear bilingual message if it ever does.
+  const loadDirectorResponses = useCallback(async () => {
+    if (!cohortToken || !currentUser || !currentUser.cwid || !currentUser.birthday) return;
+    setDirectorLoading(true);
+    setDirectorError("");
+    try {
+      const payload = await fetchAdminResponses({
+        token: cohortToken,
+        cwid: currentUser.cwid,
+        birthday: currentUser.birthday,
+      });
+      setDirectorPayload(payload);
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        clearCohortToken();
+        setCohortToken("");
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSelectedPrompt(null);
+        setDirectorOpen(false);
+      } else if (err && err.name === "NoMatchError") {
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSelectedPrompt(null);
+        setDirectorOpen(false);
+      } else if (err && err.name === "ForbiddenError") {
+        setDirectorError("No tenés permiso para esta vista. / You don't have access to this view.");
+      } else {
+        setDirectorError("No se pudo cargar. Intentá de nuevo. / Couldn't load. Try again.");
+      }
+    } finally {
+      setDirectorLoading(false);
+    }
+  }, [cohortToken, currentUser]);
+
+  const handleOpenDirector = useCallback(() => {
+    setDirectorOpen(true);
+    setProfileOpen(false); // close the gear modal so the dashboard isn't stacked under it
+    loadDirectorResponses();
+  }, [loadDirectorResponses]);
+
+  const handleCloseDirector = useCallback(() => {
+    setDirectorOpen(false);
+    setDirectorError("");
+  }, []);
+
   // Position the bottom-nav pill under the active tab. Re-runs on tab
   // change and on window resize so the pill stays anchored when the
   // viewport changes width. Uses requestAnimationFrame to wait for
@@ -7853,6 +8634,7 @@ export default function App() {
         onSignOut={handleSignOut}
         prompts={prompts}
         onOpenPrompt={handleOpenPrompt}
+        onOpenDirector={isStaff(currentUser) ? handleOpenDirector : null}
       />
 
       {/* Prompts form bottom sheet. Rendered at App level (rather
@@ -7866,6 +8648,21 @@ export default function App() {
         onClose={handleClosePrompt}
         prompt={selectedPrompt}
         onSubmit={handleSubmitPrompt}
+      />
+
+      {/* Director response dashboard. Rendered at App level so it
+          stacks over ProfileModal (which is dismissed when the
+          dashboard opens, but rendered here regardless so a stale
+          open=true on ProfileModal doesn't pin two overlays). Only
+          ever opened via the gated button on ProfileModal, so the
+          render is effectively gated on isStaff too. */}
+      <DirectorResponsesView
+        open={directorOpen}
+        onClose={handleCloseDirector}
+        loading={directorLoading}
+        error={directorError}
+        payload={directorPayload}
+        onRefresh={loadDirectorResponses}
       />
     </div>
   );
