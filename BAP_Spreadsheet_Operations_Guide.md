@@ -169,11 +169,13 @@ One row per data-collection question you want to ask students. A prompt can be a
 | `end_time` | No | `HH:mm` (24-hour, e.g. `20:00` for 8 PM). Tightens the close on `end_date` from end-of-day to a specific time of day — useful for "RSVP closes at 8 PM the night before" style cutoffs. Blank keeps the end-of-day default. Only meaningful when `end_date` is also set; the validator flags `end_time` without `end_date` because it has no effect. The student-facing app shows a subtle "Cierra hoy a las 20:00" caption beneath the prompt title once a cutoff is set. |
 | `category` | No | `profile` / `meal` / `activity` / `feedback`. Free-form; reserved for future grouping/filtering. Helpful for your own organization. |
 | `surface` | No | `today` (default if blank) / `profile` / `both`. Drives where the prompt renders: `today` shows on the Today tab between the activity card and Finals tile (good for time-bounded prompts like RSVPs); `profile` shows inside the Profile/Settings modal (good for evergreen fields students should be able to revisit anytime); `both` shows in both places. |
+| `lock_after_submit` | No | TRUE/FALSE; default FALSE. When TRUE, once a student submits the form goes read-only and a second submit is rejected. Use for "submit-once" prompts where the answer becomes load-bearing on something external (t-shirt size goes to ordering, an excursion sign-up where the headcount drives logistics). Leave FALSE for prompts where the student should be able to revise up to the cutoff (most meal RSVPs — students change their mind, and the cutoff itself is enough). |
+| `event_date` | No | `YYYY-MM-DD`. Marks the date a prompt should resurface on Today in read-only mode, even after `end_date` has passed. Use for meal RSVPs and other event-tied prompts where the student wants to see their selection on the day of the event. The prompt vanishes from the regular "Pendientes / For you" tile after the cutoff, then re-appears on `event_date` as a small "Tu selección" caption inside the day's activity card. Profile-surface prompts ignore `event_date` and stay on Profile in read-only state automatically (so t-shirt size lives there permanently without needing `event_date`). For meals, set `event_date` to the date of the meal and `end_date` to a day or two earlier so the kitchen has the tally before service — the validator flags `event_date` before `end_date` because the cutoff would land after the event, which is almost certainly a mistake. |
 
 **Where they show:**
 
-- `surface=today` or `both` → Today tab `<PromptCard>` ("For you / Pendientes" tile) when the prompt is in its active window.
-- `surface=profile` or `both` → Profile/Settings modal `<PromptProfileSection>` ("About you / Tu información"). Active-window gating still applies; evergreen prompts (no dates) appear here permanently.
+- `surface=today` or `both` → Today tab `<PromptCard>` ("For you / Pendientes" tile) when the prompt is in its active window. On the prompt's `event_date`, the prompt is removed from the Pendientes tile and instead rendered inline beneath the matching event row inside the activity card as a small "Tu selección · {title}" caption block (locked, read-only, tappable to view the full form).
+- `surface=profile` or `both` → Profile/Settings modal `<PromptProfileSection>` ("About you / Tu información"). Active-window gating still applies for unanswered prompts; **saved + locked prompts stay visible permanently** so a student can always look back at their t-shirt size or dietary preferences after the submission window has closed. Never-answered locked prompts (e.g. a student who missed the cutoff entirely) are dropped from this section because there's nothing to show.
 
 ### PromptFields *(optional, separate spreadsheet — same Roster file)*
 
@@ -200,25 +202,31 @@ One row per input box inside a prompt. Multiple rows joined to a single `Prompts
 
   | Tab | Key columns |
   |---|---|
-  | Prompts | `tshirt_size_2026` · "Talle de remera" · category=`profile` · surface=`profile` |
+  | Prompts | `tshirt_size_2026` · "Talle de remera" · category=`profile` · surface=`profile` · `lock_after_submit=TRUE` |
   | PromptFields | `tshirt_size_2026` · `size` · 1 · "Talle" · `single_select` · `XS;S;M;L;XL;2XL` · required=TRUE |
+
+  `lock_after_submit=TRUE` because the size goes to ordering — you don't want students changing it after you've placed the order. The locked size stays visible on Profile permanently in read-only mode; students who want to change can contact the office.
 
 - **Welcome dinner RSVP** (1 row in `Prompts`, 4 rows in `PromptFields`):
 
   | Tab | Key columns |
   |---|---|
-  | Prompts | `welcome_dinner_2026` · "Cena de bienvenida" · category=`meal` · start=2026-05-12 · end=2026-05-15 · end_time=`20:00` · surface=`today` |
+  | Prompts | `welcome_dinner_2026` · "Cena de bienvenida" · category=`meal` · start=2026-05-12 · end=2026-05-14 · end_time=`20:00` · `event_date=2026-05-15` · surface=`today` |
   | PromptFields | `welcome_dinner_2026` · `appetizer` · 1 · "Entrada" · `single_select` · `Empanadas;Provoleta;Ensalada` · required=TRUE |
   | PromptFields | `welcome_dinner_2026` · `main` · 2 · "Plato" · `single_select` · `Bife de chorizo;Milanesa;Pasta;Vegetariano` · required=TRUE |
   | PromptFields | `welcome_dinner_2026` · `dessert` · 3 · "Postre" · `single_select` · `Flan;Helado;Fruta` · required=TRUE |
   | PromptFields | `welcome_dinner_2026` · `comments` · 4 · "Notas" · `long_text` · (blank) · required=FALSE |
 
+  `end_date=2026-05-14` + `end_time=20:00` give the kitchen the tally by 8 PM the night before; `event_date=2026-05-15` is the dinner itself, where the locked selection resurfaces inline on Today. `lock_after_submit` left FALSE — students can change their meal up to the cutoff.
+
 - **Tigre day-trip sign-up** (1 row each):
 
   | Tab | Key columns |
   |---|---|
-  | Prompts | `tigre_excursion_2026` · "Excursión a Tigre" · category=`activity` · start=2026-06-01 · end=2026-06-08 · surface=`today` |
+  | Prompts | `tigre_excursion_2026` · "Excursión a Tigre" · category=`activity` · start=2026-06-01 · end=2026-06-07 · `event_date=2026-06-08` · surface=`today` · `lock_after_submit=TRUE` |
   | PromptFields | `tigre_excursion_2026` · `attending` · 1 · "¿Vas?" · `boolean` · (blank) · required=TRUE |
+
+  `lock_after_submit=TRUE` because the headcount drives the bus / boat reservations; `event_date=2026-06-08` so the student's "Yes / No" resurfaces on Today on the day of the excursion as a quick reminder.
 
 ### Responses *(auto-created — separate spreadsheet, same Roster file)*
 
@@ -238,7 +246,7 @@ Submissions upsert: editing an existing answer updates `value` + `submitted_at` 
 
 **Editor-side validator for prompts:**
 
-- Open the Roster spreadsheet → Extensions → Apps Script → function dropdown → run `validatePrompts()`. Output goes to the execution log (View → Execution log). Flags duplicate `prompt_id` values, fields pointing at unknown `prompt_id`, duplicate `(prompt_id, field_id)` pairs in `PromptFields`, missing or unrecognized `field_type`, select fields with no options, mismatched `option_labels_es` / `option_labels_en` counts, malformed `start_date` / `end_date`, `end_date` before `start_date`, prompts with no fields defined (students would see an empty form), unrecognized `surface` values, and audience tokens that aren't `all` / a role / a CWID-shaped string.
+- Open the Roster spreadsheet → Extensions → Apps Script → function dropdown → run `validatePrompts()`. Output goes to the execution log (View → Execution log). Flags duplicate `prompt_id` values, fields pointing at unknown `prompt_id`, duplicate `(prompt_id, field_id)` pairs in `PromptFields`, missing or unrecognized `field_type`, select fields with no options, mismatched `option_labels_es` / `option_labels_en` counts, malformed `start_date` / `end_date` / `end_time` / `event_date`, `end_date` before `start_date`, `event_date` before `start_date`, `event_date` before `end_date` (the submission cutoff would land after the event date — almost certainly a typo since the kitchen / vendor needs the tally before service), prompts with no fields defined (students would see an empty form), unrecognized `surface` values, unparseable `lock_after_submit` booleans, and audience tokens that aren't `all` / a role / a CWID-shaped string.
 - Run after any meaningful edit to `Prompts` or `PromptFields`.
 
 **Privacy guidance for responses.**
@@ -543,4 +551,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-05-17b (Director response dashboard now reads submissions from inside the app for staff/faculty roles; "Reading responses" section in mid-program operations split into in-app and spreadsheet workflows).*
+*Last updated: 2026-05-21 (two new optional columns on the Prompts tab: `lock_after_submit` freezes a prompt once a student has submitted; `event_date` resurfaces locked selections on Today on the day of the event, e.g. a meal RSVP showing inline beneath the dinner card on the day of the meal).*

@@ -23,11 +23,16 @@
 //
 //   GET ?action=prompts&token=...&cwid=...&birthday=...
 //     → { prompts: [ { prompt_id, title_es, title_en, fields:[...],
-//                     responses:{field_id:value,...}, ... }, ... ] }
+//                     responses:{field_id:value,...}, readonly,
+//                     lock_after_submit, event_date, ... }, ... ] }
 //     Returns prompts the user is eligible to see — filtered by
-//     audience (all / role / cwid-list) and active window
-//     ([start_date, end_date], inclusive). Already-submitted
-//     responses are pre-filled.
+//     audience (all / role / cwid-list). A prompt is visible if it
+//     is either accepting submissions (inside [start_date, end_date])
+//     OR meets a post-close visibility rule (profile-surface with a
+//     stored response, or event_date === today with a stored
+//     response). Already-submitted responses are pre-filled. The
+//     `readonly` flag is true when the prompt is past its submission
+//     window or when lock_after_submit fired on a prior submission.
 //
 //   POST  (Content-Type: text/plain;charset=utf-8, JSON body)
 //     { action: "submit", token, cwid, birthday,
@@ -51,6 +56,8 @@
 //     { error: "not_found" }          [prompt_id doesn't exist]
 //     { error: "audience_mismatch" }  [user not in prompt audience]
 //     { error: "prompt_inactive" }    [outside active window]
+//     { error: "already_submitted" }  [prompt is lock_after_submit
+//                                      and the user has a prior row]
 //     { error: "validation_failed",
 //       details: "missing_field:..." | "bad_value:..." }
 //     { error: "lock_failed" }        [couldn't acquire write lock
@@ -336,14 +343,17 @@ function loadPromptsForUser(user) {
     const pid = String(p.prompt_id || "").trim();
     if (!pid) continue;
     if (!userMatchesAudience(user, p)) continue;
-    if (!promptIsActive(p, today)) continue;
     const fields = fieldsByPrompt[pid] || [];
     if (fields.length === 0) continue; // a prompt with no fields is a sheet bug; skip it
+    const userResponses = responsesByPrompt[pid] || {};
+    const hasResponses = Object.keys(userResponses).length > 0;
+    if (!promptIsVisible(p, today, hasResponses)) continue;
     out.push(buildPromptResponse(
       p,
       fields,
-      responsesByPrompt[pid] || {},
-      submittedAtByPrompt[pid] || ""
+      userResponses,
+      submittedAtByPrompt[pid] || "",
+      promptIsReadonly(p, today, hasResponses)
     ));
   }
 
@@ -397,7 +407,12 @@ function parseFieldRow(f) {
 // Standardize the wire shape so loadPromptsForUser and handleSubmit
 // emit identical-looking prompt objects. Keep the keys stable —
 // renaming any of these means a coordinated front-end change.
-function buildPromptResponse(prompt, fields, responses, submittedAt) {
+//
+// `readonly` is computed by the caller (loadPromptsForUser /
+// handleSubmit) because it depends on the date check AND on whether
+// the user has actually submitted yet (for the lock_after_submit
+// case). It's wire-only — not stored in the sheet.
+function buildPromptResponse(prompt, fields, responses, submittedAt, readonly) {
   return {
     prompt_id: String(prompt.prompt_id || "").trim(),
     title_es: String(prompt.title_es || ""),
@@ -409,9 +424,12 @@ function buildPromptResponse(prompt, fields, responses, submittedAt) {
     start_date: String(prompt.start_date || "").trim(),
     end_date: String(prompt.end_date || "").trim(),
     end_time: String(prompt.end_time || "").trim(),
+    event_date: String(prompt.event_date || "").trim(),
+    lock_after_submit: parseBoolean(prompt.lock_after_submit),
     fields: fields,
     responses: responses || {},
     submitted_at: submittedAt || "",
+    readonly: !!readonly,
   };
 }
 
@@ -443,12 +461,16 @@ function userMatchesAudience(user, prompt) {
 }
 
 // Inclusive on both ends. Blank dates mean "no gate on that side";
-// both blank means "always active" (used by evergreen profile
+// both blank means "always accepting" (used by evergreen profile
 // prompts like t-shirt size). Optional end_time (HH:mm) tightens
 // the close on end_date down to a specific time of day — useful for
 // "RSVP closes at 8 PM" style cutoffs. Without end_time the prompt
-// stays active through end-of-day on end_date.
-function promptIsActive(prompt, todayStr) {
+// stays accepting through end-of-day on end_date.
+//
+// Submission gate. Used by handleSubmit (rejects writes past the
+// window) and by loadPromptsForUser (to decide whether the prompt
+// should render in read-only mode).
+function promptAcceptsSubmissions(prompt, todayStr) {
   const start = String(prompt.start_date || "").trim();
   const end = String(prompt.end_date || "").trim();
   const endTime = String(prompt.end_time || "").trim();
@@ -463,6 +485,40 @@ function promptIsActive(prompt, todayStr) {
     if (nowHm > endTime) return false;
   }
   return true;
+}
+
+// Visibility gate (broader than the submission gate). A prompt is
+// visible if:
+//   (a) it is currently accepting submissions, OR
+//   (b) it is a profile-surface prompt with at least one stored
+//       response (so locked answers like t-shirt size remain on
+//       Profile permanently after the submission window closes), OR
+//   (c) its event_date is today and the user has at least one stored
+//       response (so a locked meal selection resurfaces on Today on
+//       the day of the meal).
+// hasResponses is a boolean — the caller has already grouped this
+// user's responses, so passing the flag avoids re-walking the table.
+function promptIsVisible(prompt, todayStr, hasResponses) {
+  if (promptAcceptsSubmissions(prompt, todayStr)) return true;
+  if (!hasResponses) return false;
+
+  const surface = String(prompt.surface || "today").trim().toLowerCase();
+  if (surface === "profile" || surface === "both") return true;
+
+  const eventDate = String(prompt.event_date || "").trim();
+  if (eventDate && eventDate === todayStr) return true;
+
+  return false;
+}
+
+// A prompt is read-only when (a) it's past its submission window
+// (visible-but-not-accepting) or (b) lock_after_submit is set AND
+// the user has already submitted. Caller passes hasResponses so we
+// don't walk the response table twice.
+function promptIsReadonly(prompt, todayStr, hasResponses) {
+  if (!promptAcceptsSubmissions(prompt, todayStr)) return true;
+  if (parseBoolean(prompt.lock_after_submit) && hasResponses) return true;
+  return false;
 }
 
 function todayInSpreadsheetTz() {
@@ -622,7 +678,9 @@ function handleAdminResponses(params) {
       start_date: String(p.start_date || "").trim(),
       end_date: String(p.end_date || "").trim(),
       end_time: String(p.end_time || "").trim(),
-      is_active: promptIsActive(p, today),
+      event_date: String(p.event_date || "").trim(),
+      lock_after_submit: parseBoolean(p.lock_after_submit),
+      is_active: promptAcceptsSubmissions(p, today),
       fields: fields,
       expected_cwids: expectedCwids,
       responses: responsesByPrompt[pid] || [],
@@ -661,7 +719,7 @@ function handleSubmit(body) {
   }
 
   const today = todayInSpreadsheetTz();
-  if (!promptIsActive(def.prompt, today)) {
+  if (!promptAcceptsSubmissions(def.prompt, today)) {
     return jsonResponse({ error: "prompt_inactive" });
   }
 
@@ -671,6 +729,22 @@ function handleSubmit(body) {
   }
 
   const cwid = normalizeCwid(user.cwid);
+
+  // lock_after_submit: if the prompt is set to lock once a student
+  // has submitted, and there's already at least one stored response
+  // for this (cwid, prompt_id), refuse the second write. Front end
+  // shouldn't expose the submit button in this case, so this is a
+  // defense-in-depth check — also covers the rare race where two
+  // submits land near-simultaneously.
+  if (parseBoolean(def.prompt.lock_after_submit)) {
+    const responseRows = readTabAsObjects(RESPONSES_TAB_NAME);
+    for (let i = 0; i < responseRows.length; i++) {
+      const r = responseRows[i];
+      if (normalizeCwid(r.cwid) !== cwid) continue;
+      if (String(r.prompt_id || "").trim() !== promptId) continue;
+      return jsonResponse({ error: "already_submitted" });
+    }
+  }
 
   // LockService prevents two concurrent submissions from
   // interleaving reads/writes against the Responses tab. 10s is a
@@ -692,9 +766,17 @@ function handleSubmit(body) {
   // state without a follow-up fetch. Includes ALL field values
   // (the union of just-submitted and previously-stored), so a
   // partial submission that only updated some fields still hands
-  // back the full picture.
+  // back the full picture. After a successful submit there's by
+  // definition at least one stored response, so we pass true for
+  // hasResponses when computing the readonly flag.
   const merged = mergeStoredResponses(cwid, promptId, validation.normalized);
-  const refreshed = buildPromptResponse(def.prompt, def.fields, merged, submittedAt);
+  const refreshed = buildPromptResponse(
+    def.prompt,
+    def.fields,
+    merged,
+    submittedAt,
+    promptIsReadonly(def.prompt, today, true)
+  );
   return jsonResponse({ prompt: refreshed });
 }
 
@@ -1192,6 +1274,33 @@ function validatePrompts() {
     }
     if (endTime && !endDate) {
       issues.push("Prompts row " + sheetRow + " ('" + pid + "'): end_time set but end_date is blank — end_time has no effect without an end_date");
+    }
+
+    const eventDate = String(p.event_date || "").trim();
+    if (eventDate && !ISO_DATE_RE.test(eventDate)) {
+      issues.push("Prompts row " + sheetRow + " ('" + pid + "'): event_date '" + eventDate + "' is not YYYY-MM-DD");
+    }
+    if (eventDate && ISO_DATE_RE.test(eventDate) && startDate && ISO_DATE_RE.test(startDate) && eventDate < startDate) {
+      issues.push("Prompts row " + sheetRow + " ('" + pid + "'): event_date '" + eventDate + "' is before start_date '" + startDate + "' — the prompt would never reach its event date in an open state");
+    }
+    if (eventDate && ISO_DATE_RE.test(eventDate) && endDate && ISO_DATE_RE.test(endDate) && eventDate < endDate) {
+      // Soft warning: a meal RSVP where event_date precedes end_date
+      // means the cutoff is after the event, which is almost certainly
+      // a mistake (kitchen needs the tally before service, not after).
+      issues.push("Prompts row " + sheetRow + " ('" + pid + "'): event_date '" + eventDate + "' is before end_date '" + endDate + "' — the submission cutoff is after the event date (likely a mistake)");
+    }
+
+    // lock_after_submit accepts the same truthy/falsy values as
+    // parseBoolean. Flag anything that doesn't parse cleanly so a typo
+    // like "y3s" doesn't silently read as false.
+    const lockRaw = String(p.lock_after_submit == null ? "" : p.lock_after_submit).trim();
+    if (lockRaw) {
+      const lockLower = lockRaw.toLowerCase();
+      const TRUTHY = ["true", "t", "yes", "y", "1", "x", "✓", "sí", "si"];
+      const FALSY  = ["false", "f", "no", "n", "0", ""];
+      if (TRUTHY.indexOf(lockLower) < 0 && FALSY.indexOf(lockLower) < 0) {
+        issues.push("Prompts row " + sheetRow + " ('" + pid + "'): lock_after_submit '" + lockRaw + "' isn't a recognized boolean (TRUE/FALSE)");
+      }
     }
 
     const audience = String(p.audience || "all").trim().toLowerCase();
