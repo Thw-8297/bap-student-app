@@ -37,6 +37,12 @@ The first is the developer-facing reference (architecture, components, helpers, 
 
 ## Workflow
 
+**Sync first, sync last (this repo lives on two machines).** The app is developed from two computers (a laptop and a desktop), each with its own clone of this repo. GitHub is the source of truth that keeps them in step. To avoid divergent edits and merge conflicts:
+
+- **At the start of a working session, pull before touching anything:** run `git pull` (or `git pull --rebase` if there's local work) so this machine has whatever was pushed from the other one. If the pull surfaces conflicts or unexpected divergence, stop and surface it rather than plowing ahead.
+- **At the end of a session, push so the other machine can pick up:** once changes are committed, `git push`. Don't leave committed-but-unpushed work sitting on one machine — the other machine can't see it, and the next session there will start from stale code.
+- **Rule of thumb: pull before, push after.** Combined with the tiered shipping path below, this means: pull → edit → preview → commit → push.
+
 **Code edits happen on disk.** When `App.jsx`, `vite.config.js`, or `Code.gs` change, edit the file in place. No artifact downloads, no copy-paste back to GitHub.
 
 **Preview before pushing.** For non-trivial `App.jsx` or `vite.config.js` changes, run `npm run dev` and surface the local preview URL so the change can be sanity-checked on a phone before shipping. For pure data or text edits where the visual outcome is obvious, this can be skipped.
