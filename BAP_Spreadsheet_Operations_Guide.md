@@ -321,7 +321,7 @@ Semester-wide events: arrival, orientation, classes-begin, study tours, excursio
 | `date` | Yes | Start date in YYYY-MM-DD format. |
 | `end_date` | No | End date (for multi-day events). Leave blank for single-day. |
 | `title` | Yes | Event name. |
-| `type` | No | One of: `program`, `academic`, `excursion`, `holiday`, `orientation`. Defaults to `academic`. Each gets a distinct color. `program` carries the most prominent visual (Parchment-orange + Pep Orange + ★) and should be used for Director-curated entries like arrival days, asados, faculty visits, and other program-office-organized moments. The legacy `milestone` type was retired on 2026-05-11b — its visual was reassigned to `program`; rows still typed `milestone` in the sheet render as Academic cards until relabeled. |
+| `type` | No | One of: `program`, `academic`, `excursion`, `holiday`, `orientation`, `mundial`. Defaults to `academic`. Each gets a distinct color. `program` carries the most prominent visual (Parchment-orange + Pep Orange + ★) and should be used for Director-curated entries like arrival days, asados, faculty visits, and other program-office-organized moments. `mundial` (added 2026-06-01) is for World Cup games — it renders a fun championship-gold card with a ⚽ soccer ball next to the title, and shows up wherever the event's `visibility` directs (use `visibility: week` to keep games in the Weekly Overview only). The legacy `milestone` type was retired on 2026-05-11b — its visual was reassigned to `program`; rows still typed `milestone` in the sheet render as Academic cards until relabeled. |
 | `description` | No | One or two sentences of context. Renders inside the event card. |
 | `start_time` | No | Time of day (e.g., "10:00"). Untimed events render at the top of a day. |
 | `end_time` | No | End time. |
@@ -551,4 +551,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-05-21 (two new optional columns on the Prompts tab: `lock_after_submit` freezes a prompt once a student has submitted; `event_date` resurfaces locked selections on Today on the day of the event, e.g. a meal RSVP showing inline beneath the dinner card on the day of the meal).*
+*Last updated: 2026-06-01 (new `mundial` value for the Calendar tab's `type` column — World Cup games render as a championship-gold card with a ⚽ soccer ball; use `visibility: week` to keep them in the Weekly Overview).*
