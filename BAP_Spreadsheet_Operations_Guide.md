@@ -350,6 +350,8 @@ Healthcare providers, hospitals, pharmacies, and dental contacts.
 | `link` | No | Website. |
 | `insurance` | No | Set to `bcbs` to display the GeoBlue/BCBS badge next to the name. |
 | `category` | No | Free-form. Reserved for future filtering. |
+| `lat` | No | Latitude (decimal, e.g. `-34.5621`). Powers the "Cerca tuyo / Near you" distance sort. See the shared note below. |
+| `lng` | No | Longitude (decimal, e.g. `-58.4567`). Pairs with `lat`; both must be filled for a row to be locatable. |
 
 **Where it shows:** Local tab → Healthcare.
 
@@ -366,6 +368,8 @@ Recommended congregations, mostly with English services.
 | `service` | No | Service times and language(s). |
 | `notes` | No | Anything else worth knowing. |
 | `link` | No | Website or Instagram. |
+| `lat` | No | Latitude (decimal). Powers the "Cerca tuyo / Near you" distance sort. See the shared note below. |
+| `lng` | No | Longitude (decimal). Pairs with `lat`; both must be filled for a row to be locatable. |
 
 **Where it shows:** Local tab → Churches.
 
@@ -411,8 +415,19 @@ Curated Buenos Aires places, neighborhoods, and experiences.
 | `location_note` | No | Travel time or neighborhood. |
 | `hours` | No | Opening hours. |
 | `link` | No | Website. |
+| `lat` | No | Latitude (decimal). Powers the "Cerca tuyo / Near you" distance sort. See the shared note below. |
+| `lng` | No | Longitude (decimal). Pairs with `lat`; both must be filled for a row to be locatable. |
 
 **Where it shows:** Local tab → Explore BA.
+
+#### The `lat` / `lng` columns and "Cerca tuyo / Near you"
+
+The Explore, Health, and Churches tabs each accept optional `lat` and `lng` columns that power a **"Cerca tuyo / Near you"** distance sort on their Local sub-tab. How it works:
+
+- **Filling them:** in Google Maps, right-click the spot (or long-press on mobile) → the first menu item is the coordinate pair like `-34.5889, -58.3974`; click it to copy. Paste the first number into `lat`, the second into `lng`. One-time per row.
+- **What students see:** a small "📍 Cerca tuyo / Near you" toggle appears at the top of the sub-tab. Tapping it asks the phone for location permission (once, shared across all three tabs), then re-sorts the list nearest-first and shows a small distance caption ("~600 m", "~1,4 km") on each located card. Toggling it off restores the normal order.
+- **Graceful by design:** the toggle only appears on a sub-tab once at least one row there has coordinates, so the feature stays invisible until you start filling them in. Rows left without `lat`/`lng` simply show no distance and sort to the bottom when "Near you" is on. If a student declines the location permission, the app shows a brief note and keeps the default order. Nothing breaks offline, and the location is used only on the device for sorting; it's never sent anywhere.
+- **You don't have to do all rows at once.** Backfill the highest-value spots first (e.g. the nearest clinics and pharmacies, your most-recommended cafés); the rest can follow whenever.
 
 ### Resources *(optional)*
 
@@ -551,4 +566,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-01 (new `mundial` value for the Calendar tab's `type` column — World Cup games render as a championship-gold card with a ⚽ soccer ball; use `visibility: week` to keep them in the Weekly Overview).*
+*Last updated: 2026-06-07 (new optional `lat` / `lng` columns on the Explore, Health, and Churches tabs — power the "Cerca tuyo / Near you" distance sort on the Local tab; fill from a Google Maps right-click → copy coordinates).*
