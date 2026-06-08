@@ -99,12 +99,13 @@ These are what you'll touch *during* a cohort, not just at startup.
 
 ## The Roster spreadsheet *(separate file)*
 
-The Roster lives in its own spreadsheet ("BAP App Roster"). The auth script is bound to this file; the content script can't see it. As of 2026-05-09c the spreadsheet contains four tabs:
+The Roster lives in its own spreadsheet ("BAP App Roster"). The auth script is bound to this file; the content script can't see it. As of 2026-06-08c the spreadsheet contains up to five tabs:
 
 - **Roster** — the cohort identity table (one row per person). Required.
 - **Prompts** — Director-defined data-collection questions (one row per question). Optional but powers the prompts feature.
 - **PromptFields** — input boxes inside each prompt (one row per box). Optional; required when `Prompts` has rows.
 - **Responses** — student answers (one row per `cwid` × `prompt_id` × `field_id`). Auto-created by the auth script on first submit; you don't need to create it manually.
+- **Places** — the student-contributable BA directory that powers the Local tab's **Places** sub-view (was "Explore BA"). Optional; create it to enable Places. One row per place. See the **Places** section below.
 
 ### Roster *(required, separate spreadsheet)*
 
@@ -257,6 +258,41 @@ Submissions upsert: editing an existing answer updates `value` + `submitted_at` 
 
 ---
 
+### Places *(optional, separate spreadsheet — same Roster file)*
+
+The directory behind the Local tab's **Places** sub-view (renamed from "Explore BA"). One row per place. Create this tab to enable Places; the app reads only `status=approved` rows. Lives on the Roster spreadsheet (not the content sheet) because the future in-app vetting needs the auth script's identity + staff gate, which the content script doesn't have.
+
+**Shipped in two stages.** Stage 1 (2026-06-08c) is the read path — the app renders approved rows. Stage 2 adds in-app student submission (a "+ Suggest a place" button writes a `pending` row) and a staff-only vetting dashboard (Approve/Reject). Until Stage 2 lands, you add and approve places by editing this tab directly.
+
+| Column | Required | Notes |
+|--------|----------|-------|
+| `place_id` | Yes | Stable unique string (e.g. `cafe_lab_tostado`). Don't rename once set. |
+| `name` | Yes | Display name. |
+| `category` | Yes | One of: `cafe` · `restaurant` · `nightlife` · `outdoors` · `fitness` · `culture` · `study`. Anything else renders as "Other". |
+| `why` | No | One-line "why go here." Shown as the card's body line. |
+| `address` | No (but see note) | Street address; tap-to-Maps. A place needs **either** `address` **or** `maps_url` so students can open it in Maps. |
+| `lat` | No | Latitude (decimal). Powers the "Cerca tuyo / Near you" distance sort, same as the content tabs. Fill from a Google Maps right-click → copy coordinates. |
+| `lng` | No | Longitude (decimal). Pairs with `lat`; both needed for a row to be locatable. |
+| `maps_url` | No | Direct Google Maps URL. Used as the address link when present; also the fallback "Open in Maps" link when `address` is blank. |
+| `neighborhood` | No | "Palermo", "San Telmo", etc. Shown in the category caption line. |
+| `hours` | No | Opening hours. |
+| `link` | No | Website / Instagram. Rendered as a tappable link button. |
+| `status` | Yes | `approved` (shown in the app) / `pending` (awaiting vetting) / `rejected`. Seed-migrated rows should be `approved`. |
+| `submitted_by_cwid` | No | Set by the app on student submissions (Stage 2). Never shown to students. |
+| `submitted_by_name` | No | Submitter's first/preferred name. Shown as "Suggested by …" only when `show_credit` is on. |
+| `show_credit` | No | TRUE/FALSE. **Default-on:** a blank value on a community row shows the submitter's name; set FALSE to hide it. Seed rows show no name regardless. |
+| `source` | No | `seed` (Director-curated, migrated from Explore BA) / `community` (student-submitted). |
+| `submitted_at` | No | ISO timestamp, set by the app on submission. |
+| `vetted_by` | No | Set by the vetting dashboard (Stage 2) to the approving staff member. |
+
+**Seed migration (Stage 1 cutover).** Copy your current **Explore** rows into this tab as new Places rows with `source=seed`, `status=approved`, a mapped `category`, and (where you have them) `lat`/`lng`. Then re-deploy `AuthCode.gs` (Apps Script editor → Deploy → Manage deployments → pencil → New version) so the `?action=places` endpoint is live, and run `validatePlaces()` (Extensions → Apps Script → function dropdown → `validatePlaces` → Run; output in the execution log) to catch typos.
+
+**Editor-side validator.** `validatePlaces()` flags duplicate `place_id`, missing `name`/`category`/`address`-or-`maps_url`, unrecognized `category`/`status`/`source`, malformed `lat`/`lng`, a lone coordinate, and an unparseable `show_credit`. Run after any meaningful edit.
+
+**Where it shows:** Local tab → Places. Approved rows render as category-colored cards with a ♥ save toggle; students can filter by category or by ♥ Saved, and sort "Cerca tuyo / Near you" when coordinates are present.
+
+---
+
 ## Tab-by-tab reference *(content spreadsheet)*
 
 The rest of this section is about the **content** spreadsheet (separate from the Roster above). Tabs marked **(required)** must exist. Tabs marked **(optional)** can be missing without breaking anything.
@@ -402,9 +438,9 @@ Program staff, emergency contacts, and addresses.
 
 **Where it shows:** Contacts tab.
 
-### Explore *(required)*
+### Explore *(required tab; no longer read by the app as of 2026-06-08c)*
 
-Curated Buenos Aires places, neighborhoods, and experiences.
+Curated Buenos Aires places, neighborhoods, and experiences. **Superseded by the `Places` tab on the Roster spreadsheet** (Places Stage 1): the Local tab's "Places" sub-view now reads from `Places`, not this tab. Keep this tab present (with at least a header row) so the content fetch doesn't fail, and use it as your reference when seed-migrating rows into `Places`. It can be retired once the migration is done.
 
 | Column | Required | Notes |
 |--------|----------|-------|
@@ -566,4 +602,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-07 (new optional `lat` / `lng` columns on the Explore, Health, and Churches tabs — power the "Cerca tuyo / Near you" distance sort on the Local tab; fill from a Google Maps right-click → copy coordinates).*
+*Last updated: 2026-06-08c (Places Stage 1 — new optional `Places` tab on the Roster spreadsheet powers the Local tab's renamed "Places" sub-view; read path only for now, with in-app submission + vetting coming in Stage 2).*

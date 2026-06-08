@@ -83,6 +83,28 @@ const ROSTER_TAB_NAME = "Roster";
 const PROMPTS_TAB_NAME = "Prompts";
 const PROMPT_FIELDS_TAB_NAME = "PromptFields";
 const RESPONSES_TAB_NAME = "Responses";
+const PLACES_TAB_NAME = "Places";
+
+// Source of truth for the Places tab schema. Used to auto-create the
+// tab on first community submission (Stage 2) and to validate a
+// human-edited / seed-migrated tab. The student app reads only
+// approved rows; the Director vets pending ones in-app.
+const PLACES_HEADERS = [
+  "place_id", "name", "category", "why", "address", "lat", "lng",
+  "maps_url", "neighborhood", "hours", "link", "status",
+  "submitted_by_cwid", "submitted_by_name", "show_credit", "source",
+  "submitted_at", "vetted_by",
+];
+
+// Recognized Places category keys — must stay in sync with
+// PLACE_CATEGORIES in App.jsx. Used by validatePlaces() only; the
+// read endpoint passes any category straight through (the app falls
+// back to "other" for anything it doesn't recognize).
+const PLACE_CATEGORY_KEYS = [
+  "cafe", "restaurant", "nightlife", "outdoors", "fitness", "culture", "study",
+];
+const PLACE_STATUSES = ["pending", "approved", "rejected"];
+const PLACE_SOURCES = ["seed", "community"];
 
 // Source of truth for the Responses tab schema. Used both to
 // auto-create the tab on first submit and to validate that a
@@ -144,6 +166,7 @@ function doGet(e) {
     if (action === "identify")        return handleIdentify(params);
     if (action === "prompts")         return handlePrompts(params);
     if (action === "admin_responses") return handleAdminResponses(params);
+    if (action === "places")          return handlePlaces(params);
 
     return jsonResponse({ error: "bad_request" });
   } catch (err) {
@@ -691,6 +714,56 @@ function handleAdminResponses(params) {
     prompts: out,
     roster: rosterByCwid,
   });
+}
+
+// =========================================================
+// Places — student-contributable BA directory
+// =========================================================
+
+// Public read: returns the cohort's APPROVED places. Cohort-token
+// gated only (checkCohortToken already ran in doGet) — no per-user
+// identity needed to read approved public-ish content, so the Local
+// tab can prime the list as soon as the cohort gate is cleared.
+// Each row is curated: the submitter's CWID and the internal vetting
+// columns (status, vetted_by, submitted_at) are dropped, and the
+// submitter's name is included only when credit is on for that place.
+function handlePlaces(params) {
+  const rows = readTabAsObjects(PLACES_TAB_NAME);
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const status = String(r.status || "").trim().toLowerCase();
+    if (status !== "approved") continue;
+    out.push(curatePlaceRow(r));
+  }
+  return jsonResponse({ places: out });
+}
+
+// Project a raw Places row to the public shape the app renders.
+// Credit rule (default-on): a community place shows the submitter's
+// name unless show_credit is explicitly falsy; a blank show_credit is
+// treated as ON. Seed rows (source !== "community") never carry a name.
+function curatePlaceRow(r) {
+  const source = String(r.source || "").trim().toLowerCase();
+  const rawCredit = String(r.show_credit == null ? "" : r.show_credit).trim();
+  const creditOn = rawCredit === "" ? true : parseBoolean(rawCredit);
+  const name = (source === "community" && creditOn) ? String(r.submitted_by_name || "") : "";
+  return {
+    place_id: String(r.place_id || ""),
+    name: String(r.name || ""),
+    category: String(r.category || "").trim().toLowerCase(),
+    why: String(r.why || ""),
+    address: String(r.address || ""),
+    lat: String(r.lat == null ? "" : r.lat),
+    lng: String(r.lng == null ? "" : r.lng),
+    maps_url: String(r.maps_url || ""),
+    neighborhood: String(r.neighborhood || ""),
+    hours: String(r.hours || ""),
+    link: String(r.link || ""),
+    source: source,
+    submitted_by_name: name,
+    show_credit: creditOn ? "TRUE" : "FALSE",
+  };
 }
 
 // =========================================================
@@ -1388,6 +1461,95 @@ function validatePrompts() {
 
   if (issues.length === 0) {
     Logger.log("✓ Prompts/PromptFields look clean. " + promptRows.length + " prompt(s), " + fieldRows.length + " field(s) checked.");
+  } else {
+    Logger.log("Found " + issues.length + " issue(s):");
+    for (let i = 0; i < issues.length; i++) Logger.log("  " + issues[i]);
+  }
+}
+
+// Editor helper — run from the Apps Script editor after editing the
+// Places tab (seed migration, vetting, manual tidy). Mirrors
+// validatePrompts: flags structural problems that would render badly
+// in the app. Output goes to the execution log (View → Execution log).
+function validatePlaces() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(PLACES_TAB_NAME);
+  if (!sheet) {
+    Logger.log("No '" + PLACES_TAB_NAME + "' tab found yet. It's auto-created on the first community submission, or create it manually to seed-migrate Explore rows.");
+    return;
+  }
+
+  const rows = readTabAsObjects(PLACES_TAB_NAME);
+  const issues = [];
+  const seenIds = {};
+  const NUM_RE = /^-?\d+(\.\d+)?$/;
+
+  for (let i = 0; i < rows.length; i++) {
+    const sheetRow = i + 2; // header + 1-indexed
+    const r = rows[i];
+    const id = String(r.place_id || "").trim();
+
+    if (!id) {
+      issues.push("Places row " + sheetRow + ": missing place_id");
+    } else if (seenIds[id]) {
+      issues.push("Places row " + sheetRow + ": duplicate place_id '" + id + "' (also in row " + seenIds[id] + ")");
+    } else {
+      seenIds[id] = sheetRow;
+    }
+
+    if (!String(r.name || "").trim()) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): missing name");
+    }
+
+    const cat = String(r.category || "").trim().toLowerCase();
+    if (!cat) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): missing category");
+    } else if (PLACE_CATEGORY_KEYS.indexOf(cat) < 0) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): unrecognized category '" + cat + "' (will render as 'Other'; expected one of " + PLACE_CATEGORY_KEYS.join(", ") + ")");
+    }
+
+    // A place needs at least one way to be found on a map.
+    if (!String(r.address || "").trim() && !String(r.maps_url || "").trim()) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): no address and no maps_url — students can't open it in Maps");
+    }
+
+    const lat = String(r.lat == null ? "" : r.lat).trim();
+    const lng = String(r.lng == null ? "" : r.lng).trim();
+    if (lat && !NUM_RE.test(lat)) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): lat '" + lat + "' isn't a decimal number");
+    }
+    if (lng && !NUM_RE.test(lng)) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): lng '" + lng + "' isn't a decimal number");
+    }
+    if ((lat && !lng) || (lng && !lat)) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): only one of lat/lng is filled — both are needed for the 'Near you' sort");
+    }
+
+    const status = String(r.status || "").trim().toLowerCase();
+    if (!status) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): missing status (expected approved/pending/rejected)");
+    } else if (PLACE_STATUSES.indexOf(status) < 0) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): unrecognized status '" + status + "' (expected " + PLACE_STATUSES.join(", ") + ")");
+    }
+
+    const source = String(r.source || "").trim().toLowerCase();
+    if (source && PLACE_SOURCES.indexOf(source) < 0) {
+      issues.push("Places row " + sheetRow + " ('" + id + "'): unrecognized source '" + source + "' (expected seed or community)");
+    }
+
+    const creditRaw = String(r.show_credit == null ? "" : r.show_credit).trim();
+    if (creditRaw) {
+      const cl = creditRaw.toLowerCase();
+      const TRUTHY = ["true", "t", "yes", "y", "1", "x", "✓", "sí", "si"];
+      const FALSY  = ["false", "f", "no", "n", "0"];
+      if (TRUTHY.indexOf(cl) < 0 && FALSY.indexOf(cl) < 0) {
+        issues.push("Places row " + sheetRow + " ('" + id + "'): show_credit '" + creditRaw + "' isn't a recognized boolean (TRUE/FALSE)");
+      }
+    }
+  }
+
+  if (issues.length === 0) {
+    Logger.log("✓ Places look clean. " + rows.length + " place(s) checked.");
   } else {
     Logger.log("Found " + issues.length + " issue(s):");
     for (let i = 0; i < issues.length; i++) Logger.log("  " + issues[i]);
