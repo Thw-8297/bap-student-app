@@ -101,7 +101,8 @@ const PLACES_HEADERS = [
 // read endpoint passes any category straight through (the app falls
 // back to "other" for anything it doesn't recognize).
 const PLACE_CATEGORY_KEYS = [
-  "cafe", "restaurant", "nightlife", "outdoors", "fitness", "culture", "study",
+  "cafe", "restaurant", "nightlife", "outdoors", "fitness", "study",
+  "culture", "theater", "sights", "markets", "neighborhood",
 ];
 const PLACE_STATUSES = ["pending", "approved", "rejected"];
 const PLACE_SOURCES = ["seed", "community"];

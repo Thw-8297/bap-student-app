@@ -268,7 +268,7 @@ The directory behind the Local tab's **Places** sub-view (renamed from "Explore 
 |--------|----------|-------|
 | `place_id` | Yes | Stable unique string (e.g. `cafe_lab_tostado`). Don't rename once set. |
 | `name` | Yes | Display name. |
-| `category` | Yes | One of: `cafe` · `restaurant` · `nightlife` · `outdoors` · `fitness` · `culture` · `study`. Anything else renders as "Other". |
+| `category` | Yes | One of: `cafe` · `restaurant` · `nightlife` · `outdoors` · `fitness` · `study` · `culture` · `theater` · `sights` · `markets` · `neighborhood`. Anything else renders as "Other". (See the seed-migration mapping below for how your old Explore `type` values translate.) |
 | `why` | No | One-line "why go here." Shown as the card's body line. |
 | `address` | No (but see note) | Street address; tap-to-Maps. A place needs **either** `address` **or** `maps_url` so students can open it in Maps. |
 | `lat` | No | Latitude (decimal). Powers the "Cerca tuyo / Near you" distance sort, same as the content tabs. Fill from a Google Maps right-click → copy coordinates. |
@@ -286,6 +286,21 @@ The directory behind the Local tab's **Places** sub-view (renamed from "Explore 
 | `vetted_by` | No | Set by the vetting dashboard (Stage 2) to the approving staff member. |
 
 **Seed migration (Stage 1 cutover).** Copy your current **Explore** rows into this tab as new Places rows with `source=seed`, `status=approved`, a mapped `category`, and (where you have them) `lat`/`lng`. Then re-deploy `AuthCode.gs` (Apps Script editor → Deploy → Manage deployments → pencil → New version) so the `?action=places` endpoint is live, and run `validatePlaces()` (Extensions → Apps Script → function dropdown → `validatePlaces` → Run; output in the execution log) to catch typos.
+
+**Mapping your old Explore `type` values to the new `category`.** The 11-category set was designed so your existing sightseeing content maps cleanly with nothing landing in "Other":
+
+| Old Explore `type` | New Places `category` |
+|---|---|
+| Museum | `culture` |
+| Cultural Center | `culture` |
+| Theater | `theater` |
+| Historic Site | `sights` |
+| Landmark | `sights` |
+| Park | `outdoors` |
+| Market | `markets` |
+| Neighborhood | `neighborhood` |
+
+The remaining categories — `cafe`, `restaurant`, `nightlife`, `fitness`, `study` — have no seed rows; they exist for student submissions (Stage 2) and stay hidden as filter pills until a place is added to them. (The `type` column itself is not carried over — Places uses `category` instead.)
 
 **Editor-side validator.** `validatePlaces()` flags duplicate `place_id`, missing `name`/`category`/`address`-or-`maps_url`, unrecognized `category`/`status`/`source`, malformed `lat`/`lng`, a lone coordinate, and an unparseable `show_credit`. Run after any meaningful edit.
 
