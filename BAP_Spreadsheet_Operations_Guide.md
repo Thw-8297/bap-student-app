@@ -268,7 +268,7 @@ The directory behind the Local tab's **Places** sub-view (renamed from "Explore 
 |--------|----------|-------|
 | `place_id` | Yes | Stable unique string (e.g. `cafe_lab_tostado`). Don't rename once set. |
 | `name` | Yes | Display name. |
-| `category` | Yes | One of: `cafe` · `restaurant` · `nightlife` · `outdoors` · `fitness` · `study` · `culture` · `theater` · `sights` · `markets` · `neighborhood`. Anything else renders as "Other". (See the seed-migration mapping below for how your old Explore `type` values translate.) |
+| `category` | Yes | One of: `cafe` · `restaurant` · `nightlife` · `outdoors` · `fitness` · `study` · `museum` · `culture` · `theater` · `sights` · `markets` · `neighborhood`. Anything else renders as "Other". (See the seed-migration mapping below for how your old Explore `type` values translate.) |
 | `why` | No | One-line "why go here." Shown as the card's body line. |
 | `address` | No (but see note) | Street address; tap-to-Maps. A place needs **either** `address` **or** `maps_url` so students can open it in Maps. |
 | `lat` | No | Latitude (decimal). Powers the "Cerca tuyo / Near you" distance sort, same as the content tabs. Fill from a Google Maps right-click → copy coordinates. |
@@ -291,7 +291,7 @@ The directory behind the Local tab's **Places** sub-view (renamed from "Explore 
 
 | Old Explore `type` | New Places `category` |
 |---|---|
-| Museum | `culture` |
+| Museum | `museum` |
 | Cultural Center | `culture` |
 | Theater | `theater` |
 | Historic Site | `sights` |
