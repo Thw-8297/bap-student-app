@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09 — Places: category-picker grid + “Places” page header. Tapping Places in the Local tab now opens a two-column grid of category glyph tiles (All first, then all 12 categories sightseeing-first, plus a ♥ Saved tile once the student has saved something) instead of dropping straight into the listing behind a filter-pill row; tapping a tile drills into that category’s listing, with a back control returning to the grid. While in Places the page header reads “Places” (Spanish gloss suppressed) instead of “Local Resources / BUENOS AIRES”. New PLACE_CATEGORY_ORDER constant (sightseeing-led order); SectionTitle gains an optional override (null es hides the gloss); LocalView reports its active sub up via onSubChange so App can set the header. Front-end-only; no data-shape change; CACHE_VERSION stays at 7.";
+const BUILD_VERSION = "2026-06-09b — Places: show the chosen category beside the “Places” page header as a breadcrumb sub-header (“Places · Café”), instead of in the in-listing back row. SectionTitle’s override gains an optional `sub`; LocalView reports the active view label up via onSubChange and App tracks it as localPlacesLabel. Front-end-only; CACHE_VERSION stays at 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -4295,7 +4295,9 @@ function EmptyDay() {
 function SectionTitle({ tabKey, override }) {
   // `override` lets a tab swap its headline/gloss contextually (e.g. the Local
   // tab reading "Places" with no gloss while in that section). An override with
-  // a null/blank `es` suppresses the Spanish gloss line entirely.
+  // a null/blank `es` suppresses the Spanish gloss line entirely; an optional
+  // `sub` renders inline beside the headline as a lighter breadcrumb-style
+  // sub-header (e.g. "Places · Café" for the chosen Places category).
   const t = override || TAB_TITLES[tabKey];
   if (!t) return null;
   return (
@@ -4307,7 +4309,14 @@ function SectionTitle({ tabKey, override }) {
       <div style={{
         fontFamily: "'EB Garamond', serif", fontSize: 28, fontWeight: 700,
         color: C.pepBlue, letterSpacing: -0.5, lineHeight: 1.05,
-      }}>{t.en}</div>
+      }}>
+        {t.en}
+        {t.sub && (
+          <span style={{ fontWeight: 400, fontSize: 19, color: C.ocean, whiteSpace: "nowrap" }}>
+            <span style={{ color: C.fog, margin: "0 9px" }}>·</span>{t.sub}
+          </span>
+        )}
+      </div>
       {t.es && (
         <div style={{
           marginTop: 4,
@@ -6806,9 +6815,18 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // | "saved" = a chosen view showing that listing.
   const [placesFilter, setPlacesFilter] = useState(null);
 
-  // Report the active sub up to <App> so the page header can read "Places"
-  // (no gloss) while in that section. Other subs keep "Local Resources".
-  useEffect(() => { if (onSubChange) onSubChange(sub); }, [sub, onSubChange]);
+  // Label for the chosen Places view (null on the grid), surfaced beside the
+  // "Places" page header as a breadcrumb sub-header.
+  const placesViewLabel = (sub === "places" && placesFilter !== null)
+    ? (placesFilter === "all" ? "All"
+        : placesFilter === "saved" ? "♥ Saved"
+        : PLACE_CATEGORIES[placesFilter]?.label || "Places")
+    : null;
+
+  // Report the active sub (and the Places sub-header label) up to <App> so the
+  // page header can read "Places · Café" while in that section. Other subs keep
+  // "Local Resources".
+  useEffect(() => { if (onSubChange) onSubChange(sub, placesViewLabel); }, [sub, placesViewLabel, onSubChange]);
 
   // "Cerca tuyo / Near you" distance sort. One geolocation permission is
   // requested on first tap and reused across all three sortable sub-tabs.
@@ -7231,13 +7249,11 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
         else if (placesFilter !== "all") list = allPlaces.filter((p) => p._cat === placesFilter);
 
         const display = nearMe && userLoc ? sortByDistance(list, userLoc) : list;
-        const viewLabel = placesFilter === "all" ? "All"
-          : placesFilter === "saved" ? "♥ Saved"
-          : PLACE_CATEGORIES[placesFilter]?.label || "Places";
 
         return (
           <div>
-            {/* Back to the category grid (not the hub), plus the chosen view's name. */}
+            {/* Back to the category grid (not the hub). The chosen view's name
+                lives in the page header ("Places · Café") rather than here. */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <button onClick={() => setPlacesFilter(null)} className="bap-press" aria-label="Lugares / Places" style={{
                 display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
@@ -7247,9 +7263,6 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
               }}>
                 <span aria-hidden="true">←</span> Lugares / Places
               </button>
-              <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 18, color: C.pepBlue }}>
-                {viewLabel}
-              </span>
             </div>
             {anyCoords(allPlaces) && nearMeControl}
             {display.length === 0 ? (
@@ -8958,13 +8971,21 @@ export default function App() {
   // on a normal Local-nav tap so the tab defaults to its category hub.
   const [localInitialSub, setLocalInitialSub] = useState(null);
   // The Local sub-section currently open, reported up by <LocalView>. Lets the
-  // page header read "Places" (no gloss) while in that section.
+  // page header read "Places" (no gloss) while in that section. `localPlacesLabel`
+  // carries the chosen Places category so the header can read "Places · Café".
   const [localSub, setLocalSub] = useState(null);
+  const [localPlacesLabel, setLocalPlacesLabel] = useState(null);
+  // Stable handler passed to <LocalView> as onSubChange; keeps both pieces of
+  // header state in sync as the student navigates within Local.
+  const reportLocalSub = useCallback((s, label) => {
+    setLocalSub(s);
+    setLocalPlacesLabel(label || null);
+  }, []);
   // Tab navigation with an optional Local sub-section deep-link. Passed to
   // <TodayView> as onJumpToTab so its tiles can route into a specific
   // Local listing rather than the hub.
   const jumpToTab = useCallback((tabKey, sub = null) => {
-    if (tabKey === "local") { setLocalInitialSub(sub); setLocalSub(sub); }
+    if (tabKey === "local") { setLocalInitialSub(sub); setLocalSub(sub); setLocalPlacesLabel(null); }
     setTab(tabKey);
   }, []);
 
@@ -9593,7 +9614,7 @@ export default function App() {
           <>
             {tab !== "today" && (
               tab === "local" && localSub === "places"
-                ? <SectionTitle override={{ en: "Places", es: null }} />
+                ? <SectionTitle override={{ en: "Places", es: null, sub: localPlacesLabel }} />
                 : <SectionTitle tabKey={tab} />
             )}
             {tab === "today" && <TodayView data={data} onJumpToTab={jumpToTab} profile={profile} currentUser={currentUser} onRefreshData={refreshAllData} prompts={prompts} onOpenPrompt={handleOpenPrompt} />}
@@ -9606,7 +9627,7 @@ export default function App() {
                 places={places}
                 savedPlaces={savedPlaces}
                 onToggleSavePlace={handleToggleSavePlace}
-                onSubChange={setLocalSub}
+                onSubChange={reportLocalSub}
               />
             )}
             {tab === "faq" && <FaqView data={data} />}
@@ -9629,7 +9650,7 @@ export default function App() {
             <button
               key={t.key}
               ref={(el) => { navBtnRefs.current[t.key] = el; }}
-              onClick={() => { if (t.key === "local") { setLocalInitialSub(null); setLocalSub(null); } setTab(t.key); }}
+              onClick={() => { if (t.key === "local") { setLocalInitialSub(null); setLocalSub(null); setLocalPlacesLabel(null); } setTab(t.key); }}
               className="bap-press"
               style={{
                 background: "none", border: "none", cursor: "pointer",
