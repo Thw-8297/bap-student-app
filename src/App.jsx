@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09f — SPIKE (places-map branch): Leaflet map view on Places listings. A lazy-loaded (separate chunk) Leaflet + CARTO Positron map behind a Lista/Mapa toggle; category-colored pins, popups with name/why/Open-in-Maps, online-only (toggle disabled offline, list stays canonical). Throwaway spike to judge bundle/offline/gesture on a phone before committing. CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09f — Places map (places-map branch): a Lista/Mapa toggle on every Places listing opens a lazy-loaded Leaflet + CARTO Positron map. Category-colored glyph pins; tapping a pin opens the real place card (with working ♥ save) in a bottom sheet. Casa Holden (Pepperdine campus) is anchored on every map with a distinct Pep-Blue, orange-ringed campus pin + label. Online-only (toggle disabled offline; list stays canonical); Leaflet ships as a separate chunk excluded from the SW precache. CACHE_VERSION stays 7.";
 const _BUILD_VERSION_PREV = "2026-06-09e — Local tab: every sub-section now uses the header back chevron (← next to the section title) instead of an in-listing “Volver / Back” row, freeing a row across This Week / Places / Healthcare / Churches / Apps. The header now shows the active section name + gloss; LocalView registers one contextual back action (Places listing → grid, anywhere else → hub). Front-end-only; CACHE_VERSION stays 7.";
 
 // ============================================================
@@ -1531,6 +1531,20 @@ const PLACE_CATEGORY_ORDER = [
   "sights", "museum", "culture", "theater", "markets", "neighborhood",
   "cafe", "restaurant", "nightlife", "outdoors", "fitness", "study",
 ];
+
+// Casa Holden — Pepperdine's Buenos Aires campus. Anchored on every Places
+// map with a distinct Pep-Blue, orange-ringed campus pin (see PlacesMap.jsx)
+// so students always have home base for reference. Coordinates resolved from
+// the program-office Maps short link (11 de Septiembre de 1888 955, the corner
+// of Federico Lacroze, Belgrano R).
+const CAMPUS_ANCHOR = {
+  name: "Casa Holden",
+  subtitle: "Pepperdine · Campus BA",
+  lat: -34.5687288,
+  lng: -58.4416504,
+  address: "11 de Septiembre de 1888 955, CABA",
+  maps_url: "https://maps.app.goo.gl/HQt8A6ZQABrhL7rG7",
+};
 
 // The Local tab opens to a hub of these five category buttons; tapping one
 // drills into that category's listing. Single source of truth for the hub —
@@ -7102,11 +7116,16 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // | "saved" = a chosen view showing that listing.
   const [placesFilter, setPlacesFilter] = useState(null);
 
-  // SPIKE: list ⇆ map toggle within a Places listing. Reset to "list" whenever
-  // the chosen category changes (or we leave to the grid) so switching buckets
+  // List ⇆ map toggle within a Places listing. Reset to "list" whenever the
+  // chosen category changes (or we leave to the grid) so switching buckets
   // never strands the student on a stale map.
   const [placesView, setPlacesView] = useState("list");
   useEffect(() => { setPlacesView("list"); }, [placesFilter]);
+
+  // The place whose detail card is open in a BottomSheet (set by tapping a map
+  // pin). Reusing <PlaceCard> here gives a real, working save toggle.
+  const [selectedMapPlace, setSelectedMapPlace] = useState(null);
+  useEffect(() => { setSelectedMapPlace(null); }, [placesFilter, placesView]);
 
   // SPIKE: the map is online-only (tiles need network; we deliberately don't
   // SW-cache them). Track connectivity so the Map toggle can disable offline.
@@ -7546,19 +7565,18 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
 
         const display = nearMe && userLoc ? sortByDistance(list, userLoc) : list;
 
-        // SPIKE: map view is offered only when this listing has located rows;
-        // it's online-only, so the toggle disables (and the map falls back to
-        // the list) when offline.
-        const locatedInList = list.some((p) => p.lat != null && p.lng != null);
-        const showMap = placesView === "map" && online && locatedInList;
+        // Map view is always offered (Casa Holden anchors it even when a
+        // listing has no located rows yet); it's online-only, so the toggle
+        // disables — and the map falls back to the list — when offline.
+        const showMap = placesView === "map" && online;
         const mapPlaces = display
           .filter((p) => p.lat != null && p.lng != null)
           .map((p) => {
             const meta = getPlaceCategory(p._cat);
-            return { ...p, _color: meta.color, _catLabel: meta.label };
+            return { ...p, _color: meta.color, _catLabel: meta.label, _Icon: meta.Icon };
           });
 
-        const viewToggle = locatedInList ? (
+        const viewToggle = (
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             {[
               { key: "list", label: "Lista / List", enabled: true },
@@ -7584,14 +7602,14 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
               );
             })}
           </div>
-        ) : null;
+        );
 
         return (
           <div>
             {/* No in-listing back row: the back chevron lives in the page
                 header ("‹ Places · Café"), freeing this space for places. */}
             {viewToggle}
-            {placesView === "map" && !online && locatedInList && (
+            {placesView === "map" && !online && (
               <div style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13, color: C.stone, marginBottom: 10 }}>
                 El mapa necesita conexión. / The map needs a connection.
               </div>
@@ -7602,7 +7620,12 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                   Cargando mapa…
                 </div>
               }>
-                <PlacesMap places={mapPlaces} userLoc={nearMe ? userLoc : null} />
+                <PlacesMap
+                  places={mapPlaces}
+                  userLoc={nearMe ? userLoc : null}
+                  campus={CAMPUS_ANCHOR}
+                  onSelectPlace={(p) => setSelectedMapPlace(p)}
+                />
               </Suspense>
             ) : (<>
             {anyCoords(allPlaces) && nearMeControl}
@@ -7655,6 +7678,26 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
           +
         </button>
       )}
+
+      {/* Place detail, opened by tapping a pin on the Places map. Reuses
+          <PlaceCard> so the save toggle works exactly as it does in the list;
+          `saved` reads live from the savedPlaces prop so toggling updates here
+          and on the map's underlying list together. */}
+      <BottomSheet
+        open={!!selectedMapPlace}
+        onClose={() => setSelectedMapPlace(null)}
+        titleEn={selectedMapPlace ? getPlaceCategory(selectedMapPlace.category).label : "Place"}
+        titleEs={selectedMapPlace ? getPlaceCategory(selectedMapPlace.category).es : "Lugar"}
+      >
+        {selectedMapPlace && (
+          <PlaceCard
+            place={selectedMapPlace}
+            saved={savedPlaces.includes(selectedMapPlace.place_id)}
+            onToggleSave={onToggleSavePlace}
+            distance={distanceCaption(selectedMapPlace)}
+          />
+        )}
+      </BottomSheet>
     </div>
   );
 }

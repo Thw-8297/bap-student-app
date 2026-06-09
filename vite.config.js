@@ -46,6 +46,12 @@ export default defineConfig({
         globPatterns: [
           "**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,gif,woff,woff2,json,webmanifest}",
         ],
+        // Keep the lazy Leaflet map chunk OUT of the precache. The map is
+        // online-only (tiles need network and we don't SW-cache them), so
+        // there's no reason to ship ~45 KB of map JS + CSS to the offline
+        // shell on every install. It downloads on demand the first time a
+        // student opens the map, while online.
+        globIgnores: ["**/PlacesMap-*"],
         // SPA fallback: any navigation request that doesn't match a
         // precached file falls back to index.html so deep links
         // (e.g., /local, /faq) still work offline.
