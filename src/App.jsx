@@ -1,10 +1,16 @@
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
+
+// Places map (SPIKE): Leaflet lives in a separate chunk loaded only when a
+// student first opens the map view, so it never weighs on first paint or the
+// offline shell. See src/PlacesMap.jsx.
+const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09e — Local tab: every sub-section now uses the header back chevron (← next to the section title) instead of an in-listing “Volver / Back” row, freeing a row across This Week / Places / Healthcare / Churches / Apps. The header now shows the active section name + gloss; LocalView registers one contextual back action (Places listing → grid, anywhere else → hub). Front-end-only; CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09f — SPIKE (places-map branch): Leaflet map view on Places listings. A lazy-loaded (separate chunk) Leaflet + CARTO Positron map behind a Lista/Mapa toggle; category-colored pins, popups with name/why/Open-in-Maps, online-only (toggle disabled offline, list stays canonical). Throwaway spike to judge bundle/offline/gesture on a phone before committing. CACHE_VERSION stays 7.";
+const _BUILD_VERSION_PREV = "2026-06-09e — Local tab: every sub-section now uses the header back chevron (← next to the section title) instead of an in-listing “Volver / Back” row, freeing a row across This Week / Places / Healthcare / Churches / Apps. The header now shows the active section name + gloss; LocalView registers one contextual back action (Places listing → grid, anywhere else → hub). Front-end-only; CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -7096,6 +7102,23 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // | "saved" = a chosen view showing that listing.
   const [placesFilter, setPlacesFilter] = useState(null);
 
+  // SPIKE: list ⇆ map toggle within a Places listing. Reset to "list" whenever
+  // the chosen category changes (or we leave to the grid) so switching buckets
+  // never strands the student on a stale map.
+  const [placesView, setPlacesView] = useState("list");
+  useEffect(() => { setPlacesView("list"); }, [placesFilter]);
+
+  // SPIKE: the map is online-only (tiles need network; we deliberately don't
+  // SW-cache them). Track connectivity so the Map toggle can disable offline.
+  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine !== false);
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
+
   // Label for the chosen Places view (null on the grid), surfaced beside the
   // "Places" page header as a breadcrumb sub-header.
   const placesViewLabel = (sub === "places" && placesFilter !== null)
@@ -7523,10 +7546,65 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
 
         const display = nearMe && userLoc ? sortByDistance(list, userLoc) : list;
 
+        // SPIKE: map view is offered only when this listing has located rows;
+        // it's online-only, so the toggle disables (and the map falls back to
+        // the list) when offline.
+        const locatedInList = list.some((p) => p.lat != null && p.lng != null);
+        const showMap = placesView === "map" && online && locatedInList;
+        const mapPlaces = display
+          .filter((p) => p.lat != null && p.lng != null)
+          .map((p) => {
+            const meta = getPlaceCategory(p._cat);
+            return { ...p, _color: meta.color, _catLabel: meta.label };
+          });
+
+        const viewToggle = locatedInList ? (
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {[
+              { key: "list", label: "Lista / List", enabled: true },
+              { key: "map", label: "🗺 Mapa / Map", enabled: online },
+            ].map((opt) => {
+              const active = (opt.key === "map" ? showMap : !showMap);
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => opt.enabled && setPlacesView(opt.key)}
+                  className="bap-press"
+                  disabled={!opt.enabled}
+                  title={!opt.enabled ? "Necesitás conexión / Needs connection" : undefined}
+                  style={{
+                    padding: "5px 13px", borderRadius: 14,
+                    border: active ? `1.5px solid ${C.ocean}` : `1.5px solid ${C.fog}`,
+                    background: active ? C.ice : C.white,
+                    color: !opt.enabled ? C.fog : active ? C.ocean : C.stone,
+                    fontFamily: "'DM Mono', monospace", fontSize: 11.5, fontWeight: active ? 500 : 400,
+                    cursor: opt.enabled ? "pointer" : "not-allowed", transition: "all 0.2s", whiteSpace: "nowrap",
+                  }}
+                >{opt.label}</button>
+              );
+            })}
+          </div>
+        ) : null;
+
         return (
           <div>
             {/* No in-listing back row: the back chevron lives in the page
                 header ("‹ Places · Café"), freeing this space for places. */}
+            {viewToggle}
+            {placesView === "map" && !online && locatedInList && (
+              <div style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13, color: C.stone, marginBottom: 10 }}>
+                El mapa necesita conexión. / The map needs a connection.
+              </div>
+            )}
+            {showMap ? (
+              <Suspense fallback={
+                <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>
+                  Cargando mapa…
+                </div>
+              }>
+                <PlacesMap places={mapPlaces} userLoc={nearMe ? userLoc : null} />
+              </Suspense>
+            ) : (<>
             {anyCoords(allPlaces) && nearMeControl}
             {display.length === 0 ? (
               <Card>
@@ -7549,6 +7627,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                 ))}
               </div>
             )}
+            </>)}
           </div>
         );
       })()}
