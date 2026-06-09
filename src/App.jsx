@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09b — Places: show the chosen category beside the “Places” page header as a breadcrumb sub-header (“Places · Café”), instead of in the in-listing back row. SectionTitle’s override gains an optional `sub`; LocalView reports the active view label up via onSubChange and App tracks it as localPlacesLabel. Front-end-only; CACHE_VERSION stays at 7.";
+const BUILD_VERSION = "2026-06-09c — Places Stage 2: “+ Suggest a place” FAB + submission form (submit_place) and a staff-only vetting dashboard (admin_places + vet_place). Student suggestions land as pending/community rows; staff approve/reject in-app with a per-place credit toggle. Requires an AuthCode.gs re-deploy. No CACHE_VERSION bump (stays 7).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -602,6 +602,76 @@ async function fetchPlaces({ token }) {
   if (body && body.error === "unauthorized") throw new AuthError();
   if (body && body.error) throw new Error(`Auth script error: ${body.error}`);
   return Array.isArray(body && body.places) ? body.places : [];
+}
+
+// Submit a student-suggested place. POSTs the fixed { name, category,
+// address, maps_url, why } schema (NOT the prompts machinery) as
+// text/plain to dodge the CORS preflight, mirroring submitResponse.
+// Lands as a pending/community row for staff vetting. Throws
+// SubmitError on validation_failed / missing_location so the form can
+// show an inline message; AuthError / NoMatchError follow the gate
+// flow. Returns the parsed body ({ ok: true }) on success.
+async function submitPlace({ token, cwid, birthday, fields }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "submit_place", token, cwid, birthday, fields: fields || {},
+    }),
+  });
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error) throw new SubmitError(body.error, body.details);
+  return body;
+}
+
+// Staff-only: read EVERY place row (all statuses) for the in-app
+// vetting dashboard. Mirrors fetchAdminResponses (same Auth / NoMatch
+// / Forbidden conventions). Returns an array of admin-shaped place rows.
+async function fetchAdminPlaces({ token, cwid, birthday }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  const params = new URLSearchParams({ action: "admin_places", token, cwid, birthday });
+  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error === "forbidden") throw new ForbiddenError();
+  if (body && body.error) throw new Error(`Auth script error: ${body.error}`);
+  return Array.isArray(body && body.places) ? body.places : [];
+}
+
+// Staff-only: flip a place's status (approve/reject), optionally set
+// its show_credit. POSTs text/plain like submitPlace. Throws
+// ForbiddenError when the role check fails, otherwise mirrors the
+// usual gate conventions. Returns the parsed body ({ ok: true }).
+async function vetPlace({ token, cwid, birthday, place_id, status, show_credit }) {
+  if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
+  if (!token) throw new AuthError("missing token");
+  if (!cwid || !birthday) throw new Error("missing cwid or birthday");
+  if (!place_id) throw new Error("missing place_id");
+  const payload = { action: "vet_place", token, cwid, birthday, place_id, status };
+  if (show_credit != null) payload.show_credit = show_credit ? "TRUE" : "FALSE";
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
+  const body = await res.json();
+  if (body && body.error === "unauthorized") throw new AuthError();
+  if (body && body.error === "no_match") throw new NoMatchError();
+  if (body && body.error === "forbidden") throw new ForbiddenError();
+  if (body && body.error) throw new SubmitError(body.error, body.details);
+  return body;
 }
 
 // ============================================================
@@ -6800,8 +6870,207 @@ function PlaceCard({ place, saved, onToggleSave, distance }) {
   );
 }
 
+// ─── Place submission form (Local > Places, "+ Suggest a place") ───
+// A fixed four-field BottomSheet — deliberately NOT the dynamic
+// prompts machinery (the schema never varies). Name, category,
+// "Maps link or address", and a one-line "why." On submit we split
+// the location field: a value starting http(s) is treated as a Maps
+// URL, anything else as a free-text address. The parent handles the
+// network call + the confirmation toast; this component only owns
+// the form state and the inline error.
+function PlaceSubmitForm({ open, onClose, onSubmit }) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [location, setLocation] = useState("");
+  const [why, setWhy] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Reset every time the sheet opens so a fresh suggestion starts clean.
+  useEffect(() => {
+    if (open) {
+      setName(""); setCategory(""); setLocation(""); setWhy("");
+      setErrorMsg(""); setSubmitting(false);
+    }
+  }, [open]);
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box",
+    background: C.white, border: `1px solid ${C.fog}`, borderRadius: 10,
+    padding: "12px 14px",
+    fontFamily: "'Roboto', sans-serif", fontSize: 14, color: C.pepBlack,
+    lineHeight: 1.4, outline: "none",
+  };
+  const labelStyle = {
+    fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
+    letterSpacing: 1.5, color: C.ocean, lineHeight: 1.2, marginBottom: 8,
+    display: "flex", alignItems: "center", gap: 6,
+  };
+  const reqDot = (
+    <span aria-label="Required" title="Required" style={{
+      width: 6, height: 6, borderRadius: "50%", background: C.pepOrange, display: "inline-block",
+    }} />
+  );
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setErrorMsg("");
+    // Client-side guard mirrors the server's validatePlaceSubmission so
+    // the student gets instant feedback before the round-trip.
+    if (!name.trim()) { setErrorMsg("Falta el nombre. / Name is required."); return; }
+    if (!category) { setErrorMsg("Elegí una categoría. / Pick a category."); return; }
+    if (!location.trim()) { setErrorMsg("Falta el link de Maps o la dirección. / Maps link or address is required."); return; }
+
+    const loc = location.trim();
+    const isUrl = /^https?:\/\//i.test(loc);
+    const fields = {
+      name: name.trim(),
+      category,
+      address: isUrl ? "" : loc,
+      maps_url: isUrl ? loc : "",
+      why: why.trim(),
+    };
+
+    setSubmitting(true);
+    try {
+      await onSubmit(fields);   // parent closes the sheet + shows the toast
+    } catch (err) {
+      const code = err && err.code ? err.code : "";
+      if (code === "validation_failed") {
+        const d = String((err && err.details) || "");
+        if (d === "missing_location") setErrorMsg("Falta el link de Maps o la dirección. / Maps link or address is required.");
+        else if (d.startsWith("missing_field")) setErrorMsg("Faltan datos obligatorios. / Some required fields are missing.");
+        else if (d.startsWith("bad_value")) setErrorMsg("Categoría inválida. / Invalid category.");
+        else setErrorMsg("Hay datos inválidos. / The form has invalid data.");
+      } else if (err && err.name === "AuthError") {
+        setErrorMsg("Sesión expirada. Cerrá y volvé a abrir la app. / Session expired. Close and re-open the app.");
+      } else if (err && err.name === "NoMatchError") {
+        setErrorMsg("Tu usuario ya no es reconocido. / Your account isn't recognized.");
+      } else if (code === "lock_failed") {
+        setErrorMsg("La planilla está ocupada. Reintentá. / The sheet is busy. Please try again.");
+      } else {
+        setErrorMsg("No se pudo enviar. Reintentá. / Couldn't send. Try again.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <BottomSheet open={open} onClose={onClose} titleEs="Sugerir un lugar" titleEn="Suggest a place">
+      <div style={{
+        marginBottom: 18,
+        fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13,
+        color: C.mountain, lineHeight: 1.45,
+      }}>
+        Compartí un lugar que te gustó. El equipo lo revisa antes de publicarlo. / Share a spot you
+        liked. The team reviews it before it goes live.
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {/* Name */}
+        <div>
+          <div style={labelStyle}>Nombre / Name {reqDot}</div>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Café Tortoni" style={inputStyle} maxLength={80} />
+        </div>
+
+        {/* Category — tappable cards from the canonical Places order */}
+        <div>
+          <div style={labelStyle}>Categoría / Category {reqDot}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {PLACE_CATEGORY_ORDER.map((k) => {
+              const meta = PLACE_CATEGORIES[k];
+              const active = category === k;
+              const Icon = meta.Icon;
+              return (
+                <button key={k} type="button" onClick={() => setCategory(k)} className="bap-press" style={{
+                  display: "flex", alignItems: "center", gap: 8, textAlign: "left", cursor: "pointer",
+                  padding: "10px 11px", borderRadius: 10,
+                  border: active ? `1.5px solid ${meta.color}` : `1px solid ${C.fog}`,
+                  background: active ? C.ice : C.white,
+                }}>
+                  <span style={{
+                    flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: meta.color,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Icon size={15} color={C.white} />
+                  </span>
+                  <span style={{
+                    fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 13.5,
+                    color: active ? C.pepBlue : C.mountain, lineHeight: 1.1,
+                  }}>{meta.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Location */}
+        <div>
+          <div style={labelStyle}>Link de Maps o dirección / Maps link or address {reqDot}</div>
+          <input type="text" value={location} onChange={(e) => setLocation(e.target.value)}
+            placeholder="maps.app.goo.gl/… o Av. de Mayo 825" style={inputStyle} />
+          <div style={{
+            marginTop: 5, fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.stone,
+          }}>
+            Pegá el link de Google Maps si lo tenés. / Paste a Google Maps link if you have one.
+          </div>
+        </div>
+
+        {/* Why */}
+        <div>
+          <div style={labelStyle}>¿Por qué? / Why go?</div>
+          <input type="text" value={why} onChange={(e) => setWhy(e.target.value)}
+            placeholder="El mejor café con leche de San Telmo" style={inputStyle} maxLength={140} />
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div style={{
+          marginTop: 16, background: C.parchment, borderLeft: `3px solid ${C.pepOrange}`,
+          borderRadius: 6, padding: "10px 12px",
+          fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.pepBlack, lineHeight: 1.4,
+        }}>{errorMsg}</div>
+      )}
+
+      <button type="button" onClick={handleSubmit} disabled={submitting} className="bap-press" style={{
+        marginTop: 20, width: "100%", padding: "13px 0", borderRadius: 10,
+        background: submitting ? C.stone : C.pepBlue, color: C.white,
+        border: "none", cursor: submitting ? "wait" : "pointer",
+        fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: 0.5,
+      }}>
+        {submitting ? "Enviando…" : "Enviar / Submit"}
+      </button>
+    </BottomSheet>
+  );
+}
+
+// ─── Place confirmation toast ───
+// A small fixed pill that slides up after a successful submission and
+// auto-clears (the parent owns the timer). Sits above the bottom nav,
+// below any open BottomSheet. Driven by a non-empty `message`.
+function PlaceToast({ message }) {
+  if (!message) return null;
+  return (
+    <div style={{
+      position: "fixed", left: "50%", bottom: 84, transform: "translateX(-50%)",
+      zIndex: 210, width: "calc(100% - 32px)", maxWidth: 448,
+      background: C.ice, borderLeft: `4px solid ${C.ocean}`, borderRadius: 10,
+      boxShadow: "0 6px 22px rgba(29,37,45,0.18)",
+      padding: "12px 16px",
+      fontFamily: "'Roboto', sans-serif", fontSize: 13.5, color: C.pepBlack, lineHeight: 1.4,
+    }}
+      className="bap-toast-in"
+      role="status" aria-live="polite"
+    >
+      {message}
+    </div>
+  );
+}
+
 // ─── Local ───
-function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSavePlace, onSubChange }) {
+function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSavePlace, onSubChange, onOpenSuggest }) {
   // The Local tab opens to the category hub (sub === null). Deep-links from
   // Today (the "This Week" events tile, the empty-state "Explorar BA" button)
   // pass an initialSub so they land straight on that listing; a normal
@@ -7289,6 +7558,30 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
           </div>
         );
       })()}
+
+      {/* "+ Suggest a place" floating action button. Pinned bottom-right
+          within the 480-px column, floating over both the category grid
+          and any listing. zIndex sits below the BottomSheet/modals so an
+          open form covers it. */}
+      {sub === "places" && onOpenSuggest && (
+        <button
+          type="button"
+          onClick={onOpenSuggest}
+          className="bap-press"
+          aria-label="Sugerir un lugar / Suggest a place"
+          style={{
+            position: "fixed", bottom: 90, zIndex: 90,
+            right: "max(20px, calc(50% - 240px + 20px))",
+            width: 56, height: 56, borderRadius: 28,
+            background: C.pepBlue, color: C.white, border: "none", cursor: "pointer",
+            boxShadow: "0 6px 18px rgba(0,32,91,0.32)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 30, lineHeight: 1, paddingBottom: 3,
+          }}
+        >
+          +
+        </button>
+      )}
     </div>
   );
 }
@@ -7617,7 +7910,7 @@ function PromptProfileSection({ prompts, onOpenPrompt }) {
 // their first name, ticks the courses they're enrolled in, and toggles
 // "Show only my classes". Reads/writes the profile via the onChange
 // callback so the App owns the source of truth.
-function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut, prompts, onOpenPrompt, onOpenDirector }) {
+function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut, prompts, onOpenPrompt, onOpenDirector, onOpenPlacesAdmin }) {
   if (!open) return null;
 
   const sortedClasses = [...(classes || [])].sort((a, b) => a.code.localeCompare(b.code));
@@ -7748,6 +8041,20 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
                   }}
                 >
                   Ver respuestas&nbsp;/&nbsp;View responses
+                </button>
+              )}
+              {typeof onOpenPlacesAdmin === "function" && (
+                <button
+                  onClick={onOpenPlacesAdmin}
+                  className="bap-press"
+                  style={{
+                    marginTop: 12, marginRight: 8,
+                    background: C.ocean, border: `1px solid ${C.ocean}`, borderRadius: 8,
+                    padding: "8px 14px", cursor: "pointer",
+                    fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.white, letterSpacing: 0.5,
+                  }}
+                >
+                  Revisar lugares&nbsp;/&nbsp;Review places
                 </button>
               )}
               <button
@@ -8495,6 +8802,283 @@ function DirectorFieldSection({ field, responses, roster, responseByCwid, respon
   );
 }
 
+// ─── DirectorPlacesView (staff Places vetting queue) ───
+// Staff-only overlay for vetting student-submitted places. Mirrors
+// <DirectorResponsesView>'s shell (gradient header, top-pinned
+// loading/error, footer Refresh + Close). Pending submissions lead;
+// approved + rejected history sits below. Approve / Reject flip the
+// row's status via onVet; a per-place credit toggle decides whether
+// the submitter's name shows publicly. Field tidying (hours, coords,
+// fixing a typo) happens in the Sheet, not here.
+
+// Default-on credit: a blank show_credit means "show the name."
+function placeCreditOn(raw) {
+  const s = String(raw == null ? "" : raw).trim().toUpperCase();
+  if (s === "") return true;
+  return !(s === "FALSE" || s === "NO" || s === "0" || s === "N");
+}
+
+// Pending first (newest submission leads), then approved, then
+// rejected. Pure; safe to call each render.
+function sortAdminPlaces(places) {
+  const rank = { pending: 0, approved: 1, rejected: 2 };
+  return [...(places || [])].sort((a, b) => {
+    const ra = rank[a.status] == null ? 3 : rank[a.status];
+    const rb = rank[b.status] == null ? 3 : rank[b.status];
+    if (ra !== rb) return ra - rb;
+    // Newest submission first within a band.
+    return String(b.submitted_at || "").localeCompare(String(a.submitted_at || ""));
+  });
+}
+
+function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, onVet }) {
+  // Local credit choices keyed by place_id; seeded from show_credit on
+  // first touch. The id currently being vetted disables its buttons.
+  const [creditMap, setCreditMap] = useState({});
+  const [vettingId, setVettingId] = useState("");
+
+  useEffect(() => { if (!open) { setVettingId(""); } }, [open]);
+
+  if (!open) return null;
+
+  const list = sortAdminPlaces(places || []);
+  const pending = list.filter((p) => p.status === "pending");
+  const approved = list.filter((p) => p.status === "approved");
+  const rejected = list.filter((p) => p.status === "rejected");
+
+  const creditFor = (p) => (creditMap[p.place_id] != null ? creditMap[p.place_id] : placeCreditOn(p.show_credit));
+
+  const doVet = async (placeId, status, showCredit) => {
+    if (vettingId) return;
+    setVettingId(placeId);
+    try {
+      await onVet({ place_id: placeId, status, show_credit: showCredit });
+    } catch (e) {
+      // Errors surface via the parent's `error` prop; nothing to do here.
+    } finally {
+      setVettingId("");
+    }
+  };
+
+  const chip = (cat) => {
+    const meta = getPlaceCategory(cat);
+    return (
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+        background: C.ice, color: meta.color, padding: "2px 9px", borderRadius: 11, whiteSpace: "nowrap",
+      }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: meta.color }} />
+        {meta.label}
+      </span>
+    );
+  };
+
+  const renderPending = (p) => {
+    const busy = vettingId === p.place_id;
+    const credit = creditFor(p);
+    return (
+      <div key={p.place_id} style={{
+        background: C.white, borderRadius: 12, border: `1px solid ${C.fog}`,
+        borderLeft: `4px solid ${C.pepOrange}`, padding: "13px 15px", marginBottom: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
+          <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, lineHeight: 1.15 }}>{p.name}</span>
+          {chip(p.category)}
+        </div>
+        {p.why && (
+          <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain, lineHeight: 1.5, marginBottom: 5 }}>{p.why}</div>
+        )}
+        <div style={{ fontSize: 12.5, color: C.stone, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5 }}>
+          {p.neighborhood && <>{p.neighborhood}<br /></>}
+          {p.address
+            ? <AddressLink address={p.address} mapsUrl={p.maps_url} />
+            : (safeExternalUrl(p.maps_url) && (
+                <a href={safeExternalUrl(p.maps_url)} target="_blank" rel="noopener noreferrer" style={{ color: C.ocean, textDecoration: "none" }}>📍 Abrir en Maps / Open in Maps</a>
+              ))}
+        </div>
+        <div style={{ marginTop: 8, fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>
+          Sugerido por {p.submitted_by_name || "—"}
+        </div>
+
+        {/* Credit toggle */}
+        <button
+          type="button"
+          onClick={() => setCreditMap((m) => ({ ...m, [p.place_id]: !credit }))}
+          className="bap-press"
+          style={{
+            marginTop: 10, display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
+            background: C.white, border: `1px solid ${C.fog}`, borderRadius: 9, padding: "6px 11px",
+          }}
+        >
+          <span style={{
+            width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+            border: `1.5px solid ${credit ? C.ocean : C.stone}`, background: credit ? C.ocean : C.white,
+            color: C.white, fontSize: 11, lineHeight: "13px", textAlign: "center",
+          }}>{credit ? "✓" : ""}</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain }}>
+            Mostrar su nombre / Show their name
+          </span>
+        </button>
+
+        {/* Approve / Reject */}
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <button type="button" disabled={busy} onClick={() => doVet(p.place_id, "approved", credit)} className="bap-press" style={{
+            flex: 1, padding: "10px 0", borderRadius: 9, border: "none",
+            background: busy ? C.stone : C.pepBlue, color: C.white, cursor: busy ? "wait" : "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 12.5, fontWeight: 500, letterSpacing: 0.5,
+          }}>{busy ? "…" : "Aprobar / Approve"}</button>
+          <button type="button" disabled={busy} onClick={() => doVet(p.place_id, "rejected")} className="bap-press" style={{
+            flex: 1, padding: "10px 0", borderRadius: 9,
+            background: C.white, color: C.mountain, border: `1px solid ${C.fog}`, cursor: busy ? "wait" : "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 12.5, fontWeight: 500, letterSpacing: 0.5,
+          }}>Rechazar / Reject</button>
+        </div>
+      </div>
+    );
+  };
+
+  // Approved / rejected history rows: compact, one flip action each.
+  const renderHistory = (p, flipTo, flipLabel) => {
+    const busy = vettingId === p.place_id;
+    return (
+      <div key={p.place_id} style={{
+        background: C.ice, borderRadius: 10, border: `1px solid ${C.fog}`,
+        padding: "10px 13px", marginBottom: 8,
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14.5, color: C.pepBlue, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+            {chip(p.category)}
+          </div>
+          {p.source === "community" && (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.stone, marginTop: 3 }}>
+              {p.submitted_by_name ? `por ${p.submitted_by_name}` : "comunidad"}
+              {p.status === "approved" ? (placeCreditOn(p.show_credit) ? " · con crédito" : " · sin crédito") : ""}
+            </div>
+          )}
+        </div>
+        <button type="button" disabled={busy} onClick={() => doVet(p.place_id, flipTo, p.status === "rejected" ? creditFor(p) : undefined)} className="bap-press" style={{
+          flexShrink: 0, padding: "7px 12px", borderRadius: 8,
+          background: C.white, color: flipTo === "approved" ? C.ocean : C.mountain,
+          border: `1px solid ${C.fog}`, cursor: busy ? "wait" : "pointer",
+          fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500,
+        }}>{busy ? "…" : flipLabel}</button>
+      </div>
+    );
+  };
+
+  const sectionHeader = (es, en, count) => (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "18px 0 10px" }}>
+      <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{es}</span>
+      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 1, color: C.stone }}>{en} · {count}</span>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(29, 37, 45, 0.55)",
+      zIndex: 220, display: "flex", justifyContent: "center", alignItems: "stretch", padding: 0,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: C.parchment, width: "100%", maxWidth: 480,
+        margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "100vh",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px",
+          background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
+          color: C.white, display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: C.bapBlue, marginBottom: 2 }}>
+              Director · Solo personal
+            </div>
+            <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 22, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.1 }}>
+              Lugares · Revisión
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{
+            background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
+            width: 36, height: 36, borderRadius: 18, cursor: "pointer",
+            fontSize: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 24px" }}>
+          {loading && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10, marginBottom: 14,
+              background: C.ice, border: `1px solid ${C.fog}`,
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <div className="bap-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: `2px solid ${C.fog}`, borderTopColor: C.ocean }} />
+              Cargando&nbsp;/&nbsp;Loading…
+            </div>
+          )}
+          {error && !loading && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10, marginBottom: 14,
+              background: "#FFF3E0", borderLeft: `3px solid ${C.pepOrange}`,
+              fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.pepBlack,
+            }}>{error}</div>
+          )}
+
+          {!loading && list.length === 0 && (
+            <div style={{ textAlign: "center", padding: "32px 12px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.stone }}>
+              Todavía no hay lugares para revisar. / No places to review yet.
+            </div>
+          )}
+
+          {/* Pending */}
+          {pending.length > 0 && (
+            <>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 18, color: C.pepBlue }}>Pendientes</span>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: C.pepOrange }}>Pending · {pending.length}</span>
+              </div>
+              {pending.map(renderPending)}
+            </>
+          )}
+
+          {/* Approved */}
+          {approved.length > 0 && (
+            <>
+              {sectionHeader("Aprobados", "Approved", approved.length)}
+              {approved.map((p) => renderHistory(p, "rejected", "Ocultar / Hide"))}
+            </>
+          )}
+
+          {/* Rejected */}
+          {rejected.length > 0 && (
+            <>
+              {sectionHeader("Rechazados", "Rejected", rejected.length)}
+              {rejected.map((p) => renderHistory(p, "approved", "Publicar / Publish"))}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "12px 16px 18px", background: C.white, borderTop: `1px solid ${C.fog}`, display: "flex", gap: 10 }}>
+          <button onClick={onRefresh} disabled={loading} className="bap-press" style={{
+            flex: 1, padding: "12px 0", borderRadius: 10,
+            background: C.white, color: C.ocean, border: `1px solid ${C.fog}`, cursor: loading ? "wait" : "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: 0.5, opacity: loading ? 0.6 : 1,
+          }}>↻ Actualizar&nbsp;/&nbsp;Refresh</button>
+          <button onClick={onClose} className="bap-press" style={{
+            flex: 1, padding: "12px 0", borderRadius: 10,
+            background: C.pepBlue, color: C.white, border: "none", cursor: "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: 0.5,
+          }}>Cerrar&nbsp;/&nbsp;Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 // PASSCODE GATE
 // ============================================================
@@ -9043,6 +9627,19 @@ export default function App() {
     setSavedPlaces((prev) => toggleSavedPlace(prev, placeId));
   }, []);
 
+  // "+ Suggest a place" submission sheet + the confirmation toast it
+  // fires on success. Toast auto-clears via a timer (see handleSubmitPlace).
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [placeToast, setPlaceToast] = useState("");
+
+  // Staff Places vetting dashboard state. Same lazy posture as the
+  // Director response dashboard below — loads on open, refreshes on
+  // demand, no localStorage cache.
+  const [placesAdminOpen, setPlacesAdminOpen] = useState(false);
+  const [placesAdminPayload, setPlacesAdminPayload] = useState([]);
+  const [placesAdminLoading, setPlacesAdminLoading] = useState(false);
+  const [placesAdminError, setPlacesAdminError] = useState("");
+
   // The prompt currently being edited in the bottom-sheet form.
   // Set when the student taps a row in <PromptCard> or
   // <PromptProfileSection>; cleared when the form closes. Form sheet
@@ -9115,6 +9712,11 @@ export default function App() {
           50%  { opacity: 0.55; transform: translateY(-6px); }
           100% { opacity: 0; transform: translateY(-12px); }
         }
+        @keyframes bap-toast-in {
+          0%   { opacity: 0; transform: translate(-50%, 12px); }
+          100% { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .bap-toast-in { animation: bap-toast-in 260ms cubic-bezier(0.4, 0, 0.2, 1); }
         .bap-pulse-dot {
           width: 6px; height: 6px; border-radius: 50%;
           background: #7CFC9E;
@@ -9177,6 +9779,7 @@ export default function App() {
           .bap-nav-pill  { transition: none; }
           .bap-nav-icon  { transition: none; }
           .bap-nav-icon.lifted { transform: none; }
+          .bap-toast-in  { animation: none; }
         }
       `;
       document.head.appendChild(style);
@@ -9503,6 +10106,150 @@ export default function App() {
     setDirectorError("");
   }, []);
 
+  // Re-pull the public approved-places list and rewrite the cache.
+  // Shared by the background effect's intent and by post-vet refresh
+  // (an approval changes what students see, so the list updates right
+  // away rather than waiting on the 10-min cache TTL).
+  const refreshPlaces = useCallback(async () => {
+    if (!cohortToken) return;
+    try {
+      const list = await fetchPlaces({ token: cohortToken });
+      setPlaces(list);
+      savePlacesCache(list);
+    } catch (err) {
+      console.warn("Places refresh failed:", err);
+    }
+  }, [cohortToken]);
+
+  // Student place submission. Calls submitPlace; on success closes the
+  // sheet and fires the confirmation toast (auto-clears after 4 s).
+  // AuthError / NoMatchError clear the gates in lockstep (same as
+  // handleSubmitPrompt); SubmitError is re-thrown so <PlaceSubmitForm>
+  // can show the inline validation message.
+  const handleSubmitPlace = useCallback(async (fields) => {
+    if (!cohortToken || !currentUser || !currentUser.cwid || !currentUser.birthday) {
+      throw new AuthError("missing identity");
+    }
+    try {
+      await submitPlace({
+        token: cohortToken,
+        cwid: currentUser.cwid,
+        birthday: currentUser.birthday,
+        fields,
+      });
+      setSuggestOpen(false);
+      setPlaceToast("¡Gracias! Enviado para revisión / Thanks — sent for review");
+      setTimeout(() => setPlaceToast(""), 4000);
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        clearCohortToken();
+        setCohortToken("");
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSuggestOpen(false);
+      } else if (err && err.name === "NoMatchError") {
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setSuggestOpen(false);
+      }
+      throw err;
+    }
+  }, [cohortToken, currentUser]);
+
+  // Staff Places vetting dashboard fetch. Mirrors loadDirectorResponses:
+  // loads on open + on demand, clears gates on Auth/NoMatch, surfaces an
+  // inline message on Forbidden.
+  const loadAdminPlaces = useCallback(async () => {
+    if (!cohortToken || !currentUser || !currentUser.cwid || !currentUser.birthday) return;
+    setPlacesAdminLoading(true);
+    setPlacesAdminError("");
+    try {
+      const list = await fetchAdminPlaces({
+        token: cohortToken,
+        cwid: currentUser.cwid,
+        birthday: currentUser.birthday,
+      });
+      setPlacesAdminPayload(list);
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        clearCohortToken();
+        setCohortToken("");
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setPlacesAdminOpen(false);
+      } else if (err && err.name === "NoMatchError") {
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setPlacesAdminOpen(false);
+      } else if (err && err.name === "ForbiddenError") {
+        setPlacesAdminError("No tenés permiso para esta vista. / You don't have access to this view.");
+      } else {
+        setPlacesAdminError("No se pudo cargar. Intentá de nuevo. / Couldn't load. Try again.");
+      }
+    } finally {
+      setPlacesAdminLoading(false);
+    }
+  }, [cohortToken, currentUser]);
+
+  const handleOpenPlacesAdmin = useCallback(() => {
+    setPlacesAdminOpen(true);
+    setProfileOpen(false); // close the gear modal so the dashboard isn't stacked under it
+    loadAdminPlaces();
+  }, [loadAdminPlaces]);
+
+  const handleClosePlacesAdmin = useCallback(() => {
+    setPlacesAdminOpen(false);
+    setPlacesAdminError("");
+  }, []);
+
+  // Approve / reject a place. On success reload the admin payload AND
+  // refresh the public list so an approval is visible to students
+  // immediately. Errors surface in the dashboard's inline error row
+  // (loadAdminPlaces sets it via the next reload, but a direct vet
+  // failure also writes one here so the Director isn't left guessing).
+  const handleVetPlace = useCallback(async ({ place_id, status, show_credit }) => {
+    if (!cohortToken || !currentUser || !currentUser.cwid || !currentUser.birthday) return;
+    setPlacesAdminError("");
+    try {
+      await vetPlace({
+        token: cohortToken,
+        cwid: currentUser.cwid,
+        birthday: currentUser.birthday,
+        place_id, status, show_credit,
+      });
+      await loadAdminPlaces();
+      refreshPlaces();
+    } catch (err) {
+      if (err && err.name === "AuthError") {
+        clearCohortToken();
+        setCohortToken("");
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setPlacesAdminOpen(false);
+      } else if (err && err.name === "NoMatchError") {
+        clearUser();
+        setCurrentUser(null);
+        clearPromptsCache();
+        setPrompts([]);
+        setPlacesAdminOpen(false);
+      } else if (err && err.name === "ForbiddenError") {
+        setPlacesAdminError("No tenés permiso para esta acción. / You don't have permission for this action.");
+      } else {
+        setPlacesAdminError("No se pudo guardar el cambio. Reintentá. / Couldn't save the change. Try again.");
+      }
+    }
+  }, [cohortToken, currentUser, loadAdminPlaces, refreshPlaces]);
+
   // Position the bottom-nav pill under the active tab. Re-runs on tab
   // change and on window resize so the pill stays anchored when the
   // viewport changes width. Uses requestAnimationFrame to wait for
@@ -9628,6 +10375,7 @@ export default function App() {
                 savedPlaces={savedPlaces}
                 onToggleSavePlace={handleToggleSavePlace}
                 onSubChange={reportLocalSub}
+                onOpenSuggest={() => setSuggestOpen(true)}
               />
             )}
             {tab === "faq" && <FaqView data={data} />}
@@ -9691,6 +10439,7 @@ export default function App() {
         prompts={prompts}
         onOpenPrompt={handleOpenPrompt}
         onOpenDirector={isStaff(currentUser) ? handleOpenDirector : null}
+        onOpenPlacesAdmin={isStaff(currentUser) ? handleOpenPlacesAdmin : null}
       />
 
       {/* Prompts form bottom sheet. Rendered at App level (rather
@@ -9720,6 +10469,28 @@ export default function App() {
         payload={directorPayload}
         onRefresh={loadDirectorResponses}
       />
+
+      {/* "+ Suggest a place" submission sheet (any signed-in user). */}
+      <PlaceSubmitForm
+        open={suggestOpen}
+        onClose={() => setSuggestOpen(false)}
+        onSubmit={handleSubmitPlace}
+      />
+
+      {/* Staff Places vetting dashboard. Same staff-gated, App-level
+          render posture as the response dashboard above. */}
+      <DirectorPlacesView
+        open={placesAdminOpen}
+        onClose={handleClosePlacesAdmin}
+        loading={placesAdminLoading}
+        error={placesAdminError}
+        places={placesAdminPayload}
+        onRefresh={loadAdminPlaces}
+        onVet={handleVetPlace}
+      />
+
+      {/* Confirmation toast fired after a successful place submission. */}
+      <PlaceToast message={placeToast} />
     </div>
   );
 }

@@ -168,6 +168,7 @@ function doGet(e) {
     if (action === "prompts")         return handlePrompts(params);
     if (action === "admin_responses") return handleAdminResponses(params);
     if (action === "places")          return handlePlaces(params);
+    if (action === "admin_places")    return handleAdminPlaces(params);
 
     return jsonResponse({ error: "bad_request" });
   } catch (err) {
@@ -200,7 +201,9 @@ function doPost(e) {
     if (tokenError) return tokenError;
 
     const action = body.action || "";
-    if (action === "submit") return handleSubmit(body);
+    if (action === "submit")       return handleSubmit(body);
+    if (action === "submit_place") return handleSubmitPlace(body);
+    if (action === "vet_place")    return handleVetPlace(body);
 
     return jsonResponse({ error: "bad_request" });
   } catch (err) {
@@ -765,6 +768,244 @@ function curatePlaceRow(r) {
     submitted_by_name: name,
     show_credit: creditOn ? "TRUE" : "FALSE",
   };
+}
+
+// =========================================================
+// Places — Stage 2: submit (student) + admin/vet (staff)
+// =========================================================
+
+// Student-authenticated submission. A student suggests a place via
+// the fixed-schema form in the app; it lands as a pending,
+// community row that a staff member later approves (handleVetPlace).
+// Mirrors handleSubmit's identity gate + LockService write pattern.
+function handleSubmitPlace(body) {
+  const idResult = verifyUserIdentity({ cwid: body.cwid, birthday: body.birthday });
+  if (idResult.error) return jsonResponse({ error: idResult.error });
+  const user = idResult.user;
+
+  // The form posts a fixed { name, category, address, maps_url, why }
+  // object — NOT the dynamic prompts machinery. Reject arrays/scalars.
+  const fields = body.fields;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+    return jsonResponse({ error: "bad_request" });
+  }
+
+  const v = validatePlaceSubmission(fields);
+  if (v.error) return jsonResponse({ error: "validation_failed", details: v.error });
+
+  const cwid = normalizeCwid(user.cwid);
+  const submitterName = String(user.preferred_name || user.first_name || "").trim();
+  const placeId = "c_" + slugifyPlaceName(v.clean.name) + "_" + Utilities.getUuid().slice(0, 8);
+
+  // LockService serializes the read-headers + append so two
+  // near-simultaneous submissions can't corrupt the tab.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return jsonResponse({ error: "lock_failed" });
+  }
+  try {
+    appendPlaceRow({
+      place_id: placeId,
+      name: v.clean.name,
+      category: v.clean.category,
+      why: v.clean.why,
+      address: v.clean.address,
+      maps_url: v.clean.maps_url,
+      status: "pending",
+      submitted_by_cwid: cwid,
+      submitted_by_name: submitterName,
+      show_credit: "",           // blank = default-on (curatePlaceRow honors this)
+      source: "community",
+      submitted_at: new Date().toISOString(),
+      vetted_by: "",
+    });
+  } finally {
+    lock.releaseLock();
+  }
+
+  // Confirmation-only: the app shows a "sent for review" toast and
+  // does not track per-submission status (roadmap v1).
+  return jsonResponse({ ok: true });
+}
+
+// Validate the fixed submission schema. Returns { clean: {...} } on
+// success (trimmed/normalized) or { error: "<code>" }. A place needs
+// a name, a recognized category, and at least one way to be located.
+function validatePlaceSubmission(fields) {
+  const name = String(fields.name == null ? "" : fields.name).trim();
+  if (!name) return { error: "missing_field:name" };
+
+  const category = String(fields.category == null ? "" : fields.category).trim().toLowerCase();
+  if (!category) return { error: "missing_field:category" };
+  if (PLACE_CATEGORY_KEYS.indexOf(category) < 0) return { error: "bad_value:category" };
+
+  const address = String(fields.address == null ? "" : fields.address).trim();
+  const mapsUrl = String(fields.maps_url == null ? "" : fields.maps_url).trim();
+  if (!address && !mapsUrl) return { error: "missing_location" };
+
+  const why = String(fields.why == null ? "" : fields.why).trim();
+  return { clean: { name: name, category: category, address: address, maps_url: mapsUrl, why: why } };
+}
+
+// Lowercase, ASCII-ish, dash-separated slug for a readable place_id.
+// Strips accents so "Café Tortoni" → "cafe-tortoni".
+function slugifyPlaceName(name) {
+  let s = String(name || "").toLowerCase();
+  s = s.replace(/[áàä]/g, "a").replace(/[éèë]/g, "e").replace(/[íìï]/g, "i")
+       .replace(/[óòö]/g, "o").replace(/[úùü]/g, "u").replace(/ñ/g, "n");
+  s = s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return s.slice(0, 32) || "place";
+}
+
+// Append one place row, auto-creating the Places tab (with
+// PLACES_HEADERS) on first use so a fresh deploy needs no manual
+// setup. Maps the value object to columns by header name, so a
+// human-reordered tab still works. Caller MUST hold the script lock.
+function appendPlaceRow(place) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(PLACES_TAB_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(PLACES_TAB_NAME);
+    sheet.getRange(1, 1, 1, PLACES_HEADERS.length).setValues([PLACES_HEADERS]);
+  }
+
+  let values = sheet.getDataRange().getValues();
+  let headers;
+  if (values.length === 0) {
+    sheet.getRange(1, 1, 1, PLACES_HEADERS.length).setValues([PLACES_HEADERS]);
+    headers = PLACES_HEADERS.slice();
+  } else {
+    headers = values[0].map(function (h) { return String(h == null ? "" : h).trim(); });
+  }
+
+  // Append any missing canonical columns at the end so the mapping
+  // below always lands somewhere valid.
+  for (let i = 0; i < PLACES_HEADERS.length; i++) {
+    if (headers.indexOf(PLACES_HEADERS[i]) < 0) {
+      headers.push(PLACES_HEADERS[i]);
+      sheet.getRange(1, headers.length).setValue(PLACES_HEADERS[i]);
+    }
+  }
+
+  const rowArr = new Array(headers.length).fill("");
+  for (const key in place) {
+    const idx = headers.indexOf(key);
+    if (idx >= 0) rowArr[idx] = place[key];
+  }
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([rowArr]);
+}
+
+// Staff-only: return EVERY place row (all statuses) with the
+// vetting-relevant columns the public curatePlaceRow drops, so the
+// in-app Director dashboard can show the pending queue + history.
+// Mirrors handleAdminResponses' identity + strict-staff gate.
+function handleAdminPlaces(params) {
+  const idResult = verifyUserIdentity(params);
+  if (idResult.error) return jsonResponse({ error: idResult.error });
+
+  const role = String(idResult.user.role || "").trim().toLowerCase();
+  if (role !== "staff") {
+    return jsonResponse({ error: "forbidden" });
+  }
+
+  const rows = readTabAsObjects(PLACES_TAB_NAME);
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!String(r.place_id || "").trim()) continue;
+    out.push(curateAdminPlaceRow(r));
+  }
+  return jsonResponse({ places: out });
+}
+
+// Project a raw row to the admin shape (keeps submitter + vetting
+// columns; coords stay strings, matching curatePlaceRow).
+function curateAdminPlaceRow(r) {
+  return {
+    place_id: String(r.place_id || ""),
+    name: String(r.name || ""),
+    category: String(r.category || "").trim().toLowerCase(),
+    why: String(r.why || ""),
+    address: String(r.address || ""),
+    lat: String(r.lat == null ? "" : r.lat),
+    lng: String(r.lng == null ? "" : r.lng),
+    maps_url: String(r.maps_url || ""),
+    neighborhood: String(r.neighborhood || ""),
+    hours: String(r.hours || ""),
+    link: String(r.link || ""),
+    status: String(r.status || "").trim().toLowerCase(),
+    submitted_by_cwid: normalizeCwid(r.submitted_by_cwid),
+    submitted_by_name: String(r.submitted_by_name || ""),
+    show_credit: String(r.show_credit == null ? "" : r.show_credit),
+    source: String(r.source || "").trim().toLowerCase(),
+    submitted_at: String(r.submitted_at || ""),
+    vetted_by: String(r.vetted_by || ""),
+  };
+}
+
+// Staff-only: flip a place's status (approve/reject), optionally set
+// its show_credit, and stamp vetted_by. Field tidying (name, hours,
+// coords) is done in the Sheet, not here, to keep this light.
+function handleVetPlace(body) {
+  const idResult = verifyUserIdentity({ cwid: body.cwid, birthday: body.birthday });
+  if (idResult.error) return jsonResponse({ error: idResult.error });
+
+  const role = String(idResult.user.role || "").trim().toLowerCase();
+  if (role !== "staff") {
+    return jsonResponse({ error: "forbidden" });
+  }
+
+  const placeId = String(body.place_id || "").trim();
+  const status = String(body.status || "").trim().toLowerCase();
+  if (!placeId) return jsonResponse({ error: "bad_request" });
+  if (status !== "approved" && status !== "rejected") {
+    return jsonResponse({ error: "bad_request" });
+  }
+  // show_credit is optional; only written when the key is present.
+  const hasCredit = body.show_credit != null && String(body.show_credit).trim() !== "";
+  const creditVal = parseBoolean(body.show_credit) ? "TRUE" : "FALSE";
+  const vettedBy = String(idResult.user.preferred_name || idResult.user.first_name || "").trim();
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return jsonResponse({ error: "lock_failed" });
+  }
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(PLACES_TAB_NAME);
+    if (!sheet) return jsonResponse({ error: "not_found" });
+
+    const values = sheet.getDataRange().getValues();
+    if (values.length < 2) return jsonResponse({ error: "not_found" });
+
+    const headers = values[0].map(function (h) { return String(h == null ? "" : h).trim(); });
+    const colIdx = {};
+    for (let i = 0; i < headers.length; i++) colIdx[headers[i]] = i;
+    if (colIdx.place_id == null || colIdx.status == null) {
+      return jsonResponse({ error: "not_found" });
+    }
+
+    let rowNum = -1;
+    for (let r = 1; r < values.length; r++) {
+      if (String(values[r][colIdx.place_id] == null ? "" : values[r][colIdx.place_id]).trim() === placeId) {
+        rowNum = r + 1; // 1-indexed sheet row
+        break;
+      }
+    }
+    if (rowNum < 0) return jsonResponse({ error: "not_found" });
+
+    sheet.getRange(rowNum, colIdx.status + 1).setValue(status);
+    if (hasCredit && colIdx.show_credit != null) {
+      sheet.getRange(rowNum, colIdx.show_credit + 1).setValue(creditVal);
+    }
+    if (colIdx.vetted_by != null) {
+      sheet.getRange(rowNum, colIdx.vetted_by + 1).setValue(vettedBy);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+
+  return jsonResponse({ ok: true });
 }
 
 // =========================================================

@@ -262,7 +262,10 @@ Submissions upsert: editing an existing answer updates `value` + `submitted_at` 
 
 The directory behind the Local tab's **Places** sub-view (renamed from "Explore BA"). One row per place. Create this tab to enable Places; the app reads only `status=approved` rows. Lives on the Roster spreadsheet (not the content sheet) because the future in-app vetting needs the auth script's identity + staff gate, which the content script doesn't have.
 
-**Shipped in two stages.** Stage 1 (2026-06-08c) is the read path — the app renders approved rows. Stage 2 adds in-app student submission (a "+ Suggest a place" button writes a `pending` row) and a staff-only vetting dashboard (Approve/Reject). Until Stage 2 lands, you add and approve places by editing this tab directly.
+**Shipped in two stages — both now live.** Stage 1 (2026-06-08c) is the read path — the app renders approved rows. **Stage 2 (2026-06-09c)** adds in-app student submission and a staff-only vetting dashboard, so the day-to-day flow no longer requires editing this tab by hand:
+
+- **Students suggest places in-app.** A floating "+" button on the Local → Places screen opens a short form (name, category, Google Maps link or address, one-line "why"). On submit the app writes a new row here with `status=pending`, `source=community`, `submitted_by_cwid` + `submitted_by_name` filled in, and a blank `show_credit` (which counts as "show the name"). The student sees a "sent for review" toast; nothing is public yet.
+- **Staff vet them in-app.** Open the app → gear icon → **"Revisar lugares / Review places"** (visible only when your roster `role` is `staff`). Pending suggestions lead the list; each card has **Aprobar / Approve** and **Rechazar / Reject** plus a **"Mostrar su nombre / Show their name"** toggle that decides whether the submitter is credited publicly. Approving flips `status` to `approved` (and stamps `vetted_by`); the place shows up for everyone within a few seconds. Approved and rejected places sit below with a one-tap flip to undo. **You still edit this tab directly** for field tidying the dashboard doesn't do — adding `lat`/`lng`, `hours`, `neighborhood`, fixing a typo — and for seed-migrating the old Explore rows.
 
 | Column | Required | Notes |
 |--------|----------|-------|
@@ -617,4 +620,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-09 (Places navigation — tapping Places now opens a two-column category-picker grid; no sheet-schema change. Stage 1 read path unchanged otherwise).*
+*Last updated: 2026-06-09c (Places Stage 2 — in-app student submission ("+ Suggest a place") and the staff vetting dashboard are live; the Places tab is now mostly maintained from the app, with direct edits reserved for field tidying and seed migration. No sheet-schema change. Requires an AuthCode.gs re-deploy).*
