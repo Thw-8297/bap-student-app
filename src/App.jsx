@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09d — Places polish: ♥ Saved is now a permanent category tile (second, after All), and the in-listing back row is replaced by a back chevron in the page header (“‹ Places · Café”) to free real estate on the listing. Front-end-only; CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09e — Local tab: every sub-section now uses the header back chevron (← next to the section title) instead of an in-listing “Volver / Back” row, freeing a row across This Week / Places / Healthcare / Churches / Apps. The header now shows the active section name + gloss; LocalView registers one contextual back action (Places listing → grid, anywhere else → hub). Front-end-only; CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -7109,9 +7109,18 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // "Local Resources".
   useEffect(() => { if (onSubChange) onSubChange(sub, placesViewLabel); }, [sub, placesViewLabel, onSubChange]);
 
-  // Register the "back to the category grid" action so the App-level header
-  // chevron can trigger it. setPlacesFilter is stable, so this runs once.
-  useEffect(() => { if (onRegisterBack) onRegisterBack(() => setPlacesFilter(null)); }, [onRegisterBack]);
+  // Register a contextual "back" action so the App-level header chevron can
+  // trigger it for every Local sub. From a Places listing it returns to the
+  // category grid; from anywhere else (the Places grid, or any other sub) it
+  // returns to the hub. Re-registers when sub/placesFilter change so the
+  // closure stays fresh; the setters are stable so this is cheap.
+  useEffect(() => {
+    if (!onRegisterBack) return;
+    onRegisterBack(() => {
+      if (sub === "places" && placesFilter !== null) setPlacesFilter(null);
+      else setSub(null);
+    });
+  }, [onRegisterBack, sub, placesFilter]);
 
   // "Cerca tuyo / Near you" distance sort. One geolocation permission is
   // requested on first tap and reused across all three sortable sub-tabs.
@@ -7230,30 +7239,13 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
     );
   }
 
-  const activeSection = LOCAL_SECTIONS.find((s) => s.key === sub);
-
   return (
     <div>
-      {/* Back header — returns to the hub and names the current section.
-          Places renders its own two-level nav (grid ⇆ listing) below, so it
-          opts out here; the page header already reads "Places" for it. */}
-      {sub !== "places" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button onClick={() => setSub(null)} className="bap-press" aria-label="Volver / Back" style={{
-            display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
-            background: C.white, border: `1px solid ${C.fog}`, borderRadius: 10,
-            padding: "6px 12px", cursor: "pointer",
-            fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone,
-          }}>
-            <span aria-hidden="true">←</span> Volver / Back
-          </button>
-          {activeSection && (
-            <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 18, color: C.pepBlue }}>
-              {activeSection.en}
-            </span>
-          )}
-        </div>
-      )}
+      {/* No in-listing back rows anywhere in Local: every sub's back action
+          lives as a chevron in the page header (← next to the section title),
+          freeing this space for content. Places' two-level nav (hub ⇆ grid ⇆
+          listing) is handled by the same header chevron via the contextual
+          back registration above. */}
 
       {sub === "events" && (
         <EventsView
@@ -7495,15 +7487,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
           ];
           return (
             <div>
-              {/* Back to the Local hub. The page header already reads "Places". */}
-              <button onClick={() => setSub(null)} className="bap-press" aria-label="Volver / Back" style={{
-                display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 16,
-                background: C.white, border: `1px solid ${C.fog}`, borderRadius: 10,
-                padding: "6px 12px", cursor: "pointer",
-                fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone,
-              }}>
-                <span aria-hidden="true">←</span> Volver / Back
-              </button>
+              {/* Back to the hub is the header chevron (← Places). */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {tiles.map((t) => {
                   const Icon = t.Icon;
@@ -10375,11 +10359,18 @@ export default function App() {
         ) : (
           <>
             {tab !== "today" && (
-              tab === "local" && localSub === "places"
-                ? <SectionTitle
-                    override={{ en: "Places", es: null, sub: localPlacesLabel }}
-                    onBack={localPlacesLabel ? () => { if (placesBackRef.current) placesBackRef.current(); } : null}
-                  />
+              tab === "local" && localSub != null
+                ? (() => {
+                    // In any Local sub: section name + a back chevron in the header.
+                    // Places keeps its breadcrumb sub ("Places · Café") and no gloss;
+                    // other subs show their LOCAL_SECTIONS name + Spanish gloss.
+                    const back = () => { if (placesBackRef.current) placesBackRef.current(); };
+                    if (localSub === "places") {
+                      return <SectionTitle override={{ en: "Places", es: null, sub: localPlacesLabel }} onBack={back} />;
+                    }
+                    const sec = LOCAL_SECTIONS.find((s) => s.key === localSub);
+                    return <SectionTitle override={{ en: sec ? sec.en : "Local", es: sec ? sec.es : null }} onBack={back} />;
+                  })()
                 : <SectionTitle tabKey={tab} />
             )}
             {tab === "today" && <TodayView data={data} onJumpToTab={jumpToTab} profile={profile} currentUser={currentUser} onRefreshData={refreshAllData} prompts={prompts} onOpenPrompt={handleOpenPrompt} />}
