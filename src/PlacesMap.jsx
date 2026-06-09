@@ -8,15 +8,19 @@
 //
 // Uses the raw Leaflet API (no react-leaflet) to avoid a second dependency.
 // Markers are divIcons — colored category discs with the category's own glyph
-// rendered to static SVG — so we sidestep Leaflet's broken-default-marker
-// problem and stay on-brand. Casa Holden (the Pepperdine campus) is always
-// anchored with a distinct Pep-Blue, orange-ringed pin. Tiles are CARTO
-// Positron raster (no key at cohort volume); offline this view isn't reachable
-// (App.jsx gates the toggle on navigator.onLine), so the list stays the
-// canonical offline experience.
+// component mounted into the disc via react-dom/client's createRoot — so we
+// sidestep Leaflet's broken-default-marker problem and stay on-brand. We mount
+// the live glyph component (rather than pre-rendering to an SVG string) so the
+// pins never diverge from the app's icon set, and so this chunk doesn't have to
+// pull in react-dom/server (~40 KB gz) just to stringify a dozen glyphs —
+// react-dom/client is already in the main bundle, so it's shared at no chunk
+// cost. Casa Holden (the Pepperdine campus) is always anchored with a distinct
+// Pep-Blue, orange-ringed pin. Tiles are CARTO Positron raster (no key at
+// cohort volume); offline this view isn't reachable (App.jsx gates the toggle
+// on navigator.onLine), so the list stays the canonical offline experience.
 import { useEffect, useRef } from "react";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createRoot } from "react-dom/client";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -52,15 +56,24 @@ function mapsHref(p) {
   return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
 }
 
-// A circular marker: colored disc + white ring + soft shadow, with an inner
-// glyph (an SVG string). Anchored at center so the disc marks the point.
-function makeDiscIcon({ size, bg, ringColor, ringWidth, glyphHtml }) {
+// The disc element: colored circle + ring + soft shadow, flex-centered so a
+// glyph (a static SVG string, or a React component mounted via createRoot)
+// sits in the middle. Returned as an HTMLElement so a React root can be
+// attached to it; Leaflet's divIcon accepts an element and appends it as-is.
+function makeDiscEl({ size, bg, ringColor, ringWidth }) {
+  const el = document.createElement("div");
+  el.style.cssText =
+    `width:${size}px;height:${size}px;border-radius:50%;background:${bg};` +
+    `border:${ringWidth}px solid ${ringColor};box-shadow:0 1px 5px rgba(0,0,0,0.4);` +
+    `box-sizing:border-box;display:flex;align-items:center;justify-content:center;`;
+  return el;
+}
+
+// Wrap a disc element in a Leaflet divIcon, anchored at center.
+function discIcon(el, size) {
   return L.divIcon({
     className: "bap-place-pin",
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;
-      background:${bg};border:${ringWidth}px solid ${ringColor};
-      box-shadow:0 1px 5px rgba(0,0,0,0.4);box-sizing:border-box;
-      display:flex;align-items:center;justify-content:center;">${glyphHtml}</div>`,
+    html: el,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -(size / 2) - 2],
@@ -114,13 +127,17 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     ).addTo(map);
 
     const latlngs = [];
+    // React roots mounted into place-pin discs; unmounted on cleanup.
+    const roots = [];
 
     // Campus anchor — distinct from category pins: larger, Pep-Blue, orange
-    // ring, mortarboard glyph, with a permanent label so it always reads as
-    // home base.
+    // ring, mortarboard glyph (a static SVG string), with a permanent label so
+    // it always reads as home base.
     if (campus && campus.lat != null && campus.lng != null) {
+      const campusEl = makeDiscEl({ size: 38, bg: "#00205B", ringColor: "#E35205", ringWidth: 3 });
+      campusEl.innerHTML = CAP_SVG;
       const m = L.marker([campus.lat, campus.lng], {
-        icon: makeDiscIcon({ size: 38, bg: "#00205B", ringColor: "#E35205", ringWidth: 3, glyphHtml: CAP_SVG }),
+        icon: discIcon(campusEl, 38),
         zIndexOffset: 1000,
       }).addTo(map);
       m.bindPopup(
@@ -140,14 +157,15 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     const located = places.filter((p) => p.lat != null && p.lng != null);
     located.forEach((p) => {
       const color = p._color || "#00205B";
-      // Render the category glyph to a static white SVG for the disc center.
-      let glyphHtml = "";
+      // Mount the live category glyph component into the disc as a white SVG.
+      const discEl = makeDiscEl({ size: 28, bg: color, ringColor: "#fff", ringWidth: 2 });
       if (p._Icon) {
-        try { glyphHtml = renderToStaticMarkup(createElement(p._Icon, { size: 15, color: "#fff" })); }
-        catch { glyphHtml = ""; }
+        const root = createRoot(discEl);
+        root.render(createElement(p._Icon, { size: 15, color: "#fff" }));
+        roots.push(root);
       }
       const marker = L.marker([p.lat, p.lng], {
-        icon: makeDiscIcon({ size: 28, bg: color, ringColor: "#fff", ringWidth: 2, glyphHtml }),
+        icon: discIcon(discEl, 28),
       }).addTo(map);
       // Tap → open the real place card (with a working save toggle) in App.
       // Look the place up by id so a background refresh's edits are reflected.
@@ -177,6 +195,9 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
 
     return () => {
       clearTimeout(t);
+      // Defer root unmounts a microtask so React isn't asked to unmount one
+      // root while mid-render of another (a harmless but noisy warning).
+      roots.forEach((r) => queueMicrotask(() => { try { r.unmount(); } catch { /* detached */ } }));
       map.remove();
       mapRef.current = null;
     };
