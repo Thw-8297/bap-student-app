@@ -304,7 +304,7 @@ The remaining categories — `cafe`, `restaurant`, `nightlife`, `fitness`, `stud
 
 **Editor-side validator.** `validatePlaces()` flags duplicate `place_id`, missing `name`/`category`/`address`-or-`maps_url`, unrecognized `category`/`status`/`source`, malformed `lat`/`lng`, a lone coordinate, and an unparseable `show_credit`. Run after any meaningful edit.
 
-**Where it shows:** Local tab → Places. Approved rows render as category-colored cards with a ♥ save toggle; students can filter by category or by ♥ Saved, and sort "Cerca tuyo / Near you" when coordinates are present.
+**Where it shows:** Local tab → Places. Tapping Places opens a two-column **category-picker grid** (All first, then all twelve categories, plus a ♥ Saved tile once a student has saved something); tapping a category opens its listing of category-colored cards with a ♥ save toggle and the "Cerca tuyo / Near you" distance sort when coordinates are present. The grid shows all twelve categories even before any place is added to a bucket, so a brand-new category just shows a "Nothing here yet" state until you (or a student submission) populate it.
 
 ---
 
@@ -617,4 +617,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-08c (Places Stage 1 — new optional `Places` tab on the Roster spreadsheet powers the Local tab's renamed "Places" sub-view; read path only for now, with in-app submission + vetting coming in Stage 2).*
+*Last updated: 2026-06-09 (Places navigation — tapping Places now opens a two-column category-picker grid; no sheet-schema change. Stage 1 read path unchanged otherwise).*
