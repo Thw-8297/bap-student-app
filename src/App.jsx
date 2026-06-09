@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09h — iOS safe-area insets: re-added viewport-fit=cover and now consume env(safe-area-inset-*) everywhere a fixed/full-screen element meets a screen edge — main header top + gear (no longer under the status bar), bottom nav + content + Places FAB + place toast (no more dead strip over the home indicator), the three full-screen overlay headers (Settings + both Director views), their footers, and the BottomSheet body. CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09i — iOS safe-area insets, spacing tuned: switched every inset from additive calc(base + inset) (which double-counted and read too loose at the top) to non-additive max(base, inset) so content sits flush at the safe boundary. Tightened the bottom-nav reservation and made the active-tab pill track it (it was pinned low near the home indicator while the labels rode up). FAB/toast/content reverted to flat now that the nav is tighter. CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -2882,7 +2882,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
           >×</button>
         </div>
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "14px 16px calc(28px + env(safe-area-inset-bottom))" }}>
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "14px 16px max(28px, env(safe-area-inset-bottom))" }}>
           {children}
         </div>
       </div>
@@ -7085,7 +7085,7 @@ function PlaceToast({ message }) {
   if (!message) return null;
   return (
     <div style={{
-      position: "fixed", left: "50%", bottom: "calc(84px + env(safe-area-inset-bottom))", transform: "translateX(-50%)",
+      position: "fixed", left: "50%", bottom: 84, transform: "translateX(-50%)",
       zIndex: 210, width: "calc(100% - 32px)", maxWidth: 448,
       background: C.ice, borderLeft: `4px solid ${C.ocean}`, borderRadius: 10,
       boxShadow: "0 6px 22px rgba(29,37,45,0.18)",
@@ -7665,7 +7665,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
           className="bap-press"
           aria-label="Sugerir un lugar / Suggest a place"
           style={{
-            position: "fixed", bottom: "calc(90px + env(safe-area-inset-bottom))", zIndex: 90,
+            position: "fixed", bottom: 90, zIndex: 90,
             right: "max(20px, calc(50% - 240px + 20px))",
             width: 56, height: 56, borderRadius: 28,
             background: C.pepBlue, color: C.white, border: "none", cursor: "pointer",
@@ -8084,7 +8084,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
       >
         {/* Modal header */}
         <div style={{
-          padding: "calc(16px + env(safe-area-inset-top)) 20px 16px",
+          padding: "max(16px, env(safe-area-inset-top)) 20px 16px",
           background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
           color: C.white, display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
@@ -8108,7 +8108,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
         </div>
 
         {/* Modal body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px calc(24px + env(safe-area-inset-bottom))" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px max(24px, env(safe-area-inset-bottom))" }}>
           {/* Logged in as */}
           {currentUser && (
             <div style={{
@@ -8487,7 +8487,7 @@ function DirectorResponsesView({ open, onClose, loading, error, payload, onRefre
       >
         {/* Header */}
         <div style={{
-          padding: "calc(16px + env(safe-area-inset-top)) 20px 16px",
+          padding: "max(16px, env(safe-area-inset-top)) 20px 16px",
           background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
           color: C.white, display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
@@ -8571,7 +8571,7 @@ function DirectorResponsesView({ open, onClose, loading, error, payload, onRefre
 
         {/* Footer */}
         <div style={{
-          padding: "12px 16px calc(18px + env(safe-area-inset-bottom))", background: C.white, borderTop: `1px solid ${C.fog}`,
+          padding: "12px 16px max(18px, env(safe-area-inset-bottom))", background: C.white, borderTop: `1px solid ${C.fog}`,
           display: "flex", gap: 10,
         }}>
           <button
@@ -9102,7 +9102,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
       }}>
         {/* Header */}
         <div style={{
-          padding: "calc(16px + env(safe-area-inset-top)) 20px 16px",
+          padding: "max(16px, env(safe-area-inset-top)) 20px 16px",
           background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`,
           color: C.white, display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
@@ -9177,7 +9177,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "12px 16px calc(18px + env(safe-area-inset-bottom))", background: C.white, borderTop: `1px solid ${C.fog}`, display: "flex", gap: 10 }}>
+        <div style={{ padding: "12px 16px max(18px, env(safe-area-inset-bottom))", background: C.white, borderTop: `1px solid ${C.fog}`, display: "flex", gap: 10 }}>
           <button onClick={onRefresh} disabled={loading} className="bap-press" style={{
             flex: 1, padding: "12px 0", borderRadius: 10,
             background: C.white, color: C.ocean, border: `1px solid ${C.fog}`, cursor: loading ? "wait" : "pointer",
@@ -9875,7 +9875,10 @@ export default function App() {
         }
         .bap-nav-pill {
           position: absolute;
-          bottom: 6px;
+          /* Track the nav's safe-area bottom padding so the pill stays
+             just under the active label (the nav pads to
+             max(16px, inset - 10px); the pill sits ~10px below that). */
+          bottom: max(6px, calc(env(safe-area-inset-bottom) - 20px));
           left: 0;
           width: 44px;
           height: 4px;
@@ -10429,14 +10432,14 @@ export default function App() {
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", height: "100dvh", background: C.parchment, display: "flex", flexDirection: "column" }}>
       {/* Header */}
-      <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 20px 16px", background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`, color: C.white, position: "relative", overflow: "hidden" }}>
+      <div style={{ padding: "max(16px, env(safe-area-inset-top)) 20px 16px", background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`, color: C.white, position: "relative", overflow: "hidden" }}>
         <SouthernCrossDecoration />
         <button
           onClick={() => setProfileOpen(true)}
           aria-label="Open settings"
           className="bap-press"
           style={{
-            position: "absolute", top: "calc(12px + env(safe-area-inset-top))", right: 12, zIndex: 5,
+            position: "absolute", top: "max(12px, env(safe-area-inset-top))", right: 12, zIndex: 5,
             width: 36, height: 36, borderRadius: 18,
             background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)",
             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -10474,7 +10477,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minHeight: 0, padding: "20px 16px calc(100px + env(safe-area-inset-bottom))", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain" }}>
+      <div style={{ flex: 1, minHeight: 0, padding: "20px 16px 100px", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain" }}>
         {status === "loading" ? (
           <LoadingScreen tips={data.tips} />
         ) : (
@@ -10520,7 +10523,7 @@ export default function App() {
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "100%", maxWidth: 480, background: C.white,
         borderTop: `1px solid ${C.fog}`, display: "flex", justifyContent: "space-around",
-        padding: "8px 0 calc(8px + env(safe-area-inset-bottom))", zIndex: 100,
+        padding: "8px 0 max(16px, calc(env(safe-area-inset-bottom) - 10px))", zIndex: 100,
       }}>
         {TABS.map((t) => {
           const active = tab === t.key;
