@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09k — Tier 3 bug-fix batch. (6) Unanswered boolean prompt fields no longer pre-select 'No' — a skipped answer is caught as missing instead of recorded as a decline. (7) PromptForm re-initializes on the open transition, so abandoned-then-reopened edits no longer resurrect as if saved. (8) Finals UI now turns off after finals_window_end passes (was persisting forever). (9) parseDays handles Sat/Sun (was rendering Sat classes on Tuesday) and splits on whitespace so a comma-less 'Mon Wed' still parses; Mon–Fri Class Schedule grid unchanged by design. (10) ErrorBoundary around the lazy Places map so a 404'd chunk after a deploy can't white-screen the app. (11) Cleared DirectorPlacesView creditMap on refresh/close; formatPromptCutoff compares time in minutes; PlacesMap markers look up the freshest place at click time; Today cache writes re-read to avoid a refresh race; PlaceToast keeps a timer ref; non-interactive stat tile dropped bap-press; BottomSheet body-scroll lock is ref-counted. CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09l — Tier 4 phone-polish batch. (14) prefers-reduced-motion now also stops the 80s spinning sun and the mate-steam loop (both infinite animations that were slipping the gate). (17) Touch targets: FilterPill padded to ~38px min-height, the ♥ save toggle hit area grown to ~40px (glyph unchanged) — the primary filter UI on five surfaces and the save control now meet the 44px guideline more closely. (13) Contrast: tertiary TEXT in stone (#7A99AC, ~3:1 on white) darkened to mountain (#425563, ~7.8:1) across ~96 sites (captions, hours, labels, inactive nav, empty states) for WCAG AA; stone kept for borders/strokes/backgrounds and disabled-state affordances; category brand tokens left untouched. (16) Manifest: added id, lang, orientation, categories, explicit purpose:any on existing icons, and a maskable 512 icon so Android adaptive launchers stop letterboxing the logo. (15) Assets: icon-512 302KB→37KB (and 192/apple-touch/logo recompressed) via palette quantization — precache ~750KB→460KB; PlacesMap chunk 68KB→45.5KB gz by mounting glyph components with react-dom/client createRoot instead of bundling react-dom/server. CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -2836,7 +2836,7 @@ class MapErrorBoundary extends Component {
         }}>
           No se pudo cargar el mapa. Probá recargar la app.
           <br />
-          <span style={{ fontStyle: "italic", color: C.stone }}>
+          <span style={{ fontStyle: "italic", color: C.mountain }}>
             Couldn't load the map — try reloading the app.
           </span>
         </div>
@@ -3059,14 +3059,14 @@ function WeatherSheet({ open, onClose, weather }) {
         <div style={{
           fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
           letterSpacing: 1.5, color: C.ocean, marginBottom: 10,
-        }}>Próximas 12 horas <span style={{ color: C.stone }}>·</span> <span style={{
+        }}>Próximas 12 horas <span style={{ color: C.mountain }}>·</span> <span style={{
           fontFamily: "'EB Garamond', serif", fontStyle: "italic", textTransform: "none",
           letterSpacing: 0, color: C.mountain, fontSize: 12,
         }}>Next 12 hours</span></div>
         {hourRows.length === 0 ? (
           <div style={{
             background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
-            padding: "16px", color: C.stone, fontSize: 12,
+            padding: "16px", color: C.mountain, fontSize: 12,
             fontFamily: "'Roboto', sans-serif",
           }}>—</div>
         ) : (
@@ -3114,14 +3114,14 @@ function WeatherSheet({ open, onClose, weather }) {
         <div style={{
           fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
           letterSpacing: 1.5, color: C.ocean, marginBottom: 10,
-        }}>Próximos 7 días <span style={{ color: C.stone }}>·</span> <span style={{
+        }}>Próximos 7 días <span style={{ color: C.mountain }}>·</span> <span style={{
           fontFamily: "'EB Garamond', serif", fontStyle: "italic", textTransform: "none",
           letterSpacing: 0, color: C.mountain, fontSize: 12,
         }}>Next 7 days</span></div>
         {dayRows.length === 0 ? (
           <div style={{
             background: C.white, border: `1px solid ${C.fog}`, borderRadius: 12,
-            padding: "16px", color: C.stone, fontSize: 12,
+            padding: "16px", color: C.mountain, fontSize: 12,
             fontFamily: "'Roboto', sans-serif",
           }}>Cargando pronóstico extendido…</div>
         ) : (
@@ -3185,7 +3185,7 @@ function WeatherSheet({ open, onClose, weather }) {
                     textAlign: "right", flexShrink: 0,
                   }}>
                     {d.tempMaxF !== null ? d.tempMaxF + "°" : "—"}
-                    <span style={{ color: C.stone, fontWeight: 400, margin: "0 4px" }}>/</span>
+                    <span style={{ color: C.mountain, fontWeight: 400, margin: "0 4px" }}>/</span>
                     <span style={{ color: C.mountain, fontWeight: 400 }}>
                       {d.tempMinF !== null ? d.tempMinF + "°" : "—"}
                     </span>
@@ -3197,7 +3197,7 @@ function WeatherSheet({ open, onClose, weather }) {
         )}
         <div style={{
           fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 11.5,
-          color: C.stone, marginTop: 10, lineHeight: 1.4, textAlign: "center",
+          color: C.mountain, marginTop: 10, lineHeight: 1.4, textAlign: "center",
         }}>
           Datos de Open-Meteo <span style={{ color: C.fog }}>·</span> Open-Meteo
         </div>
@@ -3335,7 +3335,7 @@ function DolarSheet({ open, onClose, dolar }) {
           letterSpacing: 1.5, color: C.ocean, marginBottom: 6,
         }}>
           {direction === "ars-to-usd" ? "Tenés en pesos" : "Tenés en dólares"}
-          <span style={{ color: C.stone, margin: "0 4px" }}>·</span>
+          <span style={{ color: C.mountain, margin: "0 4px" }}>·</span>
           <span style={{
             fontFamily: "'EB Garamond', serif", fontStyle: "italic",
             textTransform: "none", letterSpacing: 0, color: C.mountain,
@@ -3344,7 +3344,7 @@ function DolarSheet({ open, onClose, dolar }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{
             fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 700,
-            color: C.stone, lineHeight: 1,
+            color: C.mountain, lineHeight: 1,
           }}>{direction === "ars-to-usd" ? "$" : "US$"}</span>
           <input
             type="text"
@@ -3390,7 +3390,7 @@ function DolarSheet({ open, onClose, dolar }) {
             letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
           }}>
             {direction === "ars-to-usd" ? "Equivale a" : "Equivale a"}
-            <span style={{ color: C.stone, margin: "0 4px" }}>·</span>
+            <span style={{ color: C.mountain, margin: "0 4px" }}>·</span>
             <span style={{
               fontFamily: "'EB Garamond', serif", fontStyle: "italic",
               textTransform: "none", letterSpacing: 0, color: C.mountain,
@@ -3410,7 +3410,7 @@ function DolarSheet({ open, onClose, dolar }) {
         <div style={{
           fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
           letterSpacing: 1.5, color: C.ocean, marginBottom: 8,
-        }}>Comparación <span style={{ color: C.stone }}>·</span> <span style={{
+        }}>Comparación <span style={{ color: C.mountain }}>·</span> <span style={{
           fontFamily: "'EB Garamond', serif", fontStyle: "italic", textTransform: "none",
           letterSpacing: 0, color: C.mountain, fontSize: 12,
         }}>All rates</span></div>
@@ -3445,7 +3445,7 @@ function DolarSheet({ open, onClose, dolar }) {
                   )}
                   <div style={{
                     fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                    color: C.stone, marginTop: 3,
+                    color: C.mountain, marginTop: 3,
                   }}>
                     {row.rate ? `1 US$ = ${formatPesos(row.rate)}` : "—"}
                   </div>
@@ -3936,7 +3936,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
               color: C.pepBlack,
             }}>
               {weatherAlert.es}
-              <span style={{ color: C.stone, margin: "0 4px" }}>/</span>
+              <span style={{ color: C.mountain, margin: "0 4px" }}>/</span>
               <span style={{
                 fontFamily: "'EB Garamond', serif", fontStyle: "italic",
                 fontWeight: 400, color: C.mountain,
@@ -3951,7 +3951,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
           fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
           letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
         }}>Buenos Aires</div>
-        <div style={{ height: 32, display: "flex", alignItems: "center", color: C.stone, fontSize: 12 }}>—</div>
+        <div style={{ height: 32, display: "flex", alignItems: "center", color: C.mountain, fontSize: 12 }}>—</div>
       </>
     ),
     "weather",
@@ -4000,7 +4000,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
           fontFamily: "'DM Mono', monospace", fontSize: 9.5, textTransform: "uppercase",
           letterSpacing: 1.5, color: C.ocean, marginBottom: 4,
         }}>Dólar blue</div>
-        <div style={{ height: 32, display: "flex", alignItems: "center", color: C.stone, fontSize: 12 }}>—</div>
+        <div style={{ height: 32, display: "flex", alignItems: "center", color: C.mountain, fontSize: 12 }}>—</div>
       </>
     ),
     "dolar",
@@ -4048,7 +4048,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
           textTransform: "uppercase", letterSpacing: 1.5, color: accent,
           marginBottom: 6,
         }}>
-          {labelEs} <span style={{ color: C.stone, margin: "0 2px" }}>/</span> {labelEn}
+          {labelEs} <span style={{ color: C.mountain, margin: "0 2px" }}>/</span> {labelEn}
         </div>
         <div style={{
           fontFamily: "'EB Garamond', serif", fontSize: 19, fontWeight: 700,
@@ -4119,7 +4119,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
           fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
           lineHeight: 1.4,
         }}>
-          {summary || <span style={{ fontStyle: "italic", color: C.stone }}>Sin respuesta / No answer</span>}
+          {summary || <span style={{ fontStyle: "italic", color: C.mountain }}>Sin respuesta / No answer</span>}
         </div>
       </button>
     );
@@ -4269,13 +4269,13 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
                 {item.location && (
                   <div style={{
                     fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
-                    color: C.stone, marginTop: 2,
+                    color: C.mountain, marginTop: 2,
                   }}>{item.location}</div>
                 )}
                 {item.description && (
                   <div style={{
                     fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
-                    color: C.stone, marginTop: 2, lineHeight: 1.35,
+                    color: C.mountain, marginTop: 2, lineHeight: 1.35,
                   }}>{item.description}</div>
                 )}
               </div>
@@ -4680,7 +4680,7 @@ function AnnouncementBanner({ announcements }) {
                 fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
                 textTransform: "uppercase", letterSpacing: 1.5, color: accent,
               }}>
-                {labelEs} <span style={{ color: C.stone, margin: "0 2px" }}>/</span> {labelEn}
+                {labelEs} <span style={{ color: C.mountain, margin: "0 2px" }}>/</span> {labelEn}
               </span>
               {isUrgent && (
                 <span
@@ -4946,7 +4946,7 @@ function WeeklyOverviewView({ data, profile }) {
           }}
         >‹</button>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone, letterSpacing: 0.5 }}>{weekLabel}</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.mountain, letterSpacing: 0.5 }}>{weekLabel}</div>
           {weekOffset === 0 && (
             <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.ocean, fontWeight: 500, marginTop: 2 }}>This Week</div>
           )}
@@ -5117,11 +5117,11 @@ function WeeklyOverviewView({ data, profile }) {
                               {e.type === "mundial" && <span style={{ marginRight: 5 }}>⚽</span>}{e.title}
                             </span>
                             {timeStr && (
-                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap", marginLeft: 8 }}>{timeStr}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain, whiteSpace: "nowrap", marginLeft: 8 }}>{timeStr}</span>
                             )}
                           </div>
                           {isMulti && (
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, marginTop: 3 }}>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain, marginTop: 3 }}>
                               {dateRangeLabel(e.date, e.end_date)} · {countDays(e.date, e.end_date)} days
                             </div>
                           )}
@@ -5154,13 +5154,13 @@ function WeeklyOverviewView({ data, profile }) {
                               {c.title}
                             </span>
                             {c.final_time && (
-                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, whiteSpace: "nowrap" }}>{c.final_time}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain, whiteSpace: "nowrap" }}>{c.final_time}</span>
                             )}
                           </div>
                           {c.location && (
                             <div style={{
                               fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
-                              color: C.stone, marginTop: 3,
+                              color: C.mountain, marginTop: 3,
                             }}>{c.location}</div>
                           )}
                         </div>
@@ -5183,14 +5183,14 @@ function WeeklyOverviewView({ data, profile }) {
                         }}>
                           <span style={{
                             fontFamily: "'DM Mono', monospace", fontSize: 10,
-                            color: C.stone, marginRight: 6,
+                            color: C.mountain, marginRight: 6,
                           }}>{c.code}</span>
                           {c.title}
                         </span>
                         {t && (
                           <span style={{
                             fontFamily: "'DM Mono', monospace", fontSize: 10,
-                            color: C.stone, whiteSpace: "nowrap",
+                            color: C.mountain, whiteSpace: "nowrap",
                           }}>{t}</span>
                         )}
                       </div>
@@ -5275,7 +5275,7 @@ function ClassScheduleView({ data, view, profile }) {
                           <div style={{ padding: "10px 14px", flex: 1 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                               <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>{c.title}</span>
-                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone, whiteSpace: "nowrap", marginLeft: 12 }}>{getTimeForDay(c.time, day)}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain, whiteSpace: "nowrap", marginLeft: 12 }}>{getTimeForDay(c.time, day)}</span>
                             </div>
                             <div style={{ fontSize: 13, color: C.mountain, marginTop: 3, fontFamily: "'Roboto', sans-serif" }}>{c.code} · {c.professor} · {c.location}</div>
                           </div>
@@ -5300,7 +5300,7 @@ function ClassScheduleView({ data, view, profile }) {
                 <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 6 }}>{c.code}: {c.title}</div>
                 <div style={{ fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7 }}>
                   {profDisplay}<br />
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.stone }}>{compactSchedule(c.days, c.time)}</span><br />
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.mountain }}>{compactSchedule(c.days, c.time)}</span><br />
                   {c.location}
                 </div>
                 {c.email && (
@@ -5451,7 +5451,7 @@ function CalendarView({ data }) {
         const monthName = d.toLocaleString("en-US", { month: "long", year: "numeric" });
         return (
           <div key={monthKey} style={{ marginBottom: 28 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${C.fog}` }}>{monthName}</div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.mountain, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${C.fog}` }}>{monthName}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {monthEvents.map((e, i) => {
                 const s = EVENT_STYLES[e.type] || EVENT_STYLES.academic;
@@ -5489,12 +5489,12 @@ function CalendarView({ data }) {
                     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", opacity: isPast ? 0.55 : 1 }}>
                       <div style={{ minWidth: 44, textAlign: "right", paddingTop: 2 }}>
                         <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 16, fontWeight: 700, color: C.pepBlack }}>{dateDisplay}</div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>{dayDisplay}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain }}>{dayDisplay}</div>
                       </div>
                       <div style={{ flex: 1, background: s.bg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${s.border}` }}>
                         <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 14, color: C.pepBlack }}>{e.type === "mundial" && <span style={{ marginRight: 5 }}>⚽</span>}{e.title}</div>
                         {isMulti && (
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone, marginTop: 3 }}>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain, marginTop: 3 }}>
                             {countDays(e.date, e.end_date)} days
                           </div>
                         )}
@@ -5559,7 +5559,7 @@ function AddressLink({ address, mapsUrl }) {
 // never linked, no pin icon.
 function LocationNote({ note }) {
   if (!note) return null;
-  return <span style={{ color: C.stone, fontStyle: "italic" }}>{note}</span>;
+  return <span style={{ color: C.mountain, fontStyle: "italic" }}>{note}</span>;
 }
 
 // ─── Link Helper ───
@@ -5588,10 +5588,11 @@ function LinkButton({ url }) {
 function FilterPill({ active, onClick, children }) {
   return (
     <button onClick={onClick} style={{
-      padding: "3px 11px", borderRadius: 14,
+      padding: "9px 14px", borderRadius: 19, minHeight: 38,
+      display: "inline-flex", alignItems: "center",
       border: active ? `1.5px solid ${C.ocean}` : "1.5px solid transparent",
       background: active ? C.ice : C.parchment,
-      color: active ? C.ocean : C.stone,
+      color: active ? C.ocean : C.mountain,
       fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: active ? 500 : 400,
       cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
     }}>{children}</button>
@@ -5753,7 +5754,7 @@ function EventsView({ events, activeFilter, onFilterChange, categoriesPresent })
         <>
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+            letterSpacing: 1.5, color: C.mountain, marginBottom: 8,
           }}>This week / Esta semana</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: later.length > 0 ? 18 : 0 }}>
             {thisWeek.map((e, i) => <EventCard key={`tw-${i}`} event={e} dolarCompra={dolarCompra} />)}
@@ -5765,7 +5766,7 @@ function EventsView({ events, activeFilter, onFilterChange, categoriesPresent })
         <>
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+            letterSpacing: 1.5, color: C.mountain, marginBottom: 8,
           }}>Coming up / Próximamente</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {later.map((e, i) => <EventCard key={`lt-${i}`} event={e} dolarCompra={dolarCompra} />)}
@@ -5827,7 +5828,7 @@ function EventCard({ event, dolarCompra }) {
 
         {(event.venue || event.neighborhood) && (
           <div style={{
-            fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.stone,
+            fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.mountain,
             marginTop: 6,
           }}>
             {event.venue}
@@ -5852,8 +5853,8 @@ function EventCard({ event, dolarCompra }) {
               {event.cost}
               {usdAmount !== null && (
                 <>
-                  <span style={{ color: C.stone, margin: "0 4px" }}>·</span>
-                  <span style={{ color: C.stone }}>~{formatUsd(usdAmount)} USD</span>
+                  <span style={{ color: C.mountain, margin: "0 4px" }}>·</span>
+                  <span style={{ color: C.mountain }}>~{formatUsd(usdAmount)} USD</span>
                 </>
               )}
             </span>
@@ -5967,7 +5968,7 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
               </div>
               <div style={{
                 fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                color: C.stone, marginTop: 1,
+                color: C.mountain, marginTop: 1,
               }}>
                 {f.final_date
                   ? (f.final_time ? `${formatFinalDate(f.final_date)} · ${f.final_time}` : formatFinalDate(f.final_date))
@@ -5981,7 +5982,7 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
 
       {finals.length > preview.length && (
         <div style={{
-          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.stone,
+          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.mountain,
           marginTop: 8, textAlign: "center",
         }}>
           +{finals.length - preview.length} more
@@ -6086,7 +6087,7 @@ function FinalsCard({ data, profile, today }) {
                 {f.location && (
                   <div style={{
                     fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
-                    color: C.stone, marginTop: 2,
+                    color: C.mountain, marginTop: 2,
                   }}>{f.location}</div>
                 )}
               </div>
@@ -6162,7 +6163,7 @@ function EventsTodayTile({ data, todayStr, onJumpToTab }) {
                 }}>{e.title}</div>
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                  color: C.stone, marginTop: 1,
+                  color: C.mountain, marginTop: 1,
                 }}>
                   {eventDateLabel(e)}{e.time ? ` · ${e.time}` : ""}
                   {e.neighborhood ? ` · ${e.neighborhood}` : ""}
@@ -6170,7 +6171,7 @@ function EventsTodayTile({ data, todayStr, onJumpToTab }) {
                 {e.description ? (
                   <div style={{
                     fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
-                    color: C.stone, marginTop: 2, lineHeight: 1.3,
+                    color: C.mountain, marginTop: 2, lineHeight: 1.3,
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                     overflow: "hidden",
                   }}>{e.description}</div>
@@ -6183,7 +6184,7 @@ function EventsTodayTile({ data, todayStr, onJumpToTab }) {
 
       {events.length > preview.length && (
         <div style={{
-          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.stone,
+          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.mountain,
           marginTop: 8, textAlign: "center",
         }}>
           +{events.length - preview.length} more this week
@@ -6599,7 +6600,7 @@ function PromptFieldInput({ field, value, onChange, readonly }) {
       <div style={{
         background: C.ice, border: `1px dashed ${C.fog}`, borderRadius: 10,
         padding: "10px 12px", fontFamily: "'Roboto', sans-serif", fontSize: 12,
-        color: C.stone, fontStyle: "italic",
+        color: C.mountain, fontStyle: "italic",
       }}>
         Tipo de campo no soportado: {t}
       </div>
@@ -6659,7 +6660,7 @@ function PromptForm({ open, onClose, prompt, onSubmit }) {
     // open this without a prompt, but if it does the user can dismiss.
     return (
       <BottomSheet open={open} onClose={onClose} titleEs="Formulario" titleEn="Form">
-        <div style={{ color: C.stone, fontStyle: "italic", padding: 8 }}>
+        <div style={{ color: C.mountain, fontStyle: "italic", padding: 8 }}>
           No hay formulario seleccionado.
         </div>
       </BottomSheet>
@@ -6820,7 +6821,7 @@ function PromptForm({ open, onClose, prompt, onSubmit }) {
       {hasPriorSubmission && (
         <div style={{
           marginTop: 8, textAlign: "center",
-          fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.stone,
+          fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.mountain,
         }}>
           Guardado {formatPromptSavedAt(displayPrompt.submitted_at)}
         </div>
@@ -6929,7 +6930,7 @@ function PromptCard({ prompts, onOpenPrompt, todayStr }) {
                   )}
                   {!locked && cutoff && (
                     <div style={{
-                      fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.stone,
+                      fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.mountain,
                       lineHeight: 1.3, marginTop: 3,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>{cutoff.es}</div>
@@ -6985,7 +6986,8 @@ function PlaceCard({ place, saved, onToggleSave, distance }) {
               aria-pressed={saved}
               style={{
                 flexShrink: 0, background: "transparent", border: "none", cursor: "pointer",
-                padding: 2, fontSize: 19, lineHeight: 1, color: saved ? C.pepOrange : C.stone,
+                padding: 10, margin: "-8px -6px -8px 0", fontSize: 19, lineHeight: 1,
+                color: saved ? C.pepOrange : C.stone,
               }}
             >{saved ? "♥" : "♡"}</button>
           </div>
@@ -6996,17 +6998,17 @@ function PlaceCard({ place, saved, onToggleSave, distance }) {
             </span><br />
             {place.why && <>{place.why}<br /></>}
             {place.address
-              ? <span style={{ color: C.stone }}><AddressLink address={place.address} mapsUrl={place.maps_url} /><br /></span>
+              ? <span style={{ color: C.mountain }}><AddressLink address={place.address} mapsUrl={place.maps_url} /><br /></span>
               : (safeExternalUrl(place.maps_url) && (
-                  <span style={{ color: C.stone }}>
+                  <span style={{ color: C.mountain }}>
                     <a href={safeExternalUrl(place.maps_url)} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>
                       <span style={{ marginRight: 4 }}>📍</span>Open in Maps
                     </a><br />
                   </span>
                 ))}
-            {place.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>{place.hours}<br /></span>}
+            {place.hours && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain }}>{place.hours}<br /></span>}
             {showCredit && (
-              <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.stone }}>
+              <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.mountain }}>
                 Sugerido por {place.submitted_by_name} / Suggested by {place.submitted_by_name}
               </span>
             )}
@@ -7160,7 +7162,7 @@ function PlaceSubmitForm({ open, onClose, onSubmit }) {
           <input type="text" value={location} onChange={(e) => setLocation(e.target.value)}
             placeholder="maps.app.goo.gl/… o Av. de Mayo 825" style={inputStyle} />
           <div style={{
-            marginTop: 5, fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.stone,
+            marginTop: 5, fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.mountain,
           }}>
             Pegá el link de Google Maps si lo tenés. / Paste a Google Maps link if you have one.
           </div>
@@ -7345,7 +7347,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
         📍 {geoStatus === "loading" ? "Buscando…" : "Cerca tuyo / Near you"}
       </button>
       {(geoStatus === "denied" || geoStatus === "unavailable") && (
-        <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.stone }}>
+        <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.mountain }}>
           {geoStatus === "denied"
             ? "No pudimos acceder a tu ubicación / Couldn't get your location"
             : "Ubicación no disponible / Location unavailable"}
@@ -7387,9 +7389,9 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue }}>{s.en}</span>
-                <span style={{ display: "block", fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.stone, marginTop: 1 }}>{s.es}</span>
+                <span style={{ display: "block", fontFamily: "'Roboto', sans-serif", fontSize: 12.5, color: C.mountain, marginTop: 1 }}>{s.es}</span>
               </span>
-              <span aria-hidden="true" style={{ flexShrink: 0, color: C.stone, fontSize: 18 }}>→</span>
+              <span aria-hidden="true" style={{ flexShrink: 0, color: C.mountain, fontSize: 18 }}>→</span>
             </button>
           );
         })}
@@ -7445,7 +7447,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                   {h.address && <><AddressLink address={h.address} /><br /></>}
                   {h.location_note && <><LocationNote note={h.location_note} /><br /></>}
                   {h.phone && <>{h.phone}<br /></>}
-                  {h.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{h.notes}</span>}
+                  {h.notes && <span style={{ color: C.mountain, fontStyle: "italic" }}>{h.notes}</span>}
                 </div>
                 <LinkButton url={h.link} />
               </Card>
@@ -7480,7 +7482,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                   {ch.address && <><AddressLink address={ch.address} /><br /></>}
                   {ch.location_note && <><LocationNote note={ch.location_note} /><br /></>}
                   {ch.service && <>{ch.service}<br /></>}
-                  {ch.notes && <span style={{ color: C.stone, fontStyle: "italic" }}>{ch.notes}</span>}
+                  {ch.notes && <span style={{ color: C.mountain, fontStyle: "italic" }}>{ch.notes}</span>}
                 </div>
                 <LinkButton url={ch.link} />
               </Card>
@@ -7726,14 +7728,14 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                 header ("‹ Places · Café"), freeing this space for places. */}
             {viewToggle}
             {placesView === "map" && !online && (
-              <div style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13, color: C.stone, marginBottom: 10 }}>
+              <div style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13, color: C.mountain, marginBottom: 10 }}>
                 El mapa necesita conexión. / The map needs a connection.
               </div>
             )}
             {showMap ? (
               <MapErrorBoundary>
                 <Suspense fallback={
-                  <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>
+                  <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain }}>
                     Cargando mapa…
                   </div>
                 }>
@@ -7749,7 +7751,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
             {anyCoords(allPlaces) && nearMeControl}
             {display.length === 0 ? (
               <Card>
-                <div style={{ textAlign: "center", padding: "12px 4px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.stone }}>
+                <div style={{ textAlign: "center", padding: "12px 4px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.mountain }}>
                   {placesFilter === "saved"
                     ? "Todavía no guardaste ningún lugar. / No saved places yet."
                     : "Todavía no hay lugares acá. / Nothing here yet."}
@@ -7833,7 +7835,7 @@ function FaqView({ data }) {
             fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, textAlign: "left",
           }}>
             {p.title}
-            <span style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.stone }}>▼</span>
+            <span style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.mountain }}>▼</span>
           </button>
           {open === i && (
             <div style={{ padding: "0 16px 14px", fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7, whiteSpace: "pre-line" }}>
@@ -7912,7 +7914,7 @@ function ContactsView({ data }) {
       {/* Emergency */}
       {emergency.length > 0 && (
         <>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Emergency</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.mountain, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Emergency</div>
           {emergency.map((e, i) => (
             <div key={`emerg-${i}`} style={{
               background: "#FFF3E0", borderRadius: 10, padding: 16,
@@ -7934,7 +7936,7 @@ function ContactsView({ data }) {
       {/* Staff */}
       {staff.length > 0 && (
         <>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Staff</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.mountain, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Staff</div>
           {staff.map((s, i) => (
             <Card key={`staff-${i}`}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
@@ -7952,7 +7954,7 @@ function ContactsView({ data }) {
       )}
 
       {/* Local Emergency Numbers */}
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Local Emergency Numbers</div>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.mountain, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Local Emergency Numbers</div>
       <div style={{ background: C.white, borderRadius: 10, padding: 16, border: `1px solid ${C.fog}` }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 14, fontFamily: "'Roboto', sans-serif", color: C.mountain }}>
           {[
@@ -7975,11 +7977,11 @@ function ContactsView({ data }) {
       {/* Additional Resources */}
       {(data.resources || []).length > 0 && (
         <>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.stone, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Additional Resources</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.mountain, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Additional Resources</div>
           {data.resources.map((r, i) => (
             <Card key={`res-${i}`}>
               <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, marginBottom: 2 }}>{r.name}</div>
-              {r.detail && <div style={{ fontSize: 13, color: C.stone, fontFamily: "'Roboto', sans-serif", marginBottom: 8, whiteSpace: "pre-line" }}>{r.detail}</div>}
+              {r.detail && <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", marginBottom: 8, whiteSpace: "pre-line" }}>{r.detail}</div>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {r.phone && <ActionBtn href={`tel:${r.phone.replace(/[\s\-().]/g, "")}`} icon="📞" label={r.phone} variant="phone" />}
                 {r.url && <ActionBtn href={r.url} icon="→" label="Website" variant="maps" />}
@@ -8046,7 +8048,7 @@ function PromptProfileSection({ prompts, onOpenPrompt }) {
     <div style={{ marginBottom: 22 }}>
       <div style={{
         fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-        letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+        letterSpacing: 1.5, color: C.mountain, marginBottom: 8,
       }}>About you / Tu información</div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -8115,12 +8117,12 @@ function PromptProfileSection({ prompts, onOpenPrompt }) {
                   ) : (
                     <div style={{
                       fontFamily: "'Roboto', sans-serif", fontStyle: "italic", fontSize: 12,
-                      color: C.stone, marginTop: 2, lineHeight: 1.3,
+                      color: C.mountain, marginTop: 2, lineHeight: 1.3,
                     }}>Sin respuesta / No answer yet</div>
                   )}
                   {cutoff && (
                     <div style={{
-                      fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.stone,
+                      fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.mountain,
                       lineHeight: 1.3, marginTop: 3,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>{cutoff.es}</div>
@@ -8236,7 +8238,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
             }}>
               <div style={{
                 fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-                letterSpacing: 1.5, color: C.stone, marginBottom: 6,
+                letterSpacing: 1.5, color: C.mountain, marginBottom: 6,
               }}>
                 Sesión iniciada como&nbsp;/&nbsp;Logged in as
               </div>
@@ -8248,7 +8250,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
                 {currentUser.last_name ? ` ${currentUser.last_name}` : ""}
               </div>
               <div style={{
-                fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.stone, marginTop: 4,
+                fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain, marginTop: 4,
                 display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6,
               }}>
                 {currentUser.role && (
@@ -8322,7 +8324,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
               <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack }}>
                 Show only my classes
               </div>
-              <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.stone, marginTop: 2 }}>
+              <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 12, color: C.mountain, marginTop: 2 }}>
                 Filters Today and Schedule to the courses you tick below.
               </div>
             </div>
@@ -8350,12 +8352,12 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
           {/* Class checklist */}
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+            letterSpacing: 1.5, color: C.mountain, marginBottom: 8,
           }}>My courses</div>
 
           {sortedClasses.length === 0 ? (
             <div style={{
-              fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.stone,
+              fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain,
               fontStyle: "italic", padding: "14px 0",
             }}>No courses loaded yet. Once the schedule syncs, you can tick yours here.</div>
           ) : (
@@ -8406,12 +8408,12 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
               marginTop: 22, display: "block", marginLeft: "auto",
               background: "none", border: `1px solid ${C.fog}`, borderRadius: 8,
               padding: "6px 14px", cursor: "pointer",
-              fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone,
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain,
             }}
           >Reset profile</button>
 
           <div style={{
-            fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.stone,
+            fontFamily: "'Roboto', sans-serif", fontSize: 11, color: C.mountain,
             marginTop: 18, lineHeight: 1.5, textAlign: "center",
           }}>
             Saved on this device only. Changes apply immediately.
@@ -8725,7 +8727,7 @@ function DirectorPromptList({ prompts, roster, onSelect, loading, error }) {
     return (
       <div style={{
         padding: "30px 14px", textAlign: "center",
-        fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.stone,
+        fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.mountain,
       }}>
         No hay formularios definidos.<br />
         <span style={{ fontSize: 13 }}>No prompts defined yet.</span>
@@ -8764,7 +8766,7 @@ function DirectorPromptList({ prompts, roster, onSelect, loading, error }) {
                 {titleAlt && (
                   <div style={{
                     fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-                    fontSize: 12.5, color: C.stone, marginTop: 1, lineHeight: 1.25,
+                    fontSize: 12.5, color: C.mountain, marginTop: 1, lineHeight: 1.25,
                   }}>{titleAlt}</div>
                 )}
               </div>
@@ -8782,14 +8784,14 @@ function DirectorPromptList({ prompts, roster, onSelect, loading, error }) {
               <span style={{
                 fontWeight: 700, color: allDone ? "#1E8E3E" : C.pepBlue,
               }}>{responded} / {expected || "—"}</span>
-              <span style={{ color: C.stone, fontSize: 11 }}>
+              <span style={{ color: C.mountain, fontSize: 11 }}>
                 {expected ? "respondieron" : "sin audiencia activa"}
               </span>
             </div>
             {(p.start_date || p.end_date) && (
               <div style={{
                 marginTop: 4, fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                color: C.stone,
+                color: C.mountain,
               }}>
                 {p.start_date || "—"} → {p.end_date || "∞"}
                 {p.end_time ? ` · ${p.end_time}` : ""}
@@ -8824,7 +8826,7 @@ function DirectorPromptDetail({ prompt, roster }) {
       {titleAlt && (
         <div style={{
           fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-          fontSize: 14, color: C.stone, marginBottom: 8, lineHeight: 1.3,
+          fontSize: 14, color: C.mountain, marginBottom: 8, lineHeight: 1.3,
         }}>{titleAlt}</div>
       )}
       {description && (
@@ -8840,18 +8842,18 @@ function DirectorPromptDetail({ prompt, roster }) {
         fontFamily: "'DM Mono', monospace", fontSize: 11.5, color: C.mountain,
       }}>
         <div>
-          <span style={{ color: C.stone }}>Audiencia · Audience:&nbsp;</span>
+          <span style={{ color: C.mountain }}>Audiencia · Audience:&nbsp;</span>
           <span>{prompt.audience || "all"}</span>
         </div>
         <div style={{ marginTop: 3 }}>
-          <span style={{ color: C.stone }}>Ventana · Window:&nbsp;</span>
+          <span style={{ color: C.mountain }}>Ventana · Window:&nbsp;</span>
           <span>
             {prompt.start_date || "—"} → {prompt.end_date || "∞"}
             {prompt.end_time ? ` · ${prompt.end_time}` : ""}
           </span>
         </div>
         <div style={{ marginTop: 3 }}>
-          <span style={{ color: C.stone }}>Respondieron · Responded:&nbsp;</span>
+          <span style={{ color: C.mountain }}>Respondieron · Responded:&nbsp;</span>
           <span style={{ fontWeight: 700, color: C.pepBlue }}>
             {responders.size} / {expected.length || "—"}
           </span>
@@ -8877,7 +8879,7 @@ function DirectorPromptDetail({ prompt, roster }) {
         <div style={{ marginTop: 22 }}>
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+            letterSpacing: 1.5, color: C.mountain, marginBottom: 8,
           }}>
             Falta responder&nbsp;/&nbsp;Awaiting response · {nonResponders.length}
           </div>
@@ -8888,7 +8890,7 @@ function DirectorPromptDetail({ prompt, roster }) {
               borderRadius: 8,
               fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.pepBlack,
             }}>
-              ¡Listo! Todos respondieron.&nbsp;<span style={{ fontStyle: "italic", color: C.stone }}>All in.</span>
+              ¡Listo! Todos respondieron.&nbsp;<span style={{ fontStyle: "italic", color: C.mountain }}>All in.</span>
             </div>
           ) : (
             <div style={{
@@ -8900,7 +8902,7 @@ function DirectorPromptDetail({ prompt, roster }) {
               {nonResponders.map((cwid, i) => (
                 <span key={cwid}>
                   {directorResponderName(roster[cwid], cwid)}
-                  {i < nonResponders.length - 1 ? <span style={{ color: C.stone }}>, </span> : null}
+                  {i < nonResponders.length - 1 ? <span style={{ color: C.mountain }}>, </span> : null}
                 </span>
               ))}
             </div>
@@ -8914,7 +8916,7 @@ function DirectorPromptDetail({ prompt, roster }) {
         <div style={{ marginTop: 18 }}>
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 11, textTransform: "uppercase",
-            letterSpacing: 1.5, color: C.stone, marginBottom: 8,
+            letterSpacing: 1.5, color: C.mountain, marginBottom: 8,
           }}>
             Fuera de la audiencia&nbsp;/&nbsp;Outside audience · {outsideResponders.length}
           </div>
@@ -8961,7 +8963,7 @@ function DirectorFieldSection({ field, responses, roster, responseByCwid, respon
           fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 15, color: C.pepBlack,
         }}>{label}</div>
         <div style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.stone,
+          fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.mountain,
           textTransform: "uppercase", letterSpacing: 1,
         }}>{field.field_type}</div>
       </div>
@@ -9007,7 +9009,7 @@ function DirectorFieldSection({ field, responses, roster, responseByCwid, respon
       {rows.length === 0 ? (
         <div style={{
           marginTop: 10, fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-          fontSize: 13, color: C.stone,
+          fontSize: 13, color: C.mountain,
         }}>Sin respuestas todavía&nbsp;/&nbsp;No responses yet</div>
       ) : (
         <div style={{
@@ -9129,7 +9131,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
         {p.why && (
           <div style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.mountain, lineHeight: 1.5, marginBottom: 5 }}>{p.why}</div>
         )}
-        <div style={{ fontSize: 12.5, color: C.stone, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12.5, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.5 }}>
           {p.neighborhood && <>{p.neighborhood}<br /></>}
           {p.address
             ? <AddressLink address={p.address} mapsUrl={p.maps_url} />
@@ -9137,7 +9139,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
                 <a href={safeExternalUrl(p.maps_url)} target="_blank" rel="noopener noreferrer" style={{ color: C.ocean, textDecoration: "none" }}>📍 Abrir en Maps / Open in Maps</a>
               ))}
         </div>
-        <div style={{ marginTop: 8, fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.stone }}>
+        <div style={{ marginTop: 8, fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain }}>
           Sugerido por {p.submitted_by_name || "—"}
         </div>
 
@@ -9193,7 +9195,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
             {chip(p.category)}
           </div>
           {p.source === "community" && (
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.stone, marginTop: 3 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.mountain, marginTop: 3 }}>
               {p.submitted_by_name ? `por ${p.submitted_by_name}` : "comunidad"}
               {p.status === "approved" ? (placeCreditOn(p.show_credit) ? " · con crédito" : " · sin crédito") : ""}
             </div>
@@ -9212,7 +9214,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
   const sectionHeader = (es, en, count) => (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "18px 0 10px" }}>
       <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>{es}</span>
-      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 1, color: C.stone }}>{en} · {count}</span>
+      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 1, color: C.mountain }}>{en} · {count}</span>
     </div>
   );
 
@@ -9268,7 +9270,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
           )}
 
           {!loading && list.length === 0 && (
-            <div style={{ textAlign: "center", padding: "32px 12px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.stone }}>
+            <div style={{ textAlign: "center", padding: "32px 12px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.mountain }}>
               Todavía no hay lugares para revisar. / No places to review yet.
             </div>
           )}
@@ -10028,6 +10030,8 @@ export default function App() {
           .bap-nav-icon  { transition: none; }
           .bap-nav-icon.lifted { transform: none; }
           .bap-toast-in  { animation: none; }
+          .bap-sun-rotate { animation: none; }
+          .bap-steam     { animation: none; }
         }
       `;
       document.head.appendChild(style);
