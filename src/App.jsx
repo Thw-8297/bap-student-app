@@ -9,8 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09f — Places map (places-map branch): a Lista/Mapa toggle on every Places listing opens a lazy-loaded Leaflet + CARTO Positron map. Category-colored glyph pins; tapping a pin opens the real place card (with working ♥ save) in a bottom sheet. Casa Holden (Pepperdine campus) is anchored on every map with a distinct Pep-Blue, orange-ringed campus pin + label. Online-only (toggle disabled offline; list stays canonical); Leaflet ships as a separate chunk excluded from the SW precache. CACHE_VERSION stays 7.";
-const _BUILD_VERSION_PREV = "2026-06-09e — Local tab: every sub-section now uses the header back chevron (← next to the section title) instead of an in-listing “Volver / Back” row, freeing a row across This Week / Places / Healthcare / Churches / Apps. The header now shows the active section name + gloss; LocalView registers one contextual back action (Places listing → grid, anywhere else → hub). Front-end-only; CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09g — Places map: a Lista/Mapa toggle on every Places listing opens a lazy-loaded Leaflet + CARTO Positron map. Category-colored glyph pins; tapping a pin opens the real place card (with working ♥ save) in a bottom sheet. Casa Holden (Pepperdine campus) is anchored on every map with a distinct Pep-Blue, orange-ringed campus pin + label. Online-only (toggle disabled offline; list stays canonical); Leaflet ships as a separate chunk excluded from the SW precache. CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★

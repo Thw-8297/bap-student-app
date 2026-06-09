@@ -309,6 +309,8 @@ The remaining categories — `cafe`, `restaurant`, `nightlife`, `fitness`, `stud
 
 **Where it shows:** Local tab → Places. Tapping Places opens a two-column **category-picker grid** (All first, then all twelve categories, plus a ♥ Saved tile once a student has saved something); tapping a category opens its listing of category-colored cards with a ♥ save toggle and the "Cerca tuyo / Near you" distance sort when coordinates are present. The grid shows all twelve categories even before any place is added to a bucket, so a brand-new category just shows a "Nothing here yet" state until you (or a student submission) populate it.
 
+Every listing also has a **Lista / Mapa** toggle (added 2026-06-09g). Tapping **🗺 Mapa** opens an interactive map: each place that has `lat`/`lng` shows as a category-colored pin, and **Casa Holden** (the Pepperdine campus) is always anchored with its own distinct campus pin so students have a reference point. Tapping a pin opens that place's card with the save button. The map needs an internet connection (it's disabled offline; the list view always works offline), so **filling `lat`/`lng` is what puts a place on the map** — a place with no coordinates still appears in the list but won't have a pin. One more reason to backfill coordinates on your highest-value spots.
+
 ---
 
 ## Tab-by-tab reference *(content spreadsheet)*
@@ -620,4 +622,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-09c (Places Stage 2 — in-app student submission ("+ Suggest a place") and the staff vetting dashboard are live; the Places tab is now mostly maintained from the app, with direct edits reserved for field tidying and seed migration. No sheet-schema change. Requires an AuthCode.gs re-deploy).*
+*Last updated: 2026-06-09g (Places map — a Lista/Mapa toggle on Places listings opens an interactive Leaflet map; places with `lat`/`lng` show as category pins and Casa Holden is anchored as the campus. Front-end-only, online-only; no sheet-schema change, no Apps Script re-deploy. Backfilling `lat`/`lng` is what puts a place on the map).*
