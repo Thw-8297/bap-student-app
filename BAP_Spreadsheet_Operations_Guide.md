@@ -346,7 +346,7 @@ The course catalog for the current semester.
 | `professor` | No | Last name. |
 | `honorific` | No | Dr., Prof., etc. |
 | `firstname` | No | First name. |
-| `days` | Yes | Days the course meets. Accepts comma-separated three-letter codes ("Mon, Wed, Fri") or a single string of letter codes ("MWF"). |
+| `days` | Yes | Days the course meets. Accepts comma-separated three-letter codes ("Mon, Wed, Fri") or a single string of letter codes ("MWF"). **Weekends are supported** (as of 2026-06-09k): use "Sat" / "Sun" in the comma form, or the single letters **`S` = Saturday** and **`U` = Sunday** in the concatenated form (e.g. "MWS" = Mon/Wed/Sat). Note Sunday is `U`, not `S`, because `S` is Saturday — same idea as `R` = Thursday. Weekend classes appear on the Today tab and the Weekly Overview; the Mon–Fri "Class Schedule" grid stays Mon–Fri, so a weekend class won't show there. The list parser also tolerates a missing comma ("Mon Wed" still parses), but commas are the clean convention. |
 | `time` | Yes | Time block (e.g., "9:00–10:30"). For courses with different times on different days, format as "Mon 9:00–10:30; Wed 11:00–12:30". |
 | `location` | Yes | Classroom or building. |
 | `color` | No | Hex color override for the course's accent. Default is BAP Blue. |
@@ -622,4 +622,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-09g (Places map — a Lista/Mapa toggle on Places listings opens an interactive Leaflet map; places with `lat`/`lng` show as category pins and Casa Holden is anchored as the campus. Front-end-only, online-only; no sheet-schema change, no Apps Script re-deploy. Backfilling `lat`/`lng` is what puts a place on the map).*
+*Last updated: 2026-06-09k (Tier 3 bug-fix batch — front-end-only, no sheet-schema change, no Apps Script re-deploy. The one Director-visible change: the Classes `days` column now supports weekends — "Sat"/"Sun" in the comma form, or single letters `S`=Sat / `U`=Sun in the concatenated form. Weekend classes show on Today + Weekly Overview, not the Mon–Fri grid).*

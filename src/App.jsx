@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment, lazy, Suspense, Component } from "react";
 import { createPortal } from "react-dom";
 
 // Places map (SPIKE): Leaflet lives in a separate chunk loaded only when a
@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09j — Reverted the iOS edge-to-edge attempt (09h/09i). viewport-fit=cover + env(safe-area-inset-*) padding fought the device's safe areas (gear too close to the status bar, persistent white patch under the bottom nav) and never settled across two on-device tuning rounds. Back to the original known-good layout: no cover, flat paddings; iOS auto-insets content clear of the status bar and home indicator. Pinch-zoom fix retained. CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-09k — Tier 3 bug-fix batch. (6) Unanswered boolean prompt fields no longer pre-select 'No' — a skipped answer is caught as missing instead of recorded as a decline. (7) PromptForm re-initializes on the open transition, so abandoned-then-reopened edits no longer resurrect as if saved. (8) Finals UI now turns off after finals_window_end passes (was persisting forever). (9) parseDays handles Sat/Sun (was rendering Sat classes on Tuesday) and splits on whitespace so a comma-less 'Mon Wed' still parses; Mon–Fri Class Schedule grid unchanged by design. (10) ErrorBoundary around the lazy Places map so a 404'd chunk after a deploy can't white-screen the app. (11) Cleared DirectorPlacesView creditMap on refresh/close; formatPromptCutoff compares time in minutes; PlacesMap markers look up the freshest place at click time; Today cache writes re-read to avoid a refresh race; PlaceToast keeps a timer ref; non-interactive stat tile dropped bap-press; BottomSheet body-scroll lock is ref-counted. CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -172,16 +172,34 @@ class NoMatchError extends Error {
 // Parse day codes from the spreadsheet. Accepts both single-letter
 // concatenated codes (e.g. "MTWR") and comma-separated three-letter
 // abbreviations (e.g. "Mon,Tue,Wed"). Returns an array like ["Mon","Tue"].
-const DAY_LETTER_MAP = { M: "Mon", T: "Tue", W: "Wed", R: "Thu", F: "Fri" };
+// Single-letter day codes. R = Thursday (T is taken by Tuesday) and
+// U = Sunday (S is taken by Saturday), mirroring the registrar convention
+// already used for R. The named-day branch below handles the full
+// "Mon, Sat" form; this map handles the concatenated "MWF" / "TR" form.
+const DAY_LETTER_MAP = { M: "Mon", T: "Tue", W: "Wed", R: "Thu", F: "Fri", S: "Sat", U: "Sun" };
 
 function parseDays(raw) {
   if (!raw) return [];
   const s = raw.trim();
-  // If it contains a comma or a three-letter day name, use the old split approach
-  if (s.includes(",") || /\b(Mon|Tue|Wed|Thu|Fri)\b/.test(s)) {
-    return s.split(",").map((d) => d.trim());
+  // If it contains a comma/whitespace separator or a three-letter day
+  // name, treat it as a list and split on commas OR whitespace. Splitting
+  // on whitespace too means a comma-less typo like "Mon Wed" still parses
+  // to ["Mon","Wed"] instead of silently dropping the class everywhere.
+  if (/[,\s]/.test(s) || /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/i.test(s)) {
+    return s
+      .split(/[,\s]+/)
+      .map((d) => d.trim())
+      // Normalize casing/length to the canonical three-letter abbrev so
+      // downstream `c.days.includes("Sat")` matches regardless of input.
+      .map((d) => {
+        if (!d) return "";
+        const cap = d.charAt(0).toUpperCase() + d.slice(1).toLowerCase();
+        return cap.slice(0, 3);
+      })
+      .filter(Boolean);
   }
-  // Otherwise treat each character as a single-letter day code
+  // Otherwise treat each character as a single-letter day code (e.g. "MWF",
+  // "TR", "MTWRF"). Sat = S, Sun = U.
   return [...s].map((ch) => DAY_LETTER_MAP[ch.toUpperCase()]).filter(Boolean);
 }
 
@@ -1249,13 +1267,25 @@ function shouldShowFinalsUI(data, profile, today) {
   if (!shouldFilterClasses(profile)) return false;
   const finals = getStudentFinals(data, profile);
   if (finals.length === 0) return false;
-  const anyAssigned = finals.some((f) => !!f.final_date);
-  const anchor = data.finals_window_start || "";
-  if (anchor) {
-    const d = daysUntil(anchor, today);
-    if (d !== null && d <= 14) return true;
+  const anchorStart = data.finals_window_start || "";
+  const anchorEnd = data.finals_window_end || anchorStart;
+  // Lower bound: once the finals window has fully passed, retire the UI
+  // even though final_date cells stay populated in the sheet indefinitely.
+  // Without this the FinalsCard and Today tile persisted forever after
+  // finals ended (invisible for Summer, but wrong for Fall/Spring).
+  if (anchorEnd) {
+    const dEnd = daysUntil(anchorEnd, today);
+    if (dEnd !== null && dEnd < 0) return false;
   }
-  return anyAssigned;
+  // Pre-window runway: surface up to 14 days before the window opens, and
+  // throughout it (the end-bound above already cut off the trailing side).
+  if (anchorStart) {
+    const dStart = daysUntil(anchorStart, today);
+    if (dStart !== null && dStart <= 14) return true;
+  }
+  // No window set (or outside the 14-day runway): fall back to "any class
+  // has a final assigned" so an early-published final still surfaces.
+  return finals.some((f) => !!f.final_date);
 }
 
 // Number of milliseconds before a cached weather payload is treated
@@ -1612,7 +1642,7 @@ function eventDateLabel(event) {
 }
 
 // Compact day abbreviations: M T W R F
-const DAY_ABBREV = { Mon: "M", Tue: "T", Wed: "W", Thu: "R", Fri: "F" };
+const DAY_ABBREV = { Mon: "M", Tue: "T", Wed: "W", Thu: "R", Fri: "F", Sat: "S", Sun: "U" };
 
 // Build a compact schedule string for the "All Courses" cards.
 // Uniform schedules (e.g. "11:30–13:40") → "MTWR 11:30–13:40"
@@ -2773,6 +2803,57 @@ function parseArsAmount(costStr) {
   return n;
 }
 
+// ─── MapErrorBoundary ───
+//
+// React Suspense catches the lazy chunk's *loading* state but NOT a
+// rejected dynamic import. After a deploy, a student still running the
+// old build who taps "Mapa" for the first time 404s on the old hashed
+// PlacesMap-*.js chunk; without a boundary that rejection white-screens
+// the whole app. This class scopes the failure to the map: the list and
+// the rest of the app stay interactive, and a bilingual "reload" note
+// points the student at the recovery (a reload pulls the new chunk).
+// Class component because React error boundaries must be classes.
+class MapErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(err) {
+    // Surface in the console for debugging; no user-facing telemetry.
+    try { console.warn("PlacesMap failed to load:", err); } catch (e) { /* noop */ }
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div style={{
+          background: C.ice, border: `1px solid ${C.fog}`, borderRadius: 14,
+          padding: "20px 16px", textAlign: "center",
+          fontFamily: "'EB Garamond', serif", fontSize: 14, color: C.mountain,
+          lineHeight: 1.5,
+        }}>
+          No se pudo cargar el mapa. Probá recargar la app.
+          <br />
+          <span style={{ fontStyle: "italic", color: C.stone }}>
+            Couldn't load the map — try reloading the app.
+          </span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Module-level ref count for the body-scroll lock. Each open BottomSheet
+// increments it; only the first capture stashes the original overflow and
+// only the last release restores it. A per-instance capture would restore
+// out of order if two sheets ever stack (B opens over A, A closes first and
+// restores "" while B is still open). Latent today, but correct here.
+let __bottomSheetLockCount = 0;
+let __bottomSheetPrevOverflow = "";
+
 // ─── BottomSheet ───
 //
 // Generic slide-up modal used by <WeatherSheet> and <DolarSheet>.
@@ -2806,9 +2887,17 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
   // bounce the page behind the backdrop when you scroll the body.
   useEffect(() => {
     if (!show) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    if (__bottomSheetLockCount === 0) {
+      __bottomSheetPrevOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    __bottomSheetLockCount++;
+    return () => {
+      __bottomSheetLockCount = Math.max(0, __bottomSheetLockCount - 1);
+      if (__bottomSheetLockCount === 0) {
+        document.body.style.overflow = __bottomSheetPrevOverflow;
+      }
+    };
   }, [show]);
 
   if (!show) return null;
@@ -3525,20 +3614,20 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
   const triggerRefresh = useCallback(async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    const cur = loadTodayCache();
-    let nextCache = { ...cur };
+    // Re-read the cache inside each .then (rather than merging onto a
+    // single captured snapshot) so the weather and dólar writes — and a
+    // concurrent mount-effect write — can't clobber each other's field
+    // with a stale value.
     const weatherPromise = fetchWeather()
       .then((w) => {
         setWeather(w);
-        nextCache = { ...nextCache, weather: w };
-        saveTodayCache(nextCache);
+        saveTodayCache({ ...loadTodayCache(), weather: w });
       })
       .catch(() => { /* keep prior */ });
     const dolarPromise = fetchDolar()
       .then((d) => {
         setDolar(d);
-        nextCache = { ...nextCache, dolar: d };
-        saveTodayCache(nextCache);
+        saveTodayCache({ ...loadTodayCache(), dolar: d });
       })
       .catch(() => { /* keep prior */ });
     const sheetPromise = onRefreshData ? onRefreshData() : Promise.resolve();
@@ -3620,14 +3709,13 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
       && Array.isArray(c.weather.daily.time)
       && (c.weather.hourlySliceVersion || 0) >= 2;
 
-    let nextCache = { ...c };
-
+    // Each write re-reads the cache so a concurrent pull-to-refresh write
+    // can't be clobbered by a stale captured snapshot (and vice versa).
     if (!fresh(c.weather) || !weatherShapeOk) {
       fetchWeather()
         .then((w) => {
           setWeather(w);
-          nextCache = { ...nextCache, weather: w };
-          saveTodayCache(nextCache);
+          saveTodayCache({ ...loadTodayCache(), weather: w });
         })
         .catch(() => { /* keep cached or null */ });
     }
@@ -3635,8 +3723,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
       fetchDolar()
         .then((d) => {
           setDolar(d);
-          nextCache = { ...nextCache, dolar: d };
-          saveTodayCache(nextCache);
+          saveTodayCache({ ...loadTodayCache(), dolar: d });
         })
         .catch(() => { /* keep cached or null */ });
     }
@@ -3786,8 +3873,10 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
         >{children}</button>
       );
     }
+    // Non-interactive placeholder (no onClick): no press affordance — a
+    // tile that doesn't respond to taps shouldn't scale as if it does.
     return (
-      <div key={key} className={dimmed ? "" : "bap-press"} style={baseStyle}>{children}</div>
+      <div key={key} style={baseStyle}>{children}</div>
     );
   };
 
@@ -6135,7 +6224,12 @@ function initFormFromPrompt(prompt) {
     if (f.field_type === "multi_select") {
       out[f.field_id] = stored ? String(stored).split(";").map((x) => x.trim()).filter(Boolean) : [];
     } else if (f.field_type === "boolean") {
-      out[f.field_id] = String(stored == null ? "" : stored).trim().toUpperCase() === "TRUE";
+      // A never-answered boolean stays "" so neither Sí/No pill is
+      // pre-selected and a skipped required field is caught as missing
+      // rather than recorded as a decline the student never made.
+      // Only an actual stored TRUE/FALSE reflects as a selected pill.
+      const raw = stored == null ? "" : String(stored).trim();
+      out[f.field_id] = raw === "" ? "" : (raw.toUpperCase() === "TRUE");
     } else {
       out[f.field_id] = stored == null ? "" : String(stored);
     }
@@ -6170,8 +6264,19 @@ function formatPromptCutoff(prompt, now) {
   // Past the cutoff?
   if (todayStr > endDate) return { es: "Cerrado", en: "Closed" };
   if (todayStr === endDate) {
-    const nowHm = `${String(ref.getHours()).padStart(2, "0")}:${String(ref.getMinutes()).padStart(2, "0")}`;
-    if (nowHm > endTime) return { es: "Cerrado", en: "Closed" };
+    // Compare in minutes, not lexically: a non-zero-padded end_time like
+    // "9:00" would read as still-open at 10:00 under string comparison
+    // ("10:00" > "9:00" is false). toMinutes handles both "9:00" and
+    // "09:00"; fall back to the original padded string compare if either
+    // side won't parse.
+    const nowMin = ref.getHours() * 60 + ref.getMinutes();
+    const endMin = toMinutes(endTime);
+    if (endMin !== null) {
+      if (nowMin > endMin) return { es: "Cerrado", en: "Closed" };
+    } else {
+      const nowHm = `${String(ref.getHours()).padStart(2, "0")}:${String(ref.getMinutes()).padStart(2, "0")}`;
+      if (nowHm > endTime) return { es: "Cerrado", en: "Closed" };
+    }
   }
 
   // Compute "tomorrow" string in local terms
@@ -6531,11 +6636,23 @@ function PromptForm({ open, onClose, prompt, onSubmit }) {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Re-initialize from stored responses on the open transition (and on a
+  // prompt swap), NOT just when promptKey changes. The sticky ref keeps
+  // promptKey constant while the sheet is closed, so without gating on
+  // `open` an open→edit→close-without-submitting→reopen sequence would
+  // resurrect the abandoned edits as though they were saved. Gating on
+  // `open` (and only re-initing when open) preserves the sticky-ref
+  // behavior during the 260 ms close animation while wiping unsaved edits
+  // on the next open. A background prompts refresh while open still won't
+  // wipe in-progress edits, because submitted_at is not a dep and the
+  // effect doesn't fire when only `displayPrompt`'s contents change.
   useEffect(() => {
+    if (!open) return;
     setValues(initFormFromPrompt(displayPrompt));
     setErrorMsg("");
     setSubmitting(false);
-  }, [promptKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, promptKey]);
 
   if (!displayPrompt) {
     // Render an empty sheet as a safety net; the parent shouldn't
@@ -7614,18 +7731,20 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
               </div>
             )}
             {showMap ? (
-              <Suspense fallback={
-                <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>
-                  Cargando mapa…
-                </div>
-              }>
-                <PlacesMap
-                  places={mapPlaces}
-                  userLoc={nearMe ? userLoc : null}
-                  campus={CAMPUS_ANCHOR}
-                  onSelectPlace={(p) => setSelectedMapPlace(p)}
-                />
-              </Suspense>
+              <MapErrorBoundary>
+                <Suspense fallback={
+                  <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone }}>
+                    Cargando mapa…
+                  </div>
+                }>
+                  <PlacesMap
+                    places={mapPlaces}
+                    userLoc={nearMe ? userLoc : null}
+                    campus={CAMPUS_ANCHOR}
+                    onSelectPlace={(p) => setSelectedMapPlace(p)}
+                  />
+                </Suspense>
+              </MapErrorBoundary>
             ) : (<>
             {anyCoords(allPlaces) && nearMeControl}
             {display.length === 0 ? (
@@ -8953,6 +9072,12 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
   const [vettingId, setVettingId] = useState("");
 
   useEffect(() => { if (!open) { setVettingId(""); } }, [open]);
+  // Clear local credit overrides when the dashboard opens/closes or a
+  // fresh admin payload lands. Otherwise a stale in-memory toggle could
+  // silently overwrite a sheet-side show_credit edit on the next Approve,
+  // since each row re-seeds from placeCreditOn(show_credit) only on first
+  // touch. Dropping the overrides re-reads the canonical sheet value.
+  useEffect(() => { setCreditMap({}); }, [open, places]);
 
   if (!open) return null;
 
@@ -9751,6 +9876,9 @@ export default function App() {
   // fires on success. Toast auto-clears via a timer (see handleSubmitPlace).
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [placeToast, setPlaceToast] = useState("");
+  // Held so a second toast within the 4 s window resets the timer instead
+  // of being cut short by the first toast's still-pending clear.
+  const placeToastTimerRef = useRef(null);
 
   // Staff Places vetting dashboard state. Same lazy posture as the
   // Director response dashboard below — loads on open, refreshes on
@@ -10259,7 +10387,8 @@ export default function App() {
       });
       setSuggestOpen(false);
       setPlaceToast("¡Gracias! Enviado para revisión / Thanks — sent for review");
-      setTimeout(() => setPlaceToast(""), 4000);
+      if (placeToastTimerRef.current) clearTimeout(placeToastTimerRef.current);
+      placeToastTimerRef.current = setTimeout(() => setPlaceToast(""), 4000);
     } catch (err) {
       if (err && err.name === "AuthError") {
         clearCohortToken();

@@ -82,6 +82,18 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
   const selectRef = useRef(onSelectPlace);
   useEffect(() => { selectRef.current = onSelectPlace; }, [onSelectPlace]);
 
+  // Hold the latest place objects keyed by place_id. Markers are rebuilt
+  // only when the id+coords signature changes, so a background fetchPlaces
+  // refresh that edits a place's name/why/hours (same id, same coords)
+  // would otherwise leave the click handler closing over the stale object.
+  // Looking up by id at click time hands the freshest record to the card.
+  const placesByIdRef = useRef({});
+  useEffect(() => {
+    const m = {};
+    for (const p of places) m[p.place_id] = p;
+    placesByIdRef.current = m;
+  }, [places]);
+
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
     injectMapStyles();
@@ -138,7 +150,10 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
         icon: makeDiscIcon({ size: 28, bg: color, ringColor: "#fff", ringWidth: 2, glyphHtml }),
       }).addTo(map);
       // Tap → open the real place card (with a working save toggle) in App.
-      marker.on("click", () => { if (selectRef.current) selectRef.current(p); });
+      // Look the place up by id so a background refresh's edits are reflected.
+      marker.on("click", () => {
+        if (selectRef.current) selectRef.current(placesByIdRef.current[p.place_id] || p);
+      });
       // Light hover/tap context without committing to the sheet.
       marker.bindTooltip(escapeHtml(p.name), { direction: "top", offset: [0, -14] });
       latlngs.push([p.lat, p.lng]);
