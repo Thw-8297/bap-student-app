@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09c — Places Stage 2: “+ Suggest a place” FAB + submission form (submit_place) and a staff-only vetting dashboard (admin_places + vet_place). Student suggestions land as pending/community rows; staff approve/reject in-app with a per-place credit toggle. Requires an AuthCode.gs re-deploy. No CACHE_VERSION bump (stays 7).";
+const BUILD_VERSION = "2026-06-09d — Places polish: ♥ Saved is now a permanent category tile (second, after All), and the in-listing back row is replaced by a back chevron in the page header (“‹ Places · Café”) to free real estate on the listing. Front-end-only; CACHE_VERSION stays 7.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -4362,12 +4362,14 @@ function EmptyDay() {
 
 // Section title used at the top of every main view. English headline
 // in EB Garamond at 28 px; Spanish gloss below in DM Mono uppercase.
-function SectionTitle({ tabKey, override }) {
+function SectionTitle({ tabKey, override, onBack }) {
   // `override` lets a tab swap its headline/gloss contextually (e.g. the Local
   // tab reading "Places" with no gloss while in that section). An override with
   // a null/blank `es` suppresses the Spanish gloss line entirely; an optional
   // `sub` renders inline beside the headline as a lighter breadcrumb-style
-  // sub-header (e.g. "Places · Café" for the chosen Places category).
+  // sub-header (e.g. "Places · Café" for the chosen Places category). When
+  // `onBack` is provided, a chevron sits at the conventional top-left, before
+  // the headline — used by Places to drop the dedicated in-listing back row.
   const t = override || TAB_TITLES[tabKey];
   if (!t) return null;
   return (
@@ -4376,16 +4378,26 @@ function SectionTitle({ tabKey, override }) {
         width: 28, height: 2, background: C.pepOrange,
         borderRadius: 1, marginBottom: 10,
       }} />
-      <div style={{
-        fontFamily: "'EB Garamond', serif", fontSize: 28, fontWeight: 700,
-        color: C.pepBlue, letterSpacing: -0.5, lineHeight: 1.05,
-      }}>
-        {t.en}
-        {t.sub && (
-          <span style={{ fontWeight: 400, fontSize: 19, color: C.ocean, whiteSpace: "nowrap" }}>
-            <span style={{ color: C.fog, margin: "0 9px" }}>·</span>{t.sub}
-          </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {onBack && (
+          <button onClick={onBack} className="bap-press" aria-label="Volver / Back" style={{
+            flexShrink: 0, width: 34, height: 34, borderRadius: 17,
+            border: `1px solid ${C.fog}`, background: C.white, color: C.pepBlue,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 23, lineHeight: 1, paddingBottom: 3,
+          }}>‹</button>
         )}
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontSize: 28, fontWeight: 700,
+          color: C.pepBlue, letterSpacing: -0.5, lineHeight: 1.05,
+        }}>
+          {t.en}
+          {t.sub && (
+            <span style={{ fontWeight: 400, fontSize: 19, color: C.ocean, whiteSpace: "nowrap" }}>
+              <span style={{ color: C.fog, margin: "0 9px" }}>·</span>{t.sub}
+            </span>
+          )}
+        </div>
       </div>
       {t.es && (
         <div style={{
@@ -7070,7 +7082,7 @@ function PlaceToast({ message }) {
 }
 
 // ─── Local ───
-function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSavePlace, onSubChange, onOpenSuggest }) {
+function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSavePlace, onSubChange, onOpenSuggest, onRegisterBack }) {
   // The Local tab opens to the category hub (sub === null). Deep-links from
   // Today (the "This Week" events tile, the empty-state "Explorar BA" button)
   // pass an initialSub so they land straight on that listing; a normal
@@ -7096,6 +7108,10 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // page header can read "Places · Café" while in that section. Other subs keep
   // "Local Resources".
   useEffect(() => { if (onSubChange) onSubChange(sub, placesViewLabel); }, [sub, placesViewLabel, onSubChange]);
+
+  // Register the "back to the category grid" action so the App-level header
+  // chevron can trigger it. setPlacesFilter is stable, so this runs once.
+  useEffect(() => { if (onRegisterBack) onRegisterBack(() => setPlacesFilter(null)); }, [onRegisterBack]);
 
   // "Cerca tuyo / Near you" distance sort. One geolocation permission is
   // requested on first tap and reused across all three sortable sub-tabs.
@@ -7458,20 +7474,24 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
           _cat: String(p.category || "").trim().toLowerCase(),
         }));
         const savedSet = new Set(savedPlaces);
-        const hasSaved = allPlaces.some((p) => savedSet.has(p.place_id));
 
         // ── Level 1: category-picker grid (placesFilter === null) ──
         // Shows All first, then every category (sightseeing-led order), plus a
         // ♥ Saved tile once the student has saved anything. Two columns; each
         // tile is a glyph in its category color with the label beneath.
         if (placesFilter === null) {
+          // "All" and "♥ Saved" are the two meta-views; they lead the grid,
+          // then the twelve real categories follow. Saved is always shown
+          // (even with nothing saved yet) so it reads as a permanent place
+          // to find favorites; tapping it empty shows the "no saved places"
+          // state, consistent with how empty category tiles behave.
           const tiles = [
             { key: "all", label: "All", color: C.pepBlue, Icon: AppGridIcon },
+            { key: "saved", label: "Saved", color: C.pepOrange, Icon: null },
             ...PLACE_CATEGORY_ORDER.map((k) => ({
               key: k, label: PLACE_CATEGORIES[k].label,
               color: PLACE_CATEGORIES[k].color, Icon: PLACE_CATEGORIES[k].Icon,
             })),
-            ...(hasSaved ? [{ key: "saved", label: "Saved", color: C.pepOrange, Icon: null }] : []),
           ];
           return (
             <div>
@@ -7521,18 +7541,8 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
 
         return (
           <div>
-            {/* Back to the category grid (not the hub). The chosen view's name
-                lives in the page header ("Places · Café") rather than here. */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <button onClick={() => setPlacesFilter(null)} className="bap-press" aria-label="Lugares / Places" style={{
-                display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
-                background: C.white, border: `1px solid ${C.fog}`, borderRadius: 10,
-                padding: "6px 12px", cursor: "pointer",
-                fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.stone,
-              }}>
-                <span aria-hidden="true">←</span> Lugares / Places
-              </button>
-            </div>
+            {/* No in-listing back row: the back chevron lives in the page
+                header ("‹ Places · Café"), freeing this space for places. */}
             {anyCoords(allPlaces) && nearMeControl}
             {display.length === 0 ? (
               <Card>
@@ -9565,6 +9575,11 @@ export default function App() {
     setLocalSub(s);
     setLocalPlacesLabel(label || null);
   }, []);
+  // Down-channel for the header back chevron on a Places listing: <LocalView>
+  // registers its "back to the category grid" function here, and the header
+  // chevron calls it. A ref (not state) so registering doesn't re-render.
+  const placesBackRef = useRef(null);
+  const registerPlacesBack = useCallback((fn) => { placesBackRef.current = fn; }, []);
   // Tab navigation with an optional Local sub-section deep-link. Passed to
   // <TodayView> as onJumpToTab so its tiles can route into a specific
   // Local listing rather than the hub.
@@ -10361,7 +10376,10 @@ export default function App() {
           <>
             {tab !== "today" && (
               tab === "local" && localSub === "places"
-                ? <SectionTitle override={{ en: "Places", es: null, sub: localPlacesLabel }} />
+                ? <SectionTitle
+                    override={{ en: "Places", es: null, sub: localPlacesLabel }}
+                    onBack={localPlacesLabel ? () => { if (placesBackRef.current) placesBackRef.current(); } : null}
+                  />
                 : <SectionTitle tabKey={tab} />
             )}
             {tab === "today" && <TodayView data={data} onJumpToTab={jumpToTab} profile={profile} currentUser={currentUser} onRefreshData={refreshAllData} prompts={prompts} onOpenPrompt={handleOpenPrompt} />}
@@ -10376,6 +10394,7 @@ export default function App() {
                 onToggleSavePlace={handleToggleSavePlace}
                 onSubChange={reportLocalSub}
                 onOpenSuggest={() => setSuggestOpen(true)}
+                onRegisterBack={registerPlacesBack}
               />
             )}
             {tab === "faq" && <FaqView data={data} />}
