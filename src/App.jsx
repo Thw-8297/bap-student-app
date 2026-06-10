@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1588,7 +1588,7 @@ function getEventCategory(key) {
 const PLACE_CATEGORIES = {
   cafe:         { label: "Café",         es: "Café",            color: C.mountain,  Icon: CoffeeCupIcon },
   restaurant:   { label: "Restaurant",   es: "Gastronomía",     color: C.ocean,     Icon: ForkPlateIcon },
-  nightlife:    { label: "Nightlife",    es: "Vida nocturna",   color: C.pepBlue,   Icon: CocktailIcon },
+  nightlife:    { label: "Nightlife",    es: "Vida nocturna",   color: C.pepBlue,   Icon: MoonStarsIcon },
   outdoors:     { label: "Outdoors",     es: "Aire libre",      color: C.bapBlue,   Icon: PalmIcon },
   fitness:      { label: "Fitness",      es: "Deporte",         color: C.pepOrange, Icon: DumbbellIcon },
   study:        { label: "Study spot",   es: "Para estudiar",   color: C.stone,     Icon: BookIcon },
@@ -1923,12 +1923,18 @@ function FilmReelIcon({ size = 36, color = C.pepBlue }) {
 }
 
 function PictureFrameIcon({ size = 36, color = C.pepBlue }) {
+  // Single-colour glyph (rendered white on a coloured disc, or in the category
+  // colour on a light card): an outlined frame so the surface shows through as
+  // the canvas, with a sun + rolling hills painted inside. Reads as a framed
+  // landscape painting either way.
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="10" y="12" width="44" height="40" rx="2" fill={color} stroke={color} strokeWidth="2" />
-      <rect x="14" y="16" width="36" height="32" fill={C.white} />
-      <circle cx="22" cy="26" r="3" fill={color} opacity="0.6" />
-      <path d="M14 44 L24 32 L34 40 L42 30 L50 44 Z" fill={color} opacity="0.55" />
+      {/* Frame */}
+      <rect x="11" y="13" width="42" height="38" rx="2.5" fill="none" stroke={color} strokeWidth="3" />
+      {/* Sun */}
+      <circle cx="23" cy="25" r="4.5" fill={color} />
+      {/* Rolling hills */}
+      <path d="M14 50 L25 36 L32 43 L41 31 L50 50 Z" fill={color} />
     </svg>
   );
 }
@@ -2000,18 +2006,16 @@ function CoffeeCupIcon({ size = 36, color = C.pepBlue }) {
   );
 }
 
-function CocktailIcon({ size = 36, color = C.pepBlue }) {
+function MoonStarsIcon({ size = 36, color = C.pepBlue }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      {/* Bowl */}
-      <path d="M14 14 H50 L34 36 V50 H30 V36 Z" fill={C.white} stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
-      <path d="M20 18 H44 L33 33 H31 Z" fill={color} opacity="0.22" />
-      {/* Stem + base */}
-      <line x1="32" y1="50" x2="32" y2="56" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-      <line x1="22" y1="56" x2="42" y2="56" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-      {/* Garnish */}
-      <line x1="40" y1="16" x2="50" y2="8" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      <circle cx="50" cy="8" r="3.5" fill={color} />
+      {/* Crescent moon (a night out) */}
+      <path d="M40 12 A20 20 0 1 0 40 52 A15 15 0 1 1 40 12 Z" fill={color} />
+      {/* Sparkle star */}
+      <path d="M50 13 L51.6 17.4 L56 19 L51.6 20.6 L50 25 L48.4 20.6 L44 19 L48.4 17.4 Z" fill={color} opacity="0.85" />
+      {/* Small stars */}
+      <circle cx="51" cy="33" r="2" fill={color} opacity="0.7" />
+      <circle cx="43" cy="44" r="1.5" fill={color} opacity="0.55" />
     </svg>
   );
 }
@@ -7573,7 +7577,7 @@ function PlaceToast({ message }) {
 }
 
 // ─── Local ───
-function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSavePlace, onSubChange, onOpenSuggest, onRegisterBack }) {
+function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [], onToggleSavePlace, onSubChange, onOpenSuggest, onRegisterBack }) {
   // The Local tab opens to the category hub (sub === null). Deep-links from
   // Today (the "This Week" events tile, the empty-state "Explorar BA" button)
   // pass an initialSub so they land straight on that listing; a normal
@@ -7586,6 +7590,16 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // Places is two-level: null = the category-picker grid; "all" | <category key>
   // | "saved" = a chosen view showing that listing.
   const [placesFilter, setPlacesFilter] = useState(null);
+
+  // Re-tapping the Local bottom-nav tab while already on Local bumps resetSignal
+  // upstream; collapse all the way back to the category hub. Skip the first run
+  // so a Today deep-link (initialSub) isn't immediately overridden on mount.
+  const didLocalReset = useRef(false);
+  useEffect(() => {
+    if (!didLocalReset.current) { didLocalReset.current = true; return; }
+    setSub(null);
+    setPlacesFilter(null);
+  }, [resetSignal]);
 
   // Free-text search across all approved places, shown on the Places hub
   // (the category grid). When non-empty it replaces the grid with a flat
@@ -7695,26 +7709,35 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
 
   const distCap = { fontFamily: "'DM Mono', monospace", fontSize: 11.5, color: C.ocean, fontWeight: 500 };
 
+  // The "Near you" pill on its own; composed into nearMeControl for the
+  // Health/Churches/Explore tabs, and into the Places view-toggle row so all
+  // three pills (Lista / Mapa / Cerca) sit side-by-side on one line.
+  const nearMeButton = (
+    <button onClick={handleNearMe} className="bap-press" style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      padding: "5px 13px", borderRadius: 14,
+      border: nearMe ? `1.5px solid ${C.ocean}` : `1.5px solid ${C.fog}`,
+      background: nearMe ? C.ice : C.white,
+      color: nearMe ? C.ocean : C.stone,
+      fontFamily: "'DM Mono', monospace", fontSize: 11.5, fontWeight: nearMe ? 500 : 400,
+      cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
+    }}>
+      📍 {geoStatus === "loading" ? "Buscando…" : "Cerca / Near"}
+    </button>
+  );
+
+  const nearMeNote = (geoStatus === "denied" || geoStatus === "unavailable") ? (
+    <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.mountain }}>
+      {geoStatus === "denied"
+        ? "No pudimos acceder a tu ubicación / Couldn't get your location"
+        : "Ubicación no disponible / Location unavailable"}
+    </span>
+  ) : null;
+
   const nearMeControl = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-      <button onClick={handleNearMe} className="bap-press" style={{
-        display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "5px 13px", borderRadius: 14,
-        border: nearMe ? `1.5px solid ${C.ocean}` : `1.5px solid ${C.fog}`,
-        background: nearMe ? C.ice : C.white,
-        color: nearMe ? C.ocean : C.stone,
-        fontFamily: "'DM Mono', monospace", fontSize: 11.5, fontWeight: nearMe ? 500 : 400,
-        cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
-      }}>
-        📍 {geoStatus === "loading" ? "Buscando…" : "Cerca tuyo / Near you"}
-      </button>
-      {(geoStatus === "denied" || geoStatus === "unavailable") && (
-        <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.mountain }}>
-          {geoStatus === "denied"
-            ? "No pudimos acceder a tu ubicación / Couldn't get your location"
-            : "Ubicación no disponible / Location unavailable"}
-        </span>
-      )}
+      {nearMeButton}
+      {nearMeNote}
     </div>
   );
 
@@ -8108,8 +8131,11 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
             return { ...p, _color: meta.color, _catLabel: meta.label, _Icon: meta.Icon };
           });
 
+        // The "Near you" pill joins the list/map toggle on one line (list view
+        // only — the map already centres on the located fix).
+        const showNearMe = !showMap && anyCoords(allPlaces);
         const viewToggle = (
-          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
             {[
               { key: "list", label: "Lista / List", enabled: true },
               { key: "map", label: "🗺 Mapa / Map", enabled: online },
@@ -8133,6 +8159,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                 >{opt.label}</button>
               );
             })}
+            {showNearMe && nearMeButton}
           </div>
         );
 
@@ -8141,6 +8168,7 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
             {/* No in-listing back row: the back chevron lives in the page
                 header ("‹ Places · Café"), freeing this space for places. */}
             {viewToggle}
+            {showNearMe && nearMeNote}
             {placesView === "map" && !online && (
               <div style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13, color: C.mountain, marginBottom: 10 }}>
                 El mapa necesita conexión. / The map needs a connection.
@@ -8162,7 +8190,6 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
                 </Suspense>
               </MapErrorBoundary>
             ) : (<>
-            {anyCoords(allPlaces) && nearMeControl}
             {display.length === 0 ? (
               <Card>
                 <div style={{ textAlign: "center", padding: "12px 4px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.mountain }}>
@@ -10325,6 +10352,11 @@ export default function App() {
   // carries the chosen Places category so the header can read "Places · Café".
   const [localSub, setLocalSub] = useState(null);
   const [localPlacesLabel, setLocalPlacesLabel] = useState(null);
+  // Bumped each time the Local bottom-nav tab is tapped while already on Local.
+  // <LocalView> watches it and resets to its category hub, so re-tapping Local
+  // is a reliable "take me back to the top" gesture even when the prop-level
+  // initialSub hasn't changed (null → null wouldn't fire an effect on its own).
+  const [localResetSignal, setLocalResetSignal] = useState(0);
   // Stable handler passed to <LocalView> as onSubChange; keeps both pieces of
   // header state in sync as the student navigates within Local.
   const reportLocalSub = useCallback((s, label) => {
@@ -11198,6 +11230,7 @@ export default function App() {
               <LocalView
                 data={data}
                 initialSub={localInitialSub}
+                resetSignal={localResetSignal}
                 places={places}
                 savedPlaces={savedPlaces}
                 onToggleSavePlace={handleToggleSavePlace}
@@ -11229,7 +11262,7 @@ export default function App() {
             <button
               key={t.key}
               ref={(el) => { navBtnRefs.current[t.key] = el; }}
-              onClick={() => { if (t.key === "local") { setLocalInitialSub(null); setLocalSub(null); setLocalPlacesLabel(null); } setTab(t.key); }}
+              onClick={() => { if (t.key === "local") { if (tab === "local") setLocalResetSignal((n) => n + 1); setLocalInitialSub(null); setLocalSub(null); setLocalPlacesLabel(null); } setTab(t.key); }}
               aria-current={active ? "page" : undefined}
               aria-label={showDot ? `${t.label} — avisos sin leer / unread notices` : undefined}
               className="bap-press"
