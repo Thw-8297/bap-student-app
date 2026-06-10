@@ -1178,6 +1178,34 @@ The time field must start with a parseable time (e.g., `9:00` or `Mon 14:00–17
 
 A full-app review (security, correctness, UX, accessibility, PWA, performance) run on 2026-06-09 produced the backlog below. Items are in recommended order of attack; tiers group by urgency and by what kind of change ships them. Strike items out or move them to the changelog as they land.
 
+**Status:** Tiers 1, 2, 3, and 5 shipped in full; Tier 4 shipped 4-of-5 (#12 parked) with two scoped follow-ups carved off; Tier 6 shipped 3-of-5 (#25, #27 remain). The consolidated **"Still outstanding"** list below is the live to-do; the per-tier detail further down is kept as shipped history (each item marked ✅ with its ship date) and as the source of context for the outstanding items. As of 2026-06-10b.
+
+#### Still outstanding (carried forward from the 2026-06-09 review)
+
+Everything from Tiers 1–6 that was *not* completed or was only partially done, pulled up here so it's actionable without scanning the shipped tiers. Each links back to its origin item for full context.
+
+**Security (Apps Script — needs an `AuthCode.gs` re-deploy; no client change, no `CACHE_VERSION` bump)**
+
+- **[from Tier 2 #5] Move credential-bearing GETs to POST.** `identify` / `prompts` / `admin_responses` / `admin_places` still send `token` + `cwid` + `birthday` in GET query strings, which land in Apps Script execution logs; the POST paths already keep credentials in the body. Move these GETs to POST `text/plain` (the same CORS-preflight-avoiding pattern `submit`/`vet_place` use) and update the matching front-end callers. *Lower priority; deferred from the Tier 2 hardening pass.*
+- **[from Tier 2 #5] Harden `handleVetPlace`.** It does an unconditional in-place status write with no state machine and overwrites `vetted_by` (no history). Add an append-only vetting-log tab and guard the `rejected` → `approved` transition. *Lower priority; deferred from Tier 2.*
+
+**Phone polish / accessibility (front-end `App.jsx`/CSS; no `CACHE_VERSION` bump)**
+
+- **[Tier 4 #12 — parked] iOS safe-area insets (edge-to-edge PWA).** Attempted twice (09h/09i) and reverted (09j) because it fought a real Dynamic-Island iPhone's safe areas. The flat layout is the known-good baseline; the *enhancement* is `viewport-fit=cover` + non-additive `max(base, env(safe-area-inset-*))` padding at every fixed/full-screen edge, with the gradient bled up behind the status bar (rather than repositioning header content) and a bottom reservation *smaller* than the full home-indicator inset. **Needs genuine iterative on-device testing** — env() values can't be eyeballed in a desktop preview. Cosmetic payoff, real iteration cost → low priority. Full write-up in Tier 4 #12 below.
+- **[from Tier 4 #14] Close the inline-`transition` reduced-motion gap.** The two infinite animations (sun spin, mate steam) are now gated, but a handful of **inline** `transition:` styles still bypass `prefers-reduced-motion`: the `<BottomSheet>` slide, the FAQ accordion chevron rotation, and the settings toggle thumb. Suppressing these needs a JS `matchMedia('(prefers-reduced-motion: reduce)')` check (they're inline styles, not class-based, so the CSS media query can't reach them).
+- **[from Tier 4 #13] Recolor the stone-tinted category discs.** White glyphs on the `study` and `other` Places category discs/map-pins sit at ~2.9:1 (just under the 3:1 non-text bar) because those two `PLACE_CATEGORIES` rows use `C.stone` as their `color` token — which paints the filled disc *and* the map pin, so it's a brand/palette decision, not a text fix. Same story for the Sky-tinted `culture` caption. Pick darker category colors (or darken the two tokens) so the discs clear 3:1. *Deliberately left out of the Tier 4 contrast sweep, which touched text only.*
+
+**Wayfinding (front-end)**
+
+- **[from Tier 5 #20] Fuller ProfileModal-body bilingual pass.** The status pill, aria-labels, and the Today greeting/date were bilingualized (or made Spanish-only) in Tier 5, but the body copy inside `<ProfileModal>` still has English-leaning strings that could get the bilingual treatment. Low value, moderate churn.
+
+**Features (Tier 6 — not yet built)**
+
+- **[Tier 6 #25] Add-to-calendar (.ics) export** for calendar events and finals. No new dependency (a generated `.ics` Blob / data-URI); iOS Safari's download/handoff behavior wants a real-device check.
+- **[Tier 6 #27] Dark mode.** The parchment-on-blue palette is fixed; relevant for late-night subte use. **Identity-touching → per `CLAUDE.md` it needs a design conversation + explicit Director sign-off on a palette direction before any code, and ships on a branch, never straight to `main`.** Belongs with the "bolder color confidence — phase 2" conversation under *Future ideas → Personality / UX moves*.
+
+---
+
 **Tier 1 — trivial config fixes, ship immediately** — ✅ shipped 2026-06-09
 
 1. **✅ Re-enable geolocation in production.** `vercel.json` sends `Permissions-Policy: … geolocation=(), …` on every response, which blocks the Geolocation API for *all* origins, including our own. The "Cerca tuyo / Near you" distance sort (shipped 2026-06-07) has therefore never worked on baprogram.vercel.app; every student silently hits the graceful "unavailable" fallback, which is why nobody noticed. One-word fix: `geolocation=()` → `geolocation=(self)`.
