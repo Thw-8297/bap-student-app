@@ -511,9 +511,9 @@ Temporary alerts that surface on the Today tab.
 
 Announcements are not user-dismissible. The program office controls the banner lifecycle entirely via `start_date` / `end_date`. No need to delete rows after they expire.
 
-### Apps *(optional)*
+### Apps *(optional — not currently surfaced in the app)*
 
-Recommended mobile apps grouped on the Local tab.
+Recommended mobile apps. **As of 2026-06-10j the Apps sub-view was removed from the Local tab**, so this tab no longer appears anywhere in the student app. The tab is still fetched and parsed (kept intact for an easy resurrection — see "Removed / dormant features" in the Project Knowledge), so editing it is harmless but has no visible effect for now. The schema below remains accurate for if/when the feature is brought back.
 
 | Column | Required | Notes |
 |--------|----------|-------|
@@ -623,4 +623,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-10d (Tier 2 #5 security hardening. Director-visible change on the Roster spreadsheet: a new auto-created **PlacesVetLog** tab now records the history of every place approve/reject — you don't create or edit it, and it needs an `AuthCode.gs` re-deploy to start logging. No content-sheet schema change.)*
+*Last updated: 2026-06-10j (Apps sub-view removed from the Local tab. No sheet change required — the Apps content tab stays in place and is still fetched, but it no longer surfaces anywhere in the app; it can be resurrected later without a sheet or Apps Script change. See "Removed / dormant features" in the Project Knowledge.)*

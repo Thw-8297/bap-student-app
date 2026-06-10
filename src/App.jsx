@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1643,7 +1643,10 @@ const LOCAL_SECTIONS = [
   { key: "places",   en: "Places",     es: "Lugares para descubrir", Icon: ObeliscoIcon,    accent: C.ocean },
   { key: "health",   en: "Healthcare", es: "Salud y emergencias",    Icon: HealthCrossIcon, accent: C.bapBlue },
   { key: "churches", en: "Churches",   es: "Comunidades de fe",      Icon: ChurchIcon,      accent: C.sky },
-  { key: "apps",     en: "Apps",       es: "Para el día a día",      Icon: AppGridIcon,     accent: C.mountain },
+  // NOTE: the "Apps" section was removed from the Local hub on 2026-06-10 (see
+  // BAP_App_Project_Knowledge.md → "Removed / dormant features"). The data
+  // plumbing (data.apps, the Apps sheet tab, Code.gs) is intact, so resurrecting
+  // it is just re-adding this entry plus the `sub === "apps"` render block.
 ];
 
 // Filter an event list to entries that haven't yet ended. Events with
@@ -5462,6 +5465,35 @@ function WeeklyOverviewView({ data, profile }) {
           );
         })}
       </div>
+
+      {/* Bottom week navigation — mirrors the top chevrons so a student
+          who has scrolled through the week can move on without scrolling
+          back up. Same bounded MIN/MAX offsets and disabled treatment. */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16 }}>
+        <button
+          onClick={() => canGoBack && setWeekOffset((o) => Math.max(MIN_WEEK_OFFSET, o - 1))}
+          disabled={!canGoBack}
+          aria-label="Semana anterior / Previous week"
+          style={{
+            background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
+            cursor: canGoBack ? "pointer" : "not-allowed", fontSize: 16,
+            color: canGoBack ? C.pepBlue : C.stone, fontWeight: 700,
+            opacity: canGoBack ? 1 : 0.4,
+          }}
+        >‹</button>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.mountain, letterSpacing: 0.5 }}>{weekLabel}</div>
+        <button
+          onClick={() => canGoForward && setWeekOffset((o) => Math.min(MAX_WEEK_OFFSET, o + 1))}
+          disabled={!canGoForward}
+          aria-label="Semana siguiente / Next week"
+          style={{
+            background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
+            cursor: canGoForward ? "pointer" : "not-allowed", fontSize: 16,
+            color: canGoForward ? C.pepBlue : C.stone, fontWeight: 700,
+            opacity: canGoForward ? 1 : 0.4,
+          }}
+        >›</button>
+      </div>
     </div>
   );
 }
@@ -5561,18 +5593,21 @@ function ClassScheduleView({ data, view, profile }) {
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: C.mountain }}>{compactSchedule(c.days, c.time)}</span><br />
                   {c.location}
                 </div>
-                {c.email && (
-                  <a href={`mailto:${c.email}`} style={{
-                    display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10,
-                    fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.pepOrange,
-                    textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                    background: "#FFF4ED", border: `1px solid #FFD8C2`, cursor: "pointer",
-                    transition: "all 0.15s",
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.pepOrange} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    Email {c.honorific ? `${c.honorific} ${c.professor}` : c.professor}
-                  </a>
-                )}
+                {c.email && (() => {
+                  const profName = c.honorific ? `${c.honorific} ${c.professor}` : c.professor;
+                  const emailLabel = `Escribir a ${profName} / Email ${profName}`;
+                  return (
+                    <a href={`mailto:${c.email}`} aria-label={emailLabel} title={emailLabel} style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center", marginTop: 10,
+                      minWidth: 40, minHeight: 40, color: C.pepOrange,
+                      textDecoration: "none", borderRadius: 10,
+                      background: "#FFF4ED", border: `1px solid #FFD8C2`, cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}>
+                      <EnvelopeGlyph size={18} color={C.pepOrange} />
+                    </a>
+                  );
+                })()}
               </Card>
             );
           })}
@@ -5788,6 +5823,60 @@ function safeExternalUrl(url) {
   return /^(https?:|tel:|mailto:|sms:)/i.test(trimmed) ? trimmed : "";
 }
 
+// ─── Link / action glyphs ───
+// Small inline-SVG icons used to label contact + link buttons without words
+// (a telephone to call, the WhatsApp mark, an envelope to email, a map pin for
+// Maps, a globe for a website, the Instagram camera). Each takes { size, color }
+// so a caller can match the button's variant color. Every button that renders
+// one of these icon-only MUST also carry an aria-label + title for a11y.
+function PhoneGlyph({ size = 18, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+    </svg>
+  );
+}
+function WhatsAppGlyph({ size = 18, color = "#2E7D32" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.21 8.21 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.51.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/>
+    </svg>
+  );
+}
+function EnvelopeGlyph({ size = 18, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+      <polyline points="22,6 12,13 2,6"/>
+    </svg>
+  );
+}
+function MapPinGlyph({ size = 18, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/>
+    </svg>
+  );
+}
+function GlobeGlyph({ size = 18, color = C.pepOrange }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="2" y1="12" x2="22" y2="12"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+  );
+}
+function InstagramGlyph({ size = 18, color = C.pepOrange }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+    </svg>
+  );
+}
+
 // ─── Address → Google Maps Link ───
 // Renders an address as a tappable link that opens Google Maps (native app on
 // mobile; maps.google.com on desktop). If `mapsUrl` is provided (e.g. from the
@@ -5803,8 +5892,9 @@ function AddressLink({ address, mapsUrl }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" style={{
       color: "inherit", textDecoration: "none", cursor: "pointer",
+      display: "inline-flex", alignItems: "center", gap: 4,
     }}>
-      <span style={{ marginRight: 4 }}>📍</span>{address}
+      <MapPinGlyph size={14} color={C.ocean} />{address}
     </a>
   );
 }
@@ -5820,23 +5910,28 @@ function LocationNote({ note }) {
 }
 
 // ─── Link Helper ───
+// Renders an external link as an icon-only pill: a globe for a generic website,
+// the WhatsApp / Instagram marks for those services, a phone for a tel: link.
+// The descriptive text lives in aria-label + title (visible on hover/long-press)
+// so the button stays wordless while remaining accessible.
 function LinkButton({ url }) {
   const safe = safeExternalUrl(url);
   if (!safe) return null;
-  let label = "Visit website";
-  let icon = "→";
+  let Glyph = GlobeGlyph;
+  let label = "Sitio web / Website";
   let external = true;
-  if (safe.includes("wa.me")) { label = "WhatsApp"; icon = "💬"; }
-  else if (safe.includes("instagram.com")) { label = "Instagram"; icon = "📷"; }
-  else if (safe.startsWith("tel:")) { label = "Call"; icon = "📞"; external = false; }
+  if (safe.includes("wa.me")) { Glyph = WhatsAppGlyph; label = "WhatsApp"; }
+  else if (safe.includes("instagram.com")) { Glyph = InstagramGlyph; label = "Instagram"; }
+  else if (safe.startsWith("tel:")) { Glyph = PhoneGlyph; label = "Llamar / Call"; external = false; }
   return (
-    <a href={safe} target={external ? "_blank" : undefined} rel="noopener noreferrer" style={{
-      display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8,
-      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.pepOrange,
-      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+    <a href={safe} target={external ? "_blank" : undefined} rel="noopener noreferrer"
+      aria-label={label} title={label} style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center", marginTop: 8,
+      minWidth: 40, minHeight: 40, color: C.pepOrange,
+      textDecoration: "none", borderRadius: 10,
       background: "#FFF4ED", border: `1px solid #FFD8C2`, cursor: "pointer",
     }}>
-      {icon} {label}
+      <Glyph size={18} color={C.pepOrange} />
     </a>
   );
 }
@@ -7361,8 +7456,10 @@ function PlaceCard({ place, saved, onToggleSave, distance }) {
               ? <span style={{ color: C.mountain }}><AddressLink address={place.address} mapsUrl={place.maps_url} /><br /></span>
               : (safeExternalUrl(place.maps_url) && (
                   <span style={{ color: C.mountain }}>
-                    <a href={safeExternalUrl(place.maps_url)} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>
-                      <span style={{ marginRight: 4 }}>📍</span>Open in Maps
+                    <a href={safeExternalUrl(place.maps_url)} target="_blank" rel="noopener noreferrer"
+                      aria-label="Abrir en Maps / Open in Maps" title="Abrir en Maps / Open in Maps"
+                      style={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                      <MapPinGlyph size={16} color={C.ocean} />
                     </a><br />
                   </span>
                 ))}
@@ -7588,18 +7685,23 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
   const [sub, setSub] = useState(initialSub || null);
   const [healthFilter, setHealthFilter] = useState("all");
   const [churchFilter, setChurchFilter] = useState("all");
-  const [appsFilter, setAppsFilter] = useState("all");
   const [eventsFilter, setEventsFilter] = useState("all");
   // Places is two-level: null = the category-picker grid; "all" | <category key>
   // | "saved" = a chosen view showing that listing.
   const [placesFilter, setPlacesFilter] = useState(null);
 
   // Re-tapping the Local bottom-nav tab while already on Local bumps resetSignal
-  // upstream; collapse all the way back to the category hub. Skip the first run
-  // so a Today deep-link (initialSub) isn't immediately overridden on mount.
-  const didLocalReset = useRef(false);
+  // upstream; collapse all the way back to the category hub. We reset only when
+  // the signal VALUE actually changes from what we last saw — not merely on the
+  // effect's first run. Seeding the ref with the current resetSignal means the
+  // mount run is a no-op (so a Today deep-link via initialSub survives), and it
+  // stays a no-op under React StrictMode's double-invoke (a boolean "skip first
+  // run" ref does not — the second invoke would fire the reset and wipe the
+  // deep-link). On a genuine bump, value !== last, so the reset fires.
+  const lastResetSignal = useRef(resetSignal);
   useEffect(() => {
-    if (!didLocalReset.current) { didLocalReset.current = true; return; }
+    if (resetSignal === lastResetSignal.current) return;
+    lastResetSignal.current = resetSignal;
     setSub(null);
     setPlacesFilter(null);
   }, [resetSignal]);
@@ -7685,13 +7787,11 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
   // Extract unique types/denominations/categories
   const healthTypes = [...new Set(data.healthProviders.map((h) => h.type).filter(Boolean))].sort();
   const churchDenoms = [...new Set(data.churches.map((c) => c.denomination).filter(Boolean))].sort();
-  const appsCategories = [...new Set((data.apps || []).map((a) => a.category).filter(Boolean))].sort();
   const eventCategoriesPresent = [...new Set((data.events || []).map((e) => e.category).filter(Boolean))];
 
   // Filtered lists
   const filteredHealth = healthFilter === "all" ? data.healthProviders : data.healthProviders.filter((h) => h.type === healthFilter);
   const filteredChurches = churchFilter === "all" ? data.churches : data.churches.filter((c) => c.denomination === churchFilter);
-  const filteredApps = appsFilter === "all" ? (data.apps || []) : (data.apps || []).filter((a) => a.category === appsFilter);
 
   // Apply the distance sort when "Near you" is active and we have a fix.
   // Off-state ordering is left exactly as it was. (Places does its own
@@ -7725,7 +7825,8 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
       fontFamily: "'DM Mono', monospace", fontSize: 11.5, fontWeight: nearMe ? 500 : 400,
       cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
     }}>
-      📍 {geoStatus === "loading" ? "Buscando…" : "Cerca / Near"}
+      <MapPinGlyph size={13} color={nearMe ? C.ocean : C.stone} />
+      {geoStatus === "loading" ? "Buscando…" : "Cerca / Near"}
     </button>
   );
 
@@ -7743,14 +7844,6 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
       {nearMeNote}
     </div>
   );
-
-  // Sort apps: essentials first, then by name
-  const sortedApps = [...filteredApps].sort((a, b) => {
-    const aEss = a.priority === "essential" ? 0 : 1;
-    const bEss = b.priority === "essential" ? 0 : 1;
-    if (aEss !== bEss) return aEss - bEss;
-    return a.name.localeCompare(b.name);
-  });
 
   // Badge style
   const badge = { fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12, whiteSpace: "nowrap", flexShrink: 0 };
@@ -7879,129 +7972,6 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
           </div>
         </div>
       )}
-
-      {sub === "apps" && (() => {
-        // Internal renderer so the same card markup serves both
-        // grouped and flat (filtered) layouts without duplication.
-        const renderAppCard = (a, key) => {
-          const isEssential = a.priority === "essential";
-          return (
-            <Card key={key} bg={isEssential ? C.ice : undefined}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
-                <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue }}>
-                  {isEssential && <span style={{ color: C.pepOrange, marginRight: 6 }}>●</span>}
-                  {a.name}
-                </span>
-                {a.category && <span style={badge}>{a.category}</span>}
-              </div>
-              {a.description && (
-                <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6 }}>
-                  {a.description}
-                </div>
-              )}
-              {(a.ios_url || a.android_url || a.web_url) && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                  {safeExternalUrl(a.ios_url) && (
-                    <a href={safeExternalUrl(a.ios_url)} target="_blank" rel="noopener noreferrer" style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
-                      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                      background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
-                    }}>📱 iOS</a>
-                  )}
-                  {safeExternalUrl(a.android_url) && (
-                    <a href={safeExternalUrl(a.android_url)} target="_blank" rel="noopener noreferrer" style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
-                      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                      background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
-                    }}>🤖 Android</a>
-                  )}
-                  {safeExternalUrl(a.web_url) && !a.ios_url && !a.android_url && (
-                    <a href={safeExternalUrl(a.web_url)} target="_blank" rel="noopener noreferrer" style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.ocean,
-                      textDecoration: "none", padding: "6px 14px", borderRadius: 8,
-                      background: C.white, border: `1px solid ${C.fog}`, cursor: "pointer",
-                    }}>🌐 Website</a>
-                  )}
-                </div>
-              )}
-            </Card>
-          );
-        };
-
-        // Group apps. "Transport" covers anything in Navigation,
-        // Transportation, or Transit categories; everything else falls
-        // into "Daily life." Grouping only applies when filter === "all"
-        // (when a single category is selected, a flat list is clearer).
-        const TRANSPORT_PATTERN = /navigation|transport|transit/i;
-        const transportApps = sortedApps.filter((a) => a.category && TRANSPORT_PATTERN.test(a.category));
-        const dailyApps     = sortedApps.filter((a) => !a.category || !TRANSPORT_PATTERN.test(a.category));
-
-        return (
-          <div>
-            {/* Pattern-fill section header anchors the Apps view. */}
-            <div className="bap-dot-pattern" style={{
-              backgroundColor: C.ice,
-              borderRadius: 12,
-              padding: "14px 16px 16px",
-              marginBottom: 14,
-              border: `1px solid rgba(108, 172, 228, 0.4)`,
-            }}>
-              <span style={{
-                display: "inline-flex", alignItems: "center",
-                fontFamily: "'DM Mono', monospace", fontSize: 10,
-                textTransform: "uppercase", letterSpacing: 1.2,
-                background: C.ocean, color: "#FFFFFF",
-                padding: "3px 10px", borderRadius: 10, marginBottom: 8,
-              }}>Apps</span>
-              <h4 style={{
-                fontFamily: "'EB Garamond', serif", fontSize: 18, fontWeight: 700,
-                color: C.pepBlue, margin: "0 0 4px", letterSpacing: -0.3,
-              }}>Argentine essentials</h4>
-              <div style={{
-                fontFamily: "'DM Mono', monospace", fontSize: 10,
-                textTransform: "uppercase", letterSpacing: 1.5, color: C.ocean,
-              }}>Lo que vas a usar todos los días</div>
-            </div>
-
-            {appsCategories.length > 1 && (
-              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-                <FilterPill active={appsFilter === "all"} onClick={() => setAppsFilter("all")}>All</FilterPill>
-                {appsCategories.map((c) => (
-                  <FilterPill key={c} active={appsFilter === c} onClick={() => setAppsFilter(c)}>{c}</FilterPill>
-                ))}
-              </div>
-            )}
-
-            {appsFilter !== "all" ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {sortedApps.map((a, i) => renderAppCard(a, i))}
-              </div>
-            ) : (
-              <>
-                {transportApps.length > 0 && (
-                  <>
-                    <SectionDivider icon={<ColectivoIcon size={24} />} en="Getting around" es="Transporte" />
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {transportApps.map((a, i) => renderAppCard(a, "t" + i))}
-                    </div>
-                  </>
-                )}
-                {dailyApps.length > 0 && (
-                  <>
-                    <SectionDivider icon={<PalmIcon size={24} />} en="Daily life" es="Día a día" />
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {dailyApps.map((a, i) => renderAppCard(a, "d" + i))}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })()}
 
       {sub === "places" && (() => {
         // Auth-script rows arrive header-keyed with string coords; normalize
@@ -8373,7 +8343,12 @@ function FaqView({ data }) {
 }
 
 // ─── Action Button Helper ───
-function ActionBtn({ href, icon, label, variant }) {
+// Renders a contact action as an icon-first pill. `Glyph` is one of the link/
+// action glyph components; `label` is the bilingual accessible name (always set
+// as aria-label + title since the button is otherwise wordless). `value` is
+// optional visible text — used where the data itself is worth showing (an
+// emergency phone NUMBER, the office EMAIL) rather than hidden behind the glyph.
+function ActionBtn({ href, Glyph, label, value, variant }) {
   // Callers route both internally-constructed schemes (tel:…, mailto:…)
   // and raw sheet values (Contacts.maps, Contacts.whatsapp, Resources.url)
   // through here, so the scheme guard lives at the entry. Internally-
@@ -8389,14 +8364,18 @@ function ActionBtn({ href, icon, label, variant }) {
     emergency: { bg: "#FFF3E0", color: "#BF360C", border: "#FFCC80" },
   };
   const s = styles[variant] || styles.phone;
+  const hasValue = value != null && value !== "";
   return (
-    <a href={safe} target={variant === "maps" || variant === "whatsapp" ? "_blank" : undefined} rel="noopener noreferrer" style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
+    <a href={safe} target={variant === "maps" || variant === "whatsapp" ? "_blank" : undefined} rel="noopener noreferrer"
+      aria-label={label} title={label} style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
       fontFamily: "'DM Mono', monospace", fontSize: 12, color: s.color,
-      textDecoration: "none", padding: "6px 12px", borderRadius: 8,
+      textDecoration: "none", padding: hasValue ? "9px 12px" : "10px",
+      minWidth: 40, minHeight: 40, borderRadius: 10,
       background: s.bg, border: `1px solid ${s.border}`, cursor: "pointer",
     }}>
-      {icon} {label}
+      {Glyph && <Glyph size={18} color={s.color} />}
+      {hasValue && <span>{value}</span>}
     </a>
   );
 }
@@ -8410,20 +8389,7 @@ function ContactsView({ data }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Program Office */}
-      {office.map((o, i) => (
-        <Card key={`office-${i}`}>
-          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 4 }}>{o.name}</div>
-          {o.address && <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}><AddressLink address={o.address} mapsUrl={o.maps} /></div>}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {o.phone && <ActionBtn href={`tel:${o.phone.replace(/[\s.]/g, "")}`} icon="📞" label="Call" variant="phone" />}
-            {o.maps && <ActionBtn href={o.maps} icon="📍" label="Open in Maps" variant="maps" />}
-            {o.email && <ActionBtn href={`mailto:${o.email}`} icon="✉" label={o.email} variant="email" />}
-          </div>
-        </Card>
-      ))}
-
-      {/* Emergency */}
+      {/* Emergency — pinned to the top: it's the most time-critical card. */}
       {emergency.length > 0 && (
         <>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.mountain, paddingBottom: 4, borderBottom: `1px solid ${C.fog}` }}>Emergency</div>
@@ -8437,13 +8403,28 @@ function ContactsView({ data }) {
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: "#FFCC80", color: "#BF360C", padding: "2px 10px", borderRadius: 12 }}>{e.role}</span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {e.phone && <ActionBtn href={`tel:${e.phone.replace(/[\s.]/g, "")}`} icon="📞" label={e.phone} variant="emergency" />}
-                {e.whatsapp && <ActionBtn href={e.whatsapp} icon="💬" label="WhatsApp" variant="whatsapp" />}
+                {/* Emergency keeps the dialable NUMBER visible beside the phone glyph. */}
+                {e.phone && <ActionBtn href={`tel:${e.phone.replace(/[\s.]/g, "")}`} Glyph={PhoneGlyph} label="Llamar / Call" value={e.phone} variant="emergency" />}
+                {e.whatsapp && <ActionBtn href={e.whatsapp} Glyph={WhatsAppGlyph} label="WhatsApp" variant="whatsapp" />}
               </div>
             </div>
           ))}
         </>
       )}
+
+      {/* Program Office */}
+      {office.map((o, i) => (
+        <Card key={`office-${i}`}>
+          <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 17, color: C.pepBlue, marginBottom: 4 }}>{o.name}</div>
+          {o.address && <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", marginBottom: 8 }}><AddressLink address={o.address} mapsUrl={o.maps} /></div>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {o.phone && <ActionBtn href={`tel:${o.phone.replace(/[\s.]/g, "")}`} Glyph={PhoneGlyph} label="Llamar / Call" variant="phone" />}
+            {o.maps && <ActionBtn href={o.maps} Glyph={MapPinGlyph} label="Abrir en Maps / Open in Maps" variant="maps" />}
+            {/* Office keeps the EMAIL address visible beside the envelope glyph. */}
+            {o.email && <ActionBtn href={`mailto:${o.email}`} Glyph={EnvelopeGlyph} label="Correo / Email" value={o.email} variant="email" />}
+          </div>
+        </Card>
+      ))}
 
       {/* Staff */}
       {staff.length > 0 && (
@@ -8456,9 +8437,9 @@ function ContactsView({ data }) {
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, background: C.ice, color: C.ocean, padding: "2px 10px", borderRadius: 12 }}>{s.role}</span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {s.phone && <ActionBtn href={`tel:${s.phone.replace(/[\s.]/g, "")}`} icon="📞" label="Call" variant="phone" />}
-                {s.whatsapp && <ActionBtn href={s.whatsapp} icon="💬" label="WhatsApp" variant="whatsapp" />}
-                {s.email && <ActionBtn href={`mailto:${s.email}`} icon="✉" label="Email" variant="email" />}
+                {s.phone && <ActionBtn href={`tel:${s.phone.replace(/[\s.]/g, "")}`} Glyph={PhoneGlyph} label="Llamar / Call" variant="phone" />}
+                {s.whatsapp && <ActionBtn href={s.whatsapp} Glyph={WhatsAppGlyph} label="WhatsApp" variant="whatsapp" />}
+                {s.email && <ActionBtn href={`mailto:${s.email}`} Glyph={EnvelopeGlyph} label="Correo / Email" variant="email" />}
               </div>
             </Card>
           ))}
@@ -8495,8 +8476,8 @@ function ContactsView({ data }) {
               <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, marginBottom: 2 }}>{r.name}</div>
               {r.detail && <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", marginBottom: 8, whiteSpace: "pre-line" }}>{r.detail}</div>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {r.phone && <ActionBtn href={`tel:${r.phone.replace(/[\s\-().]/g, "")}`} icon="📞" label={r.phone} variant="phone" />}
-                {r.url && <ActionBtn href={r.url} icon="→" label="Website" variant="maps" />}
+                {r.phone && <ActionBtn href={`tel:${r.phone.replace(/[\s\-().]/g, "")}`} Glyph={PhoneGlyph} label="Llamar / Call" value={r.phone} variant="phone" />}
+                {r.url && <ActionBtn href={r.url} Glyph={GlobeGlyph} label="Sitio web / Website" variant="maps" />}
               </div>
             </Card>
           ))}
@@ -9690,7 +9671,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
           {p.address
             ? <AddressLink address={p.address} mapsUrl={p.maps_url} />
             : (safeExternalUrl(p.maps_url) && (
-                <a href={safeExternalUrl(p.maps_url)} target="_blank" rel="noopener noreferrer" style={{ color: C.ocean, textDecoration: "none" }}>📍 Abrir en Maps / Open in Maps</a>
+                <a href={safeExternalUrl(p.maps_url)} target="_blank" rel="noopener noreferrer" aria-label="Abrir en Maps / Open in Maps" title="Abrir en Maps / Open in Maps" style={{ color: C.ocean, textDecoration: "none", display: "inline-flex", alignItems: "center" }}><MapPinGlyph size={16} color={C.ocean} /></a>
               ))}
         </div>
         <div style={{ marginTop: 8, fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain }}>
@@ -10731,16 +10712,40 @@ export default function App() {
     setSelectedPrompt(null);
   }, []);
 
+  // Re-pull the public approved-places list and rewrite the cache.
+  // Shared by post-vet refresh (an approval changes what students see,
+  // so the list updates right away rather than waiting on the 10-min
+  // cache TTL) and by the Today pull-to-refresh path below — Places has
+  // its own fetch separate from the content endpoint, so without this a
+  // refresh gesture would never re-pull a Director's sheet edit to a place.
+  // Best-effort: a failure keeps whatever's already in state.
+  const refreshPlaces = useCallback(async () => {
+    if (!cohortToken) return;
+    try {
+      const list = await fetchPlaces({ token: cohortToken });
+      setPlaces(list);
+      savePlacesCache(list);
+    } catch (err) {
+      console.warn("Places refresh failed:", err);
+    }
+  }, [cohortToken]);
+
   // Manual refresh path used by the Today pull-to-refresh gesture.
   // Calls fetchAllData with bust=true so the Apps Script's 1-hour
   // CacheService entry is bypassed and the spreadsheet is re-read on
   // this fetch. Returns a promise so the caller can await it and
   // keep its refresh indicator visible until the round trip lands.
   // Status flips to "refreshing" while in flight so the header pill
-  // shows the same state as a normal background refresh.
+  // shows the same state as a normal background refresh. Places is
+  // refreshed in parallel (its own endpoint, separate from the content
+  // sheet) so a Director's pull-to-refresh also picks up place edits.
   const refreshAllData = useCallback(async () => {
     if (!SHEET_ID || !cohortToken) return;
     setStatus((prev) => (prev === "live" || prev === "cached" || prev === "fallback") ? "refreshing" : prev);
+    // Kick the Places refresh off in parallel with the content fetch; it's
+    // independent and best-effort, so it never blocks or fails the content
+    // path. We await it at the end so the refresh indicator covers both.
+    const placesPromise = refreshPlaces();
     try {
       const d = await fetchAllData({ token: cohortToken, bust: true });
       setData(d);
@@ -10762,8 +10767,10 @@ export default function App() {
       }
       console.error("Manual refresh failed:", err);
       setStatus((prev) => (prev === "refreshing" ? "cached" : "fallback"));
+    } finally {
+      await placesPromise;
     }
-  }, [cohortToken]);
+  }, [cohortToken, refreshPlaces]);
 
   // Background prompts fetch. Fires once both gates are clear, and
   // again whenever the user changes (sign out + new sign in on the
@@ -10951,21 +10958,6 @@ export default function App() {
     setDirectorOpen(false);
     setDirectorError("");
   }, []);
-
-  // Re-pull the public approved-places list and rewrite the cache.
-  // Shared by the background effect's intent and by post-vet refresh
-  // (an approval changes what students see, so the list updates right
-  // away rather than waiting on the 10-min cache TTL).
-  const refreshPlaces = useCallback(async () => {
-    if (!cohortToken) return;
-    try {
-      const list = await fetchPlaces({ token: cohortToken });
-      setPlaces(list);
-      savePlacesCache(list);
-    } catch (err) {
-      console.warn("Places refresh failed:", err);
-    }
-  }, [cohortToken]);
 
   // Student place submission. Calls submitPlace; on success closes the
   // sheet and fires the confirmation toast (auto-clears after 4 s).
