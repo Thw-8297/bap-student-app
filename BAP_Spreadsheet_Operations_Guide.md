@@ -99,13 +99,14 @@ These are what you'll touch *during* a cohort, not just at startup.
 
 ## The Roster spreadsheet *(separate file)*
 
-The Roster lives in its own spreadsheet ("BAP App Roster"). The auth script is bound to this file; the content script can't see it. As of 2026-06-08c the spreadsheet contains up to five tabs:
+The Roster lives in its own spreadsheet ("BAP App Roster"). The auth script is bound to this file; the content script can't see it. As of 2026-06-10d the spreadsheet contains up to six tabs:
 
 - **Roster** — the cohort identity table (one row per person). Required.
 - **Prompts** — Director-defined data-collection questions (one row per question). Optional but powers the prompts feature.
 - **PromptFields** — input boxes inside each prompt (one row per box). Optional; required when `Prompts` has rows.
 - **Responses** — student answers (one row per `cwid` × `prompt_id` × `field_id`). Auto-created by the auth script on first submit; you don't need to create it manually.
 - **Places** — the student-contributable BA directory that powers the Local tab's **Places** sub-view (was "Explore BA"). Optional; create it to enable Places. One row per place. See the **Places** section below.
+- **PlacesVetLog** — an append-only audit trail of every place vet action (approve/reject), one row per action (`logged_at`, `place_id`, `place_name`, `prev_status`, `new_status`, `show_credit`, `vetted_by_cwid`, `vetted_by_name`). **Auto-created** the first time you approve/reject a place in-app; you never edit it by hand. It exists so a place's vetting history is preserved (the `Places` row itself only keeps the latest status). Safe to ignore day-to-day; handy if you ever need to see who flipped a place and when.
 
 ### Roster *(required, separate spreadsheet)*
 
@@ -622,4 +623,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-09k (Tier 3 bug-fix batch — front-end-only, no sheet-schema change, no Apps Script re-deploy. The one Director-visible change: the Classes `days` column now supports weekends — "Sat"/"Sun" in the comma form, or single letters `S`=Sat / `U`=Sun in the concatenated form. Weekend classes show on Today + Weekly Overview, not the Mon–Fri grid).*
+*Last updated: 2026-06-10d (Tier 2 #5 security hardening. Director-visible change on the Roster spreadsheet: a new auto-created **PlacesVetLog** tab now records the history of every place approve/reject — you don't create or edit it, and it needs an `AuthCode.gs` re-deploy to start logging. No content-sheet schema change.)*

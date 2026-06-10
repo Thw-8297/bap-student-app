@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10c — Calendar blank-tab fix + collapsible finals. (1) Fixed the Calendar tab rendering blank when reached from Schedule: the single shared scroll container inherited the prior tab's scroll offset (Schedule auto-scrolls down to today's week), so on days with no upcoming-event divider to re-anchor, Calendar landed past its content. The content container now resets scrollTop to 0 on every tab change; the views that auto-scroll to today (Schedule, Calendar) re-anchor from a clean baseline via their own scrollIntoView. (2) TodayFinalsTile (Today) and FinalsCard (Schedule) are now collapsible, default COLLAPSED: a tappable header (aria-expanded + chevron, with count + finals-window in the collapsed summary) reveals the exam rows; the Today tile keeps a 'Ver en Schedule / See all →' link when expanded. No CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -481,9 +481,14 @@ async function identifyUser({ token, cwid, birthday }) {
   if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
   if (!token) throw new AuthError("missing token");
   if (!cwid || !birthday) throw new Error("missing cwid or birthday");
-  const params = new URLSearchParams({ action: "identify", token, cwid, birthday });
-  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
-  const res = await fetch(url);
+  // POST text/plain (not a GET query) keeps cwid + birthday out of the
+  // URL, which would otherwise land in the Apps Script execution log;
+  // text/plain dodges the CORS preflight Apps Script can't answer.
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "identify", token, cwid, birthday }),
+  });
   if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
   const body = await res.json();
   if (body && body.error === "unauthorized") throw new AuthError();
@@ -537,9 +542,12 @@ async function fetchPrompts({ token, cwid, birthday }) {
   if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
   if (!token) throw new AuthError("missing token");
   if (!cwid || !birthday) throw new Error("missing cwid or birthday");
-  const params = new URLSearchParams({ action: "prompts", token, cwid, birthday });
-  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
-  const res = await fetch(url);
+  // POST text/plain to keep cwid + birthday out of the URL/exec log.
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "prompts", token, cwid, birthday }),
+  });
   if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
   const body = await res.json();
   if (body && body.error === "unauthorized") throw new AuthError();
@@ -591,9 +599,12 @@ async function fetchAdminResponses({ token, cwid, birthday }) {
   if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
   if (!token) throw new AuthError("missing token");
   if (!cwid || !birthday) throw new Error("missing cwid or birthday");
-  const params = new URLSearchParams({ action: "admin_responses", token, cwid, birthday });
-  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
-  const res = await fetch(url);
+  // POST text/plain to keep cwid + birthday out of the URL/exec log.
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "admin_responses", token, cwid, birthday }),
+  });
   if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
   const body = await res.json();
   if (body && body.error === "unauthorized") throw new AuthError();
@@ -660,9 +671,12 @@ async function fetchAdminPlaces({ token, cwid, birthday }) {
   if (!AUTH_SCRIPT_URL) throw new Error("AUTH_SCRIPT_URL not configured");
   if (!token) throw new AuthError("missing token");
   if (!cwid || !birthday) throw new Error("missing cwid or birthday");
-  const params = new URLSearchParams({ action: "admin_places", token, cwid, birthday });
-  const url = `${AUTH_SCRIPT_URL}?${params.toString()}`;
-  const res = await fetch(url);
+  // POST text/plain to keep cwid + birthday out of the URL/exec log.
+  const res = await fetch(AUTH_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "admin_places", token, cwid, birthday }),
+  });
   if (!res.ok) throw new Error(`Auth Script endpoint returned ${res.status}`);
   const body = await res.json();
   if (body && body.error === "unauthorized") throw new AuthError();

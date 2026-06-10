@@ -109,6 +109,18 @@ const PLACE_CATEGORY_KEYS = [
 const PLACE_STATUSES = ["pending", "approved", "rejected"];
 const PLACE_SOURCES = ["seed", "community"];
 
+// Append-only audit trail for staff vet actions on Places. The Places
+// row itself only ever holds the LATEST status + vetted_by; this log
+// preserves the full history (who flipped what, when, and from which
+// status) so a rejected→approved "undo" is never a silent overwrite.
+// Auto-created on the first vet action (like Responses / Places), so a
+// fresh deploy needs no manual setup.
+const PLACES_VET_LOG_TAB_NAME = "PlacesVetLog";
+const PLACES_VET_LOG_HEADERS = [
+  "logged_at", "place_id", "place_name", "prev_status", "new_status",
+  "show_credit", "vetted_by_cwid", "vetted_by_name",
+];
+
 // Source of truth for the Responses tab schema. Used both to
 // auto-create the tab on first submit and to validate that a
 // human-edited tab still has the columns we need.
@@ -223,6 +235,20 @@ function doPost(e) {
     if (action === "submit")       return handleSubmit(body);
     if (action === "submit_place") return handleSubmitPlace(body);
     if (action === "vet_place")    return handleVetPlace(body);
+
+    // As of the 2026-06-10 hardening pass these read actions accept POST
+    // too, so the front end can keep credentials (cwid + birthday) out of
+    // the URL query string — GET query params land in the Apps Script
+    // execution log, POST bodies don't. The handlers read .cwid/.birthday
+    // off their argument regardless of whether it came from e.parameter
+    // (GET) or the parsed body (POST), so the same handlers serve both.
+    // doGet still routes these for backward compatibility with students
+    // on an older cached build; once those clients roll over, the GET
+    // routes can be removed.
+    if (action === "identify")        return handleIdentify(body);
+    if (action === "prompts")         return handlePrompts(body);
+    if (action === "admin_responses") return handleAdminResponses(body);
+    if (action === "admin_places")    return handleAdminPlaces(body);
 
     return jsonResponse({ error: "bad_request" });
   } catch (err) {
@@ -1026,13 +1052,38 @@ function handleVetPlace(body) {
     }
 
     let rowNum = -1;
+    let rowVals = null;
     for (let r = 1; r < values.length; r++) {
       if (String(values[r][colIdx.place_id] == null ? "" : values[r][colIdx.place_id]).trim() === placeId) {
         rowNum = r + 1; // 1-indexed sheet row
+        rowVals = values[r];
         break;
       }
     }
     if (rowNum < 0) return jsonResponse({ error: "not_found" });
+
+    // Read the current status so the write is a deliberate state
+    // transition rather than a blind overwrite. Blank/unknown normalizes
+    // to "pending". prev → new is recorded in the append-only vet log
+    // below, so a rejected → approved "undo" (which the dashboard offers)
+    // is fully audited rather than silently flipping vetted_by.
+    let prevStatus = String(rowVals[colIdx.status] == null ? "" : rowVals[colIdx.status]).trim().toLowerCase();
+    if (PLACE_STATUSES.indexOf(prevStatus) < 0) prevStatus = "pending";
+    const prevCredit = (colIdx.show_credit != null)
+      ? String(rowVals[colIdx.show_credit] == null ? "" : rowVals[colIdx.show_credit]).trim()
+      : "";
+    const placeName = (colIdx.name != null)
+      ? String(rowVals[colIdx.name] == null ? "" : rowVals[colIdx.name]).trim()
+      : "";
+
+    const statusChanged = status !== prevStatus;
+    const creditChanged = hasCredit && colIdx.show_credit != null && creditVal !== prevCredit;
+    // Idempotent: a repeat tap with no actual change writes nothing and
+    // logs nothing, so the audit trail stays meaningful (one row per
+    // real transition).
+    if (!statusChanged && !creditChanged) {
+      return jsonResponse({ ok: true, unchanged: true });
+    }
 
     // status ("approved"/"rejected") and creditVal ("TRUE"/"FALSE")
     // are from fixed sets; vetted_by is a roster name (Director-
@@ -1044,11 +1095,55 @@ function handleVetPlace(body) {
     if (colIdx.vetted_by != null) {
       sheet.getRange(rowNum, colIdx.vetted_by + 1).setValue(sheetSafe(vettedBy));
     }
+
+    // Append-only history (best-effort; never fail the vet on a log
+    // hiccup since the authoritative status was already written above).
+    try {
+      appendVetLog({
+        place_id: placeId,
+        place_name: placeName,
+        prev_status: prevStatus,
+        new_status: status,
+        show_credit: hasCredit ? creditVal : "",
+        vetted_by_cwid: normalizeCwid(body.cwid),
+        vetted_by_name: vettedBy,
+      });
+    } catch (logErr) {
+      Logger.log("appendVetLog failed: " + ((logErr && logErr.stack) || logErr));
+    }
   } finally {
     lock.releaseLock();
   }
 
   return jsonResponse({ ok: true });
+}
+
+// Append one row to the append-only PlacesVetLog audit tab, auto-creating
+// it on first use. Caller MUST hold the script lock (handleVetPlace does).
+// User-sourced text is sheetSafe'd; the timestamp/status fields are
+// script-controlled. logged_at is an ISO string.
+function appendVetLog(entry) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(PLACES_VET_LOG_TAB_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(PLACES_VET_LOG_TAB_NAME);
+    sheet.getRange(1, 1, 1, PLACES_VET_LOG_HEADERS.length).setValues([PLACES_VET_LOG_HEADERS]);
+  }
+  let headers = sheet.getDataRange().getValues()[0];
+  if (!headers || headers.length === 0 || String(headers[0]).trim() === "") {
+    sheet.getRange(1, 1, 1, PLACES_VET_LOG_HEADERS.length).setValues([PLACES_VET_LOG_HEADERS]);
+    headers = PLACES_VET_LOG_HEADERS.slice();
+  } else {
+    headers = headers.map(function (h) { return String(h == null ? "" : h).trim(); });
+  }
+  const withTime = { logged_at: new Date().toISOString() };
+  for (const k in entry) withTime[k] = entry[k];
+  const rowArr = new Array(headers.length).fill("");
+  for (const key in withTime) {
+    const idx = headers.indexOf(key);
+    if (idx >= 0) rowArr[idx] = sheetSafe(withTime[key]);
+  }
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([rowArr]);
 }
 
 // =========================================================
