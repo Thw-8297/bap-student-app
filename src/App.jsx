@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-09l — Tier 4 phone-polish batch. (14) prefers-reduced-motion now also stops the 80s spinning sun and the mate-steam loop (both infinite animations that were slipping the gate). (17) Touch targets: FilterPill padded to ~38px min-height, the ♥ save toggle hit area grown to ~40px (glyph unchanged) — the primary filter UI on five surfaces and the save control now meet the 44px guideline more closely. (13) Contrast: tertiary TEXT in stone (#7A99AC, ~3:1 on white) darkened to mountain (#425563, ~7.8:1) across ~96 sites (captions, hours, labels, inactive nav, empty states) for WCAG AA; stone kept for borders/strokes/backgrounds and disabled-state affordances; category brand tokens left untouched. (16) Manifest: added id, lang, orientation, categories, explicit purpose:any on existing icons, and a maskable 512 icon so Android adaptive launchers stop letterboxing the logo. (15) Assets: icon-512 302KB→37KB (and 192/apple-touch/logo recompressed) via palette quantization — precache ~750KB→460KB; PlacesMap chunk 68KB→45.5KB gz by mounting glyph components with react-dom/client createRoot instead of bundling react-dom/server. CACHE_VERSION stays 7.";
+const BUILD_VERSION = "2026-06-10 — Tier 5 UX-consistency & accessibility batch (review items 18–22). (18) PromptForm now validates required fields client-side before the round trip (mirrors PlaceSubmitForm); a skipped required field surfaces instantly. (19) A real refresh button in the Today greeting strip (bilingual aria-label, aria-busy, bap-spin) runs the same triggerRefresh path as pull-to-refresh, so desktop/keyboard/AT users (and the Director on a laptop) can force-refresh. (22) Native window.confirm for profile reset + sign out replaced by a centered, on-brand ConfirmDialog (role=dialog, focus-trap, Escape, Pep-Orange destructive button). (21) New shared useDialogA11y hook (focus-trap + Escape + focus-return, topmost-only via a __dialogStack) wired into BottomSheet, ProfileModal, ConfirmDialog, and both Director overlays (the latter two also gained role=dialog/aria-modal); plus aria-pressed on FilterPill, aria-expanded on the FAQ accordion, a <nav> landmark + aria-current on the active tab, aria-live on the status pill, and the three role=button divs (My-classes pill, TodayFinalsTile, EventsTodayTile) converted to real buttons. (20) The six status-pill labels are now Spanish-only (lang=es, e.g. 'Sincronizado', 'Guardado (offline)', 'Sin conexión'); English-only aria-labels swept to the bilingual convention; lang=es added to the cleanly-Spanish greeting + date. No CACHE_VERSION bump (no fetched-data shape change), no Apps Script change, no new dependency.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -2854,6 +2854,172 @@ class MapErrorBoundary extends Component {
 let __bottomSheetLockCount = 0;
 let __bottomSheetPrevOverflow = "";
 
+// ─── Dialog accessibility (focus trap + Escape + focus return) ───
+//
+// Shared by every modal/overlay surface (BottomSheet, ProfileModal, the
+// two Director overlays, and ConfirmDialog) so keyboard + assistive-tech
+// users get correct dialog semantics in one place instead of four copies.
+//
+// __dialogStack tracks the nesting order so a global keydown listener only
+// closes the TOPMOST dialog on Escape — without this, a ConfirmDialog
+// stacked over ProfileModal would close both on a single Escape. Each open
+// dialog pushes on mount and splices off on unmount; the topmost entry is
+// the live one.
+const __dialogStack = [];
+
+const DIALOG_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getDialogFocusable(node) {
+  if (!node) return [];
+  return Array.from(node.querySelectorAll(DIALOG_FOCUSABLE_SELECTOR))
+    .filter((el) => el.getClientRects().length > 0);
+}
+
+// useDialogA11y(ref, { open, onClose })
+//   ref     — points at the dialog's content container (made programmatically
+//             focusable via tabIndex={-1} so focus has somewhere to land when
+//             the dialog has no focusable children yet)
+//   open    — whether the dialog is currently shown
+//   onClose — called on Escape (topmost dialog only)
+// On open it stashes the element that had focus, moves focus into the dialog,
+// traps Tab/Shift+Tab inside it, and on close restores focus to the trigger.
+function useDialogA11y(ref, { open = true, onClose } = {}) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const restoreRef = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const node = ref.current;
+    restoreRef.current = document.activeElement;
+    if (node) {
+      const f = getDialogFocusable(node);
+      (f[0] || node).focus();
+    }
+    const entry = { close: () => { if (onCloseRef.current) onCloseRef.current(); } };
+    __dialogStack.push(entry);
+
+    const handleKeyDown = (e) => {
+      // Only the topmost dialog responds, so stacked overlays close one at
+      // a time from the top.
+      if (__dialogStack[__dialogStack.length - 1] !== entry) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        entry.close();
+        return;
+      }
+      if (e.key === "Tab" && node) {
+        const f = getDialogFocusable(node);
+        if (f.length === 0) { e.preventDefault(); node.focus(); return; }
+        const first = f[0];
+        const last = f[f.length - 1];
+        const active = document.activeElement;
+        if (!node.contains(active)) { e.preventDefault(); first.focus(); return; }
+        if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      const idx = __dialogStack.indexOf(entry);
+      if (idx !== -1) __dialogStack.splice(idx, 1);
+      const el = restoreRef.current;
+      // Restore focus to the trigger. No-op if it's since unmounted (e.g.
+      // sign-out tears down ProfileModal underneath the confirm).
+      if (el && typeof el.focus === "function") el.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+}
+
+// ─── ConfirmDialog ───
+//
+// Centered confirm card replacing native window.confirm for destructive
+// actions (profile reset, sign out). Bilingual title + body, a destructive
+// confirm button (Pep Orange) and a neutral cancel. Uses useDialogA11y for
+// role="dialog" focus-trap/Escape/focus-return, and portals to <body> so it
+// escapes any ancestor scroll/stacking context and floats above ProfileModal.
+function ConfirmDialog({ open, onConfirm, onCancel, titleEs, titleEn, bodyEs, bodyEn, confirmEs, confirmEn }) {
+  const cardRef = useRef(null);
+  useDialogA11y(cardRef, { open, onClose: onCancel });
+  if (!open) return null;
+  return createPortal(
+    <div
+      onClick={onCancel}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(29, 37, 45, 0.55)",
+        zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        ref={cardRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.parchment, width: "100%", maxWidth: 360,
+          borderRadius: 16, overflow: "hidden", outline: "none",
+          boxShadow: "0 12px 36px rgba(0, 32, 91, 0.28)",
+        }}
+      >
+        <div style={{ padding: "20px 20px 8px" }}>
+          <div style={{
+            fontFamily: "'EB Garamond', serif", fontSize: 21, fontWeight: 700,
+            color: C.pepBlue, lineHeight: 1.15, marginBottom: 2,
+          }} lang="es">{titleEs}</div>
+          {titleEn && titleEn !== titleEs && (
+            <div style={{
+              fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15,
+              color: C.mountain, lineHeight: 1.2,
+            }}>{titleEn}</div>
+          )}
+        </div>
+        <div style={{ padding: "0 20px 18px" }}>
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 14, color: C.mountain, lineHeight: 1.45,
+          }} lang="es">{bodyEs}</div>
+          {bodyEn && bodyEn !== bodyEs && (
+            <div style={{
+              fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 13.5,
+              color: C.stone, lineHeight: 1.4, marginTop: 4,
+            }}>{bodyEn}</div>
+          )}
+        </div>
+        <div style={{
+          display: "flex", gap: 10, padding: "0 20px 20px",
+        }}>
+          <button
+            onClick={onCancel}
+            className="bap-press"
+            style={{
+              flex: 1, padding: "12px 14px", borderRadius: 10,
+              background: C.white, border: `1px solid ${C.fog}`, color: C.mountain,
+              fontFamily: "'Roboto', sans-serif", fontSize: 14, fontWeight: 500,
+              cursor: "pointer", minHeight: 44,
+            }}
+          >Cancelar / Cancel</button>
+          <button
+            onClick={onConfirm}
+            className="bap-press"
+            style={{
+              flex: 1, padding: "12px 14px", borderRadius: 10,
+              background: C.pepOrange, border: `1px solid ${C.pepOrange}`, color: C.white,
+              fontFamily: "'Roboto', sans-serif", fontSize: 14, fontWeight: 700,
+              cursor: "pointer", minHeight: 44,
+            }}
+          >{confirmEs || "Confirmar"} / {confirmEn || "Confirm"}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── BottomSheet ───
 //
 // Generic slide-up modal used by <WeatherSheet> and <DolarSheet>.
@@ -2870,6 +3036,10 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
   // controls the transform/backdrop opacity.
   const [show, setShow] = useState(open);
   const [animateIn, setAnimateIn] = useState(false);
+  const sheetRef = useRef(null);
+  // Focus-trap + Escape + focus-return. Keyed on `show` so focus moves in
+  // when the sheet mounts and returns to the trigger when it unmounts.
+  useDialogA11y(sheetRef, { open: show, onClose });
 
   useEffect(() => {
     if (open) {
@@ -2925,6 +3095,8 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
       }}
     >
       <div
+        ref={sheetRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: C.parchment, width: "100%", maxWidth: 480,
@@ -2933,7 +3105,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
           transform: animateIn ? "translateY(0)" : "translateY(100%)",
           transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
           boxShadow: "0 -8px 28px rgba(0, 32, 91, 0.20)",
-          overflow: "hidden",
+          overflow: "hidden", outline: "none",
         }}
       >
         {/* Drag handle (decorative; tap-to-close still works via the × button or backdrop) */}
@@ -2959,7 +3131,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Cerrar / Close"
             className="bap-press"
             style={{
               background: C.ice, border: `1px solid ${C.fog}`, color: C.mountain,
@@ -3352,7 +3524,7 @@ function DolarSheet({ open, onClose, dolar }) {
             value={amount}
             onChange={(e) => onAmountChange(e.target.value)}
             placeholder="0"
-            aria-label={direction === "ars-to-usd" ? "Amount in Argentine pesos" : "Amount in U.S. dollars"}
+            aria-label={direction === "ars-to-usd" ? "Monto en pesos / Amount in Argentine pesos" : "Monto en dólares / Amount in U.S. dollars"}
             style={{
               flex: 1, minWidth: 0,
               fontFamily: "'DM Mono', monospace", fontSize: 26, fontWeight: 700,
@@ -3797,11 +3969,41 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
       }}>
         {isDayHour ? <SunIcon size={64} /> : <MoonIcon size={64} />}
       </div>
+      {/* Non-touch refresh affordance. The pull-to-refresh gesture is
+          touch-only, so a desktop/keyboard/assistive-tech user (and the
+          Director, who edits the sheet on a laptop) has no way to force a
+          fresh fetch. This button runs the same triggerRefresh path. */}
+      <button
+        onClick={triggerRefresh}
+        disabled={isRefreshing}
+        aria-label="Actualizar / Refresh"
+        aria-busy={isRefreshing}
+        className="bap-press"
+        style={{
+          position: "absolute", top: 12, right: 12, zIndex: 2,
+          width: 34, height: 34, borderRadius: "50%",
+          background: "rgba(255, 255, 255, 0.16)",
+          border: "1px solid rgba(255, 255, 255, 0.30)",
+          color: "#FFFFFF",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: isRefreshing ? "default" : "pointer",
+          padding: 0,
+        }}
+      >
+        <span className={isRefreshing ? "bap-spin" : ""} style={{ display: "flex" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
+            strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </span>
+      </button>
       <div style={{
         fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
         letterSpacing: 2, color: C.bapBlue, marginBottom: 4,
       }}>Hoy / Today</div>
-      <div style={{
+      <div lang="es" style={{
         fontFamily: "'EB Garamond', serif", fontSize: 26, fontWeight: 700,
         lineHeight: 1.05, letterSpacing: -0.4,
       }}>{(() => {
@@ -3813,7 +4015,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
         const userName = (currentUser && (currentUser.preferred_name || currentUser.first_name)) || "";
         return userName ? `${greeting.es}, ${userName}` : greeting.es;
       })()}</div>
-      <div style={{
+      <div lang="es" style={{
         fontFamily: "'EB Garamond', serif", fontStyle: "italic",
         fontSize: 16, color: C.fog, marginTop: 4,
       }}>{dateLabel}</div>
@@ -3844,7 +4046,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
           key={key}
           onClick={onClick}
           className="bap-press"
-          aria-label={`Open ${key} details`}
+          aria-label={`Ver detalles / Open ${key} details`}
           style={{
             ...baseStyle,
             cursor: "pointer", textAlign: "left",
@@ -3863,7 +4065,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
         <button
           key={key}
           onClick={onClick}
-          aria-label={`Refresh ${key}`}
+          aria-label={`Actualizar / Refresh ${key}`}
           style={{
             ...baseStyle,
             cursor: "pointer", textAlign: "left",
@@ -4937,7 +5139,7 @@ function WeeklyOverviewView({ data, profile }) {
         <button
           onClick={() => canGoBack && setWeekOffset((o) => Math.max(MIN_WEEK_OFFSET, o - 1))}
           disabled={!canGoBack}
-          aria-label="Previous week"
+          aria-label="Semana anterior / Previous week"
           style={{
             background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
             cursor: canGoBack ? "pointer" : "not-allowed", fontSize: 16,
@@ -4954,7 +5156,7 @@ function WeeklyOverviewView({ data, profile }) {
         <button
           onClick={() => canGoForward && setWeekOffset((o) => Math.min(MAX_WEEK_OFFSET, o + 1))}
           disabled={!canGoForward}
-          aria-label="Next week"
+          aria-label="Semana siguiente / Next week"
           style={{
             background: "none", border: `1px solid ${C.fog}`, borderRadius: 8, padding: "6px 12px",
             cursor: canGoForward ? "pointer" : "not-allowed", fontSize: 16,
@@ -5338,14 +5540,13 @@ function ScheduleView({ data, profile, onOpenSettings }) {
         <Pill active={section === "list"} onClick={() => setSection("list")}>Courses</Pill>
       </div>
       {filterActive && section !== "overview" && (
-        <div
+        <button
           onClick={onOpenSettings}
           className="bap-press"
-          role="button"
           style={{
-            display: "flex", alignItems: "center", gap: 8,
+            display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
             background: C.ice, border: `1px solid ${C.fog}`, borderRadius: 10,
-            padding: "8px 12px", marginBottom: 14, cursor: "pointer",
+            padding: "8px 12px", marginBottom: 14, cursor: "pointer", font: "inherit",
           }}
         >
           <span style={{
@@ -5357,7 +5558,7 @@ function ScheduleView({ data, profile, onOpenSettings }) {
           <span style={{ fontSize: 12, color: C.mountain, fontFamily: "'Roboto', sans-serif", flex: 1 }}>
             Showing {profile.enrolledClasses.length} of {(data.classes || []).length}. Tap to change.
           </span>
-        </div>
+        </button>
       )}
       {/* FinalsCard sits above all three sub-views — it's a persistent
           "what's coming" anchor while finals are in scope, and visible
@@ -5587,7 +5788,7 @@ function LinkButton({ url }) {
 // ─── Filter Pills (smaller, for sub-filtering) ───
 function FilterPill({ active, onClick, children }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} aria-pressed={!!active} style={{
       padding: "9px 14px", borderRadius: 19, minHeight: 38,
       display: "inline-flex", alignItems: "center",
       border: active ? `1.5px solid ${C.ocean}` : "1.5px solid transparent",
@@ -5920,13 +6121,13 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
   const preview = finals.slice(0, 3);
 
   return (
-    <div
+    <button
       onClick={() => { if (onJumpToTab) onJumpToTab("schedule"); }}
       className="bap-press"
-      role="button"
       style={{
         background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
         padding: "12px 14px 14px", marginBottom: 14, cursor: "pointer",
+        width: "100%", textAlign: "left", font: "inherit", display: "block",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -5988,7 +6189,7 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
           +{finals.length - preview.length} more
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -6115,13 +6316,13 @@ function EventsTodayTile({ data, todayStr, onJumpToTab }) {
   const preview = events.slice(0, 2);
 
   return (
-    <div
+    <button
       onClick={() => { if (onJumpToTab) onJumpToTab("local", "events"); }}
       className="bap-press"
-      role="button"
       style={{
         background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
         padding: "12px 14px 14px", marginBottom: 14, cursor: "pointer",
+        width: "100%", textAlign: "left", font: "inherit", display: "block",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -6190,7 +6391,7 @@ function EventsTodayTile({ data, todayStr, onJumpToTab }) {
           +{events.length - preview.length} more this week
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -6426,7 +6627,7 @@ function PromptFieldInput({ field, value, onChange, readonly }) {
         </div>
       )}
       {field.required && !readonly && (
-        <span aria-label="Required" title="Required" style={{
+        <span aria-label="Obligatorio / Required" title="Obligatorio / Required" style={{
           width: 6, height: 6, borderRadius: "50%", background: C.pepOrange,
           display: "inline-block", marginLeft: 2,
         }} />
@@ -6682,6 +6883,23 @@ function PromptForm({ open, onClose, prompt, onSubmit }) {
   const handleSubmit = async () => {
     if (submitting) return;
     setErrorMsg("");
+    // Client-side required-field check before the 2-4s round trip, so a
+    // skipped required field surfaces instantly instead of waiting on the
+    // Apps Script to reject it. Mirrors PlaceSubmitForm. The server-side
+    // validation below stays authoritative; this is just a fast pre-check.
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      if (!f.required) continue;
+      const v = values[f.field_id];
+      const empty = f.field_type === "multi_select"
+        ? !(Array.isArray(v) && v.length > 0)
+        : (v == null || String(v).trim() === ""); // boolean unanswered is "" → caught here too
+      if (empty) {
+        const lbl = f.label_es || f.label_en || f.field_id;
+        setErrorMsg(`Falta completar: ${lbl} / Missing: ${lbl}`);
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       await onSubmit({ promptId: displayPrompt.prompt_id, fields: values });
@@ -7057,7 +7275,7 @@ function PlaceSubmitForm({ open, onClose, onSubmit }) {
     display: "flex", alignItems: "center", gap: 6,
   };
   const reqDot = (
-    <span aria-label="Required" title="Required" style={{
+    <span aria-label="Obligatorio / Required" title="Obligatorio / Required" style={{
       width: 6, height: 6, borderRadius: "50%", background: C.pepOrange, display: "inline-block",
     }} />
   );
@@ -7829,13 +8047,13 @@ function FaqView({ data }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {data.faq.map((p, i) => (
         <div key={i} style={{ background: C.white, borderRadius: 10, border: `1px solid ${C.fog}`, overflow: "hidden" }}>
-          <button onClick={() => setOpen(open === i ? null : i)} className="bap-press" style={{
+          <button onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i} className="bap-press" style={{
             width: "100%", padding: "14px 16px", border: "none", background: "transparent",
             display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
             fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, textAlign: "left",
           }}>
             {p.title}
-            <span style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.mountain }}>▼</span>
+            <span aria-hidden="true" style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.mountain }}>▼</span>
           </button>
           {open === i && (
             <div style={{ padding: "0 16px 14px", fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7, whiteSpace: "pre-line" }}>
@@ -8147,6 +8365,12 @@ function PromptProfileSection({ prompts, onOpenPrompt }) {
 // "Show only my classes". Reads/writes the profile via the onChange
 // callback so the App owns the source of truth.
 function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, onSignOut, prompts, onOpenPrompt, onOpenDirector, onOpenPlacesAdmin }) {
+  // Hooks must run before the early return below. cardRef + useDialogA11y
+  // give the modal role="dialog" focus-trap/Escape/focus-return; pendingConfirm
+  // drives the in-app ConfirmDialog that replaced the native window.confirm.
+  const cardRef = useRef(null);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+  useDialogA11y(cardRef, { open, onClose });
   if (!open) return null;
 
   const sortedClasses = [...(classes || [])].sort((a, b) => a.code.localeCompare(b.code));
@@ -8171,19 +8395,25 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
     });
   };
   const toggleFilter = () => onChange({ ...profile, filterEnabled: !profile.filterEnabled });
-  const clearAll = () => {
-    if (!window.confirm("¿Querés borrar tu perfil? / Reset your profile?\n\nEsto borra las clases marcadas y la configuración. / This clears your selected classes and settings.")) return;
-    onChange({
-      ...profile,
-      enrolledClasses: [],
-      filterEnabled: false,
-      dismissedAnnouncements: [],
-    });
-  };
+  const clearAll = () => setPendingConfirm("reset");
+  const handleSignOutClick = () => setPendingConfirm("signout");
 
-  const handleSignOutClick = () => {
-    if (!window.confirm("¿Cerrar sesión? / Sign out?\n\nVas a tener que ingresar tu CWID y cumpleaños de nuevo. / You'll need to enter your CWID and birthday again.")) return;
-    if (typeof onSignOut === "function") onSignOut();
+  // Runs the action the student confirmed in the ConfirmDialog, then
+  // dismisses it. Sign-out tears down this whole modal underneath the
+  // confirm, which is fine — the focus-return no-ops on the unmounted node.
+  const runPendingConfirm = () => {
+    const action = pendingConfirm;
+    setPendingConfirm(null);
+    if (action === "reset") {
+      onChange({
+        ...profile,
+        enrolledClasses: [],
+        filterEnabled: false,
+        dismissedAnnouncements: [],
+      });
+    } else if (action === "signout") {
+      if (typeof onSignOut === "function") onSignOut();
+    }
   };
 
   return (
@@ -8196,11 +8426,16 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
       }}
     >
       <div
+        ref={cardRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tu perfil / Your profile"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: C.parchment, width: "100%", maxWidth: 480,
           margin: "0 auto", display: "flex", flexDirection: "column",
-          maxHeight: "100vh",
+          maxHeight: "100vh", outline: "none",
         }}
       >
         {/* Modal header */}
@@ -8219,7 +8454,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Cerrar / Close"
             style={{
               background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
               width: 36, height: 36, borderRadius: 18, cursor: "pointer",
@@ -8331,7 +8566,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
             <button
               onClick={toggleFilter}
               aria-pressed={!!profile.filterEnabled}
-              aria-label="Toggle My classes only"
+              aria-label="Mostrar solo mis clases / Toggle My classes only"
               className="bap-press"
               style={{
                 width: 48, height: 28, borderRadius: 14,
@@ -8435,6 +8670,22 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
           >Done</button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!pendingConfirm}
+        onConfirm={runPendingConfirm}
+        onCancel={() => setPendingConfirm(null)}
+        titleEs={pendingConfirm === "signout" ? "¿Cerrar sesión?" : "¿Borrar tu perfil?"}
+        titleEn={pendingConfirm === "signout" ? "Sign out?" : "Reset your profile?"}
+        bodyEs={pendingConfirm === "signout"
+          ? "Vas a tener que ingresar tu CWID y cumpleaños de nuevo."
+          : "Esto borra las clases marcadas y la configuración."}
+        bodyEn={pendingConfirm === "signout"
+          ? "You'll need to enter your CWID and birthday again."
+          : "This clears your selected classes and settings."}
+        confirmEs={pendingConfirm === "signout" ? "Cerrar sesión" : "Borrar"}
+        confirmEn={pendingConfirm === "signout" ? "Sign out" : "Reset"}
+      />
     </div>
   );
 }
@@ -8571,6 +8822,8 @@ function tallySelectField(field, responses) {
 
 function DirectorResponsesView({ open, onClose, loading, error, payload, onRefresh }) {
   const [selectedPromptId, setSelectedPromptId] = useState(null);
+  const cardRef = useRef(null);
+  useDialogA11y(cardRef, { open, onClose });
 
   // When the modal opens, reset the drilldown so we always land on
   // the list. Closing and reopening the modal feels like "starting
@@ -8599,11 +8852,16 @@ function DirectorResponsesView({ open, onClose, loading, error, payload, onRefre
       }}
     >
       <div
+        ref={cardRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Respuestas / Responses"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: C.parchment, width: "100%", maxWidth: 480,
           margin: "0 auto", display: "flex", flexDirection: "column",
-          maxHeight: "100vh",
+          maxHeight: "100vh", outline: "none",
         }}
       >
         {/* Header */}
@@ -8616,7 +8874,7 @@ function DirectorResponsesView({ open, onClose, loading, error, payload, onRefre
             {selectedPrompt && (
               <button
                 onClick={() => setSelectedPromptId(null)}
-                aria-label="Back to prompt list"
+                aria-label="Volver / Back to prompt list"
                 className="bap-press"
                 style={{
                   background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
@@ -8644,7 +8902,7 @@ function DirectorResponsesView({ open, onClose, loading, error, payload, onRefre
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Cerrar / Close"
             style={{
               background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
               width: 36, height: 36, borderRadius: 18, cursor: "pointer",
@@ -9072,6 +9330,8 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
   // first touch. The id currently being vetted disables its buttons.
   const [creditMap, setCreditMap] = useState({});
   const [vettingId, setVettingId] = useState("");
+  const cardRef = useRef(null);
+  useDialogA11y(cardRef, { open, onClose });
 
   useEffect(() => { if (!open) { setVettingId(""); } }, [open]);
   // Clear local credit overrides when the dashboard opens/closes or a
@@ -9223,9 +9483,9 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
       position: "fixed", inset: 0, background: "rgba(29, 37, 45, 0.55)",
       zIndex: 220, display: "flex", justifyContent: "center", alignItems: "stretch", padding: 0,
     }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
+      <div ref={cardRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Revisar lugares / Review places" onClick={(e) => e.stopPropagation()} style={{
         background: C.parchment, width: "100%", maxWidth: 480,
-        margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "100vh",
+        margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "100vh", outline: "none",
       }}>
         {/* Header */}
         <div style={{
@@ -9241,7 +9501,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
               Lugares · Revisión
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{
+          <button onClick={onClose} aria-label="Cerrar / Close" style={{
             background: "rgba(255,255,255,0.15)", border: "none", color: C.white,
             width: 36, height: 36, borderRadius: 18, cursor: "pointer",
             fontSize: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
@@ -10524,12 +10784,17 @@ export default function App() {
     return () => window.removeEventListener("resize", positionPill);
   }, [tab]);
 
-  const statusLabel = status === "live" ? "Synced"
-    : status === "refreshing" ? "Refreshing..."
-    : status === "loading" ? "Loading..."
-    : status === "cached" ? "Saved version (offline)"
-    : status === "fallback" ? "Using saved data (sheet unavailable)"
-    : "Preview mode";
+  // Spanish-only status pill labels. The pill is narrow (10px DM Mono in
+  // the header), so terse Spanish reads cleanly where a bilingual string
+  // would overflow — and Spanish is the app's primary language. Wrapped in
+  // lang="es" + aria-live below so a screen reader announces the offline
+  // transition with correct pronunciation.
+  const statusLabel = status === "live" ? "Sincronizado"
+    : status === "refreshing" ? "Actualizando…"
+    : status === "loading" ? "Cargando…"
+    : status === "cached" ? "Guardado (offline)"
+    : status === "fallback" ? "Sin conexión"
+    : "Vista previa";
 
   // Treat "live" and "refreshing" as the healthy/synced visual state
   const isHealthy = status === "live" || status === "refreshing";
@@ -10566,7 +10831,7 @@ export default function App() {
         <SouthernCrossDecoration />
         <button
           onClick={() => setProfileOpen(true)}
-          aria-label="Open settings"
+          aria-label="Ajustes / Settings"
           className="bap-press"
           style={{
             position: "absolute", top: 12, right: 12, zIndex: 5,
@@ -10592,7 +10857,7 @@ export default function App() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
               <span style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: C.fog }}>{data.semester}</span>
-              <span style={{
+              <span lang="es" role="status" aria-live="polite" style={{
                 fontFamily: "'DM Mono', monospace", fontSize: 10, padding: "2px 8px", borderRadius: 10,
                 background: isHealthy ? "rgba(100,181,246,0.25)" : "rgba(255,255,255,0.15)",
                 color: isHealthy ? "#E3F2FD" : "rgba(255,255,255,0.6)",
@@ -10649,7 +10914,7 @@ export default function App() {
       </div>
 
       {/* Bottom nav */}
-      <div ref={navRef} style={{
+      <nav ref={navRef} aria-label="Secciones / Sections" style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "100%", maxWidth: 480, background: C.white,
         borderTop: `1px solid ${C.fog}`, display: "flex", justifyContent: "space-around",
@@ -10663,6 +10928,7 @@ export default function App() {
               key={t.key}
               ref={(el) => { navBtnRefs.current[t.key] = el; }}
               onClick={() => { if (t.key === "local") { setLocalInitialSub(null); setLocalSub(null); setLocalPlacesLabel(null); } setTab(t.key); }}
+              aria-current={active ? "page" : undefined}
               className="bap-press"
               style={{
                 background: "none", border: "none", cursor: "pointer",
@@ -10689,7 +10955,7 @@ export default function App() {
             background: pillTransform.color,
           }}
         />
-      </div>
+      </nav>
 
       {/* Profile / settings modal */}
       <ProfileModal
