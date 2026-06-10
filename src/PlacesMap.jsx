@@ -217,6 +217,13 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
       style={{
         height: "min(68vh, 520px)", width: "100%",
         borderRadius: 14, overflow: "hidden", border: "1px solid #B9D9EB",
+        // Contain Leaflet's internal z-indices (panes ~200–700, controls ~1000)
+        // inside this element's own stacking context. Without it, on Android —
+        // which lacks the iOS scroll-container stacking context that happens to
+        // trap them — those high z-indices leak to the root and paint OVER the
+        // place-info BottomSheet (portaled to <body> at z-index 200). isolate +
+        // a positioned z-index:0 both force the context; belt-and-suspenders.
+        position: "relative", zIndex: 0, isolation: "isolate",
       }}
     />
   );
