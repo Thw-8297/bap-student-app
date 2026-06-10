@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10 — Tier 5 UX-consistency & accessibility batch (review items 18–22). (18) PromptForm now validates required fields client-side before the round trip (mirrors PlaceSubmitForm); a skipped required field surfaces instantly. (19) A real refresh button in the Today greeting strip (bilingual aria-label, aria-busy, bap-spin) runs the same triggerRefresh path as pull-to-refresh, so desktop/keyboard/AT users (and the Director on a laptop) can force-refresh. (22) Native window.confirm for profile reset + sign out replaced by a centered, on-brand ConfirmDialog (role=dialog, focus-trap, Escape, Pep-Orange destructive button). (21) New shared useDialogA11y hook (focus-trap + Escape + focus-return, topmost-only via a __dialogStack) wired into BottomSheet, ProfileModal, ConfirmDialog, and both Director overlays (the latter two also gained role=dialog/aria-modal); plus aria-pressed on FilterPill, aria-expanded on the FAQ accordion, a <nav> landmark + aria-current on the active tab, aria-live on the status pill, and the three role=button divs (My-classes pill, TodayFinalsTile, EventsTodayTile) converted to real buttons. (20) The six status-pill labels are now Spanish-only (lang=es, e.g. 'Sincronizado', 'Guardado (offline)', 'Sin conexión'); English-only aria-labels swept to the bilingual convention; lang=es added to the cleanly-Spanish greeting + date. No CACHE_VERSION bump (no fetched-data shape change), no Apps Script change, no new dependency.";
+const BUILD_VERSION = "2026-06-10b — Tier 6 batch (review items 23, 24, 26). (23) Client-side search: a reusable <SearchInput> drives FAQ search (matches title + content) and a Places-hub search (matches name/why/neighborhood/category across all categories, replacing the grid with a flat result list while typing). (24) Announcement unread cue: a Pep-Orange dot on the Today nav tab when an active announcement hasn't been seen yet, cleared when Today is viewed; new seenAnnouncements profile field → PROFILE_VERSION 2→3 with a v2→v3 salvage migration (keeps enrolledClasses/filterEnabled). djb2 key per announcement; shared isAnnouncementActive predicate with <AnnouncementBanner>. (26) Saved places count + share: the ♥ Saved hub tile shows its count; <PlaceCard> gains a share button (Web Share API, clipboard-copy fallback with ¡Copiado! confirmation). No CACHE_VERSION bump (no fetched-data shape change), no Apps Script change, no new dependency. PRIOR: 2026-06-10 — Tier 5 UX-consistency & accessibility batch (review items 18–22). (18) PromptForm now validates required fields client-side before the round trip (mirrors PlaceSubmitForm); a skipped required field surfaces instantly. (19) A real refresh button in the Today greeting strip (bilingual aria-label, aria-busy, bap-spin) runs the same triggerRefresh path as pull-to-refresh, so desktop/keyboard/AT users (and the Director on a laptop) can force-refresh. (22) Native window.confirm for profile reset + sign out replaced by a centered, on-brand ConfirmDialog (role=dialog, focus-trap, Escape, Pep-Orange destructive button). (21) New shared useDialogA11y hook (focus-trap + Escape + focus-return, topmost-only via a __dialogStack) wired into BottomSheet, ProfileModal, ConfirmDialog, and both Director overlays (the latter two also gained role=dialog/aria-modal); plus aria-pressed on FilterPill, aria-expanded on the FAQ accordion, a <nav> landmark + aria-current on the active tab, aria-live on the status pill, and the three role=button divs (My-classes pill, TodayFinalsTile, EventsTodayTile) converted to real buttons. (20) The six status-pill labels are now Spanish-only (lang=es, e.g. 'Sincronizado', 'Guardado (offline)', 'Sin conexión'); English-only aria-labels swept to the bilingual convention; lang=es added to the cleanly-Spanish greeting + date. No CACHE_VERSION bump (no fetched-data shape change), no Apps Script change, no new dependency.";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -910,13 +910,16 @@ function isStaff(user) {
 // ============================================================
 
 const PROFILE_KEY = "bap-profile";
-const PROFILE_VERSION = 2;
+const PROFILE_VERSION = 3;
 
 const EMPTY_PROFILE = {
   version: PROFILE_VERSION,
   enrolledClasses: [],
   filterEnabled: false,
   dismissedAnnouncements: [],
+  // Keys (announcementKey) of announcements the student has already
+  // seen on the Today tab. Drives the unread dot on the Today nav tab.
+  seenAnnouncements: [],
 };
 
 function loadProfile() {
@@ -925,12 +928,15 @@ function loadProfile() {
     if (!raw) return { ...EMPTY_PROFILE };
     const parsed = JSON.parse(raw);
 
-    // V1 → V2 migration: the `name` field moved to currentUser
-    // (the authoritative roster identity). Salvage enrolledClasses
-    // and filterEnabled rather than nuking the profile so a student
-    // who already personalized doesn't lose their course selections
-    // on the deploy that introduces the user gate.
-    if (parsed.version === 1) {
+    // V1 → V2 and V2 → V3 migrations: salvage the load-bearing fields
+    // (course selections + filter toggle) rather than nuking the profile,
+    // so a student who already personalized doesn't lose their selections
+    // on the deploy. V1 dropped `name` (moved to currentUser); V3 adds
+    // `seenAnnouncements` (defaults to [], so the first cue read after the
+    // bump treats every currently-active announcement as already seen,
+    // which is correct — we don't want a deploy to light up the dot for
+    // announcements the student has had on screen for days).
+    if (parsed.version === 1 || parsed.version === 2) {
       return {
         ...EMPTY_PROFILE,
         enrolledClasses: Array.isArray(parsed.enrolledClasses) ? parsed.enrolledClasses : [],
@@ -944,6 +950,7 @@ function loadProfile() {
       ...parsed,
       enrolledClasses: Array.isArray(parsed.enrolledClasses) ? parsed.enrolledClasses : [],
       dismissedAnnouncements: Array.isArray(parsed.dismissedAnnouncements) ? parsed.dismissedAnnouncements : [],
+      seenAnnouncements: Array.isArray(parsed.seenAnnouncements) ? parsed.seenAnnouncements : [],
     };
   } catch (e) {
     return { ...EMPTY_PROFILE };
@@ -971,6 +978,38 @@ function filterClassesByProfile(classes, profile) {
   if (!shouldFilterClasses(profile)) return classes;
   const set = new Set(profile.enrolledClasses);
   return (classes || []).filter((c) => set.has(c.code));
+}
+
+// ── Announcement "unread" cue helpers ──
+// An announcement is active when today falls inside its date range
+// (both bounds required). Shared by <AnnouncementBanner> and the
+// Today-nav unread-dot logic so the two never disagree about what's
+// on screen.
+function isAnnouncementActive(a, todayStr) {
+  if (!a || !a.start_date || !a.end_date) return false;
+  return todayStr >= a.start_date && todayStr <= a.end_date;
+}
+
+// djb2 string hash → short stable key. Used to identify an announcement
+// across sessions without storing its full text. Keyed on the message +
+// its window, so editing the copy or shifting the dates resurfaces it as
+// new (matching the existing dismissedAnnouncements convention).
+function djb2(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+function announcementKey(a) {
+  return djb2(`${a.message || ""}|${a.start_date || ""}|${a.end_date || ""}`);
+}
+
+// Keys for every announcement active today. Used both to detect unread
+// (active keys not in profile.seenAnnouncements) and to mark-seen.
+function activeAnnouncementKeys(announcements, todayStr) {
+  return (announcements || [])
+    .filter((a) => isAnnouncementActive(a, todayStr))
+    .map(announcementKey);
 }
 
 // ============================================================
@@ -4835,11 +4874,7 @@ function AnnouncementBanner({ announcements }) {
   // the date range). Per 2026-04-26 redesign, announcements are
   // not user-dismissible: they auto-clear once the end_date passes,
   // so the program office controls the lifecycle in the sheet.
-  const active = (announcements || []).filter((a) => {
-    if (!a.start_date || !a.end_date) return false;
-    if (todayStr < a.start_date || todayStr > a.end_date) return false;
-    return true;
-  });
+  const active = (announcements || []).filter((a) => isAnnouncementActive(a, todayStr));
 
   if (active.length === 0) return null;
 
@@ -7185,6 +7220,37 @@ function PlaceCard({ place, saved, onToggleSave, distance }) {
   const creditOn = rawCredit === "" ? true : parseBoolean(rawCredit);
   const showCredit = place.source === "community" && place.submitted_by_name && creditOn;
 
+  // Share (#26): native share sheet where available, clipboard-copy
+  // fallback (desktop) with a brief "¡Copiado!" confirmation.
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+
+  const handleShare = async () => {
+    const heading = place.neighborhood ? `${place.name} (${place.neighborhood})` : place.name;
+    const text = `${heading} — recomendado en la app del Buenos Aires Program`;
+    // Prefer an explicit Maps URL; otherwise build a Maps search from the address.
+    let url = safeExternalUrl(place.maps_url) || "";
+    if (!url && place.address) {
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address)}`;
+    }
+    const shareData = url ? { title: place.name, text, url } : { title: place.name, text };
+    try {
+      if (navigator.share) { await navigator.share(shareData); return; }
+    } catch (e) {
+      return; // user cancelled (AbortError) or the share failed — leave it be
+    }
+    // Fallback: copy text + link to the clipboard.
+    try {
+      await navigator.clipboard.writeText(url ? `${text}\n${url}` : text);
+      setCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      // Clipboard blocked (insecure context / permissions) — nothing to do.
+    }
+  };
+
   return (
     <Card>
       <div style={{ display: "flex", gap: 12 }}>
@@ -7197,17 +7263,36 @@ function PlaceCard({ place, saved, onToggleSave, distance }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
             <span style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, lineHeight: 1.2 }}>{place.name}</span>
-            <button
-              onClick={() => onToggleSave(place.place_id)}
-              className="bap-press"
-              aria-label={saved ? "Quitar de guardados / Remove from saved" : "Guardar / Save"}
-              aria-pressed={saved}
-              style={{
-                flexShrink: 0, background: "transparent", border: "none", cursor: "pointer",
-                padding: 10, margin: "-8px -6px -8px 0", fontSize: 19, lineHeight: 1,
-                color: saved ? C.pepOrange : C.stone,
-              }}
-            >{saved ? "♥" : "♡"}</button>
+            <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, margin: "-8px -6px -8px 0" }}>
+              <span aria-live="polite" style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: "#2E7D32",
+                opacity: copied ? 1 : 0, transition: "opacity 0.2s", whiteSpace: "nowrap",
+              }}>{copied ? "¡Copiado! / Copied" : ""}</span>
+              <button
+                onClick={handleShare}
+                className="bap-press"
+                aria-label="Compartir / Share"
+                style={{
+                  background: "transparent", border: "none", cursor: "pointer",
+                  padding: 10, lineHeight: 0, color: copied ? "#2E7D32" : C.stone,
+                }}
+              >
+                {copied
+                  ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>}
+              </button>
+              <button
+                onClick={() => onToggleSave(place.place_id)}
+                className="bap-press"
+                aria-label={saved ? "Quitar de guardados / Remove from saved" : "Guardar / Save"}
+                aria-pressed={saved}
+                style={{
+                  background: "transparent", border: "none", cursor: "pointer",
+                  padding: 10, fontSize: 19, lineHeight: 1,
+                  color: saved ? C.pepOrange : C.stone,
+                }}
+              >{saved ? "♥" : "♡"}</button>
+            </div>
           </div>
           <div style={{ fontSize: 13, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.6, marginTop: 3, whiteSpace: "pre-line" }}>
             {distance && <span style={distCap}>{distance}<br /></span>}
@@ -7451,6 +7536,15 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
   // Places is two-level: null = the category-picker grid; "all" | <category key>
   // | "saved" = a chosen view showing that listing.
   const [placesFilter, setPlacesFilter] = useState(null);
+
+  // Free-text search across all approved places, shown on the Places hub
+  // (the category grid). When non-empty it replaces the grid with a flat
+  // list of matches across every category. Cleared whenever we leave the
+  // grid (drill into a category) or leave the Places sub entirely, so it
+  // never lingers behind a category listing.
+  const [placesQuery, setPlacesQuery] = useState("");
+  useEffect(() => { if (placesFilter !== null) setPlacesQuery(""); }, [placesFilter]);
+  useEffect(() => { if (sub !== "places") setPlacesQuery(""); }, [sub]);
 
   // List ⇆ map toggle within a Places listing. Reset to "list" whenever the
   // chosen category changes (or we leave to the grid) so switching buckets
@@ -7850,14 +7944,60 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
         // ♥ Saved tile once the student has saved anything. Two columns; each
         // tile is a glyph in its category color with the label beneath.
         if (placesFilter === null) {
+          const savedCount = allPlaces.filter((p) => savedSet.has(p.place_id)).length;
+          const pq = placesQuery.trim().toLowerCase();
+
+          // Search results replace the grid while there's a query. Matches
+          // name / why / neighborhood / category label across every category.
+          if (pq) {
+            const results = allPlaces.filter((p) => {
+              const hay = `${p.name || ""} ${p.why || ""} ${p.neighborhood || ""} ${getPlaceCategory(p._cat).label}`.toLowerCase();
+              return hay.includes(pq);
+            });
+            return (
+              <div>
+                <SearchInput
+                  value={placesQuery}
+                  onChange={setPlacesQuery}
+                  placeholder="Buscar lugares… / Search places…"
+                  ariaLabel="Buscar lugares / Search places"
+                />
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain, padding: "0 2px 8px" }}>
+                  {results.length === 0
+                    ? "Sin resultados / No results"
+                    : `${results.length} resultado${results.length === 1 ? "" : "s"} / result${results.length === 1 ? "" : "s"}`}
+                </div>
+                {results.length === 0 ? (
+                  <Card>
+                    <div style={{ textAlign: "center", padding: "12px 4px", fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 15, color: C.mountain }}>
+                      Probá con otra palabra. / Try another word.
+                    </div>
+                  </Card>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {results.map((p, i) => (
+                      <PlaceCard
+                        key={p.place_id || i}
+                        place={p}
+                        saved={savedSet.has(p.place_id)}
+                        onToggleSave={onToggleSavePlace}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           // "All" and "♥ Saved" are the two meta-views; they lead the grid,
           // then the twelve real categories follow. Saved is always shown
           // (even with nothing saved yet) so it reads as a permanent place
           // to find favorites; tapping it empty shows the "no saved places"
-          // state, consistent with how empty category tiles behave.
+          // state, consistent with how empty category tiles behave. The Saved
+          // tile shows its count once the student has saved anything (#26).
           const tiles = [
             { key: "all", label: "All", color: C.pepBlue, Icon: AppGridIcon },
-            { key: "saved", label: "Saved", color: C.pepOrange, Icon: null },
+            { key: "saved", label: savedCount > 0 ? `Saved · ${savedCount}` : "Saved", color: C.pepOrange, Icon: null },
             ...PLACE_CATEGORY_ORDER.map((k) => ({
               key: k, label: PLACE_CATEGORIES[k].label,
               color: PLACE_CATEGORIES[k].color, Icon: PLACE_CATEGORIES[k].Icon,
@@ -7866,6 +8006,12 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
           return (
             <div>
               {/* Back to the hub is the header chevron (← Places). */}
+              <SearchInput
+                value={placesQuery}
+                onChange={setPlacesQuery}
+                placeholder="Buscar lugares… / Search places…"
+                ariaLabel="Buscar lugares / Search places"
+              />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {tiles.map((t) => {
                   const Icon = t.Icon;
@@ -8041,11 +8187,79 @@ function LocalView({ data, initialSub, places = [], savedPlaces = [], onToggleSa
 }
 
 // ─── FAQ ───
+// ─── Reusable search input ───
+// A bordered text field with a magnifier glyph and a clear × that
+// appears once there's text. Used by FAQ search and Places search.
+function SearchInput({ value, onChange, placeholder, ariaLabel }) {
+  return (
+    <div style={{ position: "relative", marginBottom: 12 }}>
+      <span aria-hidden="true" style={{
+        position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)",
+        fontSize: 14, color: C.stone, pointerEvents: "none",
+      }}>🔍</span>
+      <input
+        type="search"
+        inputMode="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={ariaLabel || placeholder}
+        style={{
+          width: "100%", boxSizing: "border-box",
+          background: C.white, border: `1px solid ${C.fog}`, borderRadius: 10,
+          padding: "11px 38px 11px 38px",
+          fontFamily: "'Roboto', sans-serif", fontSize: 14, color: C.pepBlack,
+          outline: "none",
+        }}
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Borrar búsqueda / Clear search"
+          className="bap-press"
+          style={{
+            position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+            width: 26, height: 26, borderRadius: "50%", border: "none",
+            background: C.ice, color: C.mountain, cursor: "pointer",
+            fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >×</button>
+      )}
+    </div>
+  );
+}
+
 function FaqView({ data }) {
   const [open, setOpen] = useState(null);
+  const [query, setQuery] = useState("");
+
+  // Filter on title + content, case-insensitive. Original index is kept
+  // as the stable key for `open` so filtering doesn't reshuffle which
+  // card is expanded.
+  const q = query.trim().toLowerCase();
+  const rows = (data.faq || []).map((p, i) => ({ p, i }));
+  const filtered = q
+    ? rows.filter(({ p }) =>
+        `${p.title || ""} ${p.content || ""}`.toLowerCase().includes(q))
+    : rows;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {data.faq.map((p, i) => (
+      <SearchInput
+        value={query}
+        onChange={setQuery}
+        placeholder="Buscar… / Search…"
+        ariaLabel="Buscar preguntas / Search FAQ"
+      />
+      {q && (
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.mountain, padding: "2px 2px 8px" }}>
+          {filtered.length === 0
+            ? "Sin resultados / No results"
+            : `${filtered.length} resultado${filtered.length === 1 ? "" : "s"} / result${filtered.length === 1 ? "" : "s"}`}
+        </div>
+      )}
+      {filtered.map(({ p, i }) => (
         <div key={i} style={{ background: C.white, borderRadius: 10, border: `1px solid ${C.fog}`, overflow: "hidden" }}>
           <button onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i} className="bap-press" style={{
             width: "100%", padding: "14px 16px", border: "none", background: "transparent",
@@ -10192,6 +10406,30 @@ export default function App() {
     return loadCache() ? "refreshing" : "loading";
   });
 
+  // ── Announcement "unread" cue (#24) ──
+  // A dot on the Today nav tab when there's an active announcement the
+  // student hasn't seen yet. "Seen" is recorded the moment the Today tab
+  // is active (the banner is in view there). The dot is meaningful mainly
+  // across tabs / sessions: a student parked on another tab when a new
+  // announcement goes live gets a gentle nudge back to Today.
+  const hasUnreadAnnouncements = useMemo(() => {
+    const seen = new Set(profile.seenAnnouncements || []);
+    return activeAnnouncementKeys(data.announcements, getTodayStr())
+      .some((k) => !seen.has(k));
+  }, [data.announcements, profile.seenAnnouncements]);
+
+  useEffect(() => {
+    if (tab !== "today") return;
+    const active = activeAnnouncementKeys(data.announcements, getTodayStr());
+    if (active.length === 0) return;
+    const seen = new Set(profile.seenAnnouncements || []);
+    const fresh = active.filter((k) => !seen.has(k));
+    if (fresh.length === 0) return; // nothing new — avoid a needless write/re-render
+    // Keep only still-active keys plus the freshly-seen ones, so the
+    // stored list doesn't grow unbounded as old announcements expire.
+    updateProfile({ ...profile, seenAnnouncements: active });
+  }, [tab, data.announcements, profile, updateProfile]);
+
   useEffect(() => {
     const link = document.createElement("link");
     link.href = "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&family=EB+Garamond:wght@400;700&family=Roboto:wght@400;500;700&display=swap";
@@ -10923,12 +11161,16 @@ export default function App() {
         {TABS.map((t) => {
           const active = tab === t.key;
           const color = active ? t.color : C.stone;
+          // Unread-announcement dot only on the Today tab, and only while
+          // the student is somewhere else (on Today it's already in view).
+          const showDot = t.key === "today" && hasUnreadAnnouncements && !active;
           return (
             <button
               key={t.key}
               ref={(el) => { navBtnRefs.current[t.key] = el; }}
               onClick={() => { if (t.key === "local") { setLocalInitialSub(null); setLocalSub(null); setLocalPlacesLabel(null); } setTab(t.key); }}
               aria-current={active ? "page" : undefined}
+              aria-label={showDot ? `${t.label} — avisos sin leer / unread notices` : undefined}
               className="bap-press"
               style={{
                 background: "none", border: "none", cursor: "pointer",
@@ -10936,8 +11178,15 @@ export default function App() {
                 gap: 3, padding: "4px 8px", flex: 1,
               }}
             >
-              <span className={`bap-nav-icon${active ? " lifted" : ""}`}>
+              <span className={`bap-nav-icon${active ? " lifted" : ""}`} style={{ position: "relative" }}>
                 {t.icon(color)}
+                {showDot && (
+                  <span aria-hidden="true" style={{
+                    position: "absolute", top: -2, right: -4,
+                    width: 9, height: 9, borderRadius: "50%",
+                    background: C.pepOrange, border: `1.5px solid ${C.white}`,
+                  }} />
+                )}
               </span>
               <span style={{
                 fontSize: 10, fontWeight: active ? 700 : 400,
