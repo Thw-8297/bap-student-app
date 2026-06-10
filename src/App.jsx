@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10b — Tier 6 batch (review items 23, 24, 26). (23) Client-side search: a reusable <SearchInput> drives FAQ search (matches title + content) and a Places-hub search (matches name/why/neighborhood/category across all categories, replacing the grid with a flat result list while typing). (24) Announcement unread cue: a Pep-Orange dot on the Today nav tab when an active announcement hasn't been seen yet, cleared when Today is viewed; new seenAnnouncements profile field → PROFILE_VERSION 2→3 with a v2→v3 salvage migration (keeps enrolledClasses/filterEnabled). djb2 key per announcement; shared isAnnouncementActive predicate with <AnnouncementBanner>. (26) Saved places count + share: the ♥ Saved hub tile shows its count; <PlaceCard> gains a share button (Web Share API, clipboard-copy fallback with ¡Copiado! confirmation). No CACHE_VERSION bump (no fetched-data shape change), no Apps Script change, no new dependency. PRIOR: 2026-06-10 — Tier 5 UX-consistency & accessibility batch (review items 18–22). (18) PromptForm now validates required fields client-side before the round trip (mirrors PlaceSubmitForm); a skipped required field surfaces instantly. (19) A real refresh button in the Today greeting strip (bilingual aria-label, aria-busy, bap-spin) runs the same triggerRefresh path as pull-to-refresh, so desktop/keyboard/AT users (and the Director on a laptop) can force-refresh. (22) Native window.confirm for profile reset + sign out replaced by a centered, on-brand ConfirmDialog (role=dialog, focus-trap, Escape, Pep-Orange destructive button). (21) New shared useDialogA11y hook (focus-trap + Escape + focus-return, topmost-only via a __dialogStack) wired into BottomSheet, ProfileModal, ConfirmDialog, and both Director overlays (the latter two also gained role=dialog/aria-modal); plus aria-pressed on FilterPill, aria-expanded on the FAQ accordion, a <nav> landmark + aria-current on the active tab, aria-live on the status pill, and the three role=button divs (My-classes pill, TodayFinalsTile, EventsTodayTile) converted to real buttons. (20) The six status-pill labels are now Spanish-only (lang=es, e.g. 'Sincronizado', 'Guardado (offline)', 'Sin conexión'); English-only aria-labels swept to the bilingual convention; lang=es added to the cleanly-Spanish greeting + date. No CACHE_VERSION bump (no fetched-data shape change), no Apps Script change, no new dependency.";
+const BUILD_VERSION = "2026-06-10c — Calendar blank-tab fix + collapsible finals. (1) Fixed the Calendar tab rendering blank when reached from Schedule: the single shared scroll container inherited the prior tab's scroll offset (Schedule auto-scrolls down to today's week), so on days with no upcoming-event divider to re-anchor, Calendar landed past its content. The content container now resets scrollTop to 0 on every tab change; the views that auto-scroll to today (Schedule, Calendar) re-anchor from a clean baseline via their own scrollIntoView. (2) TodayFinalsTile (Today) and FinalsCard (Schedule) are now collapsible, default COLLAPSED: a tappable header (aria-expanded + chevron, with count + finals-window in the collapsed summary) reveals the exam rows; the Today tile keeps a 'Ver en Schedule / See all →' link when expanded. No CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -6135,6 +6135,10 @@ function formatFinalsWindow(startStr, endStr) {
 // Mirrors <EventsTodayTile>'s shape but uses a Pep Blue accent so it
 // reads as academic, not cultural.
 function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
+  // Collapsed by default — the tile is a quiet header until tapped, so it
+  // doesn't crowd the Today dashboard with exam rows the student isn't
+  // actively checking.
+  const [open, setOpen] = useState(false);
   // Memoize the heavy derivations on the calendar day (not on `now` itself),
   // so the 1-minute clock tick doesn't re-run the full class scan + sort
   // + days-until math every tick. data/profile are stable refs from App.
@@ -6153,19 +6157,22 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
   );
   if (!shouldShow) return null;
   if (finals.length === 0) return null;
-  const preview = finals.slice(0, 3);
 
   return (
-    <button
-      onClick={() => { if (onJumpToTab) onJumpToTab("schedule"); }}
-      className="bap-press"
-      style={{
-        background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
-        padding: "12px 14px 14px", marginBottom: 14, cursor: "pointer",
-        width: "100%", textAlign: "left", font: "inherit", display: "block",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+    <div style={{
+      background: C.white, border: `1px solid ${C.fog}`, borderRadius: 14,
+      padding: open ? "12px 14px 14px" : "12px 14px", marginBottom: 14,
+    }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="bap-press"
+        style={{
+          width: "100%", background: "transparent", border: "none", padding: 0,
+          cursor: "pointer", font: "inherit", textAlign: "left",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+        }}
+      >
         <div>
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
@@ -6175,56 +6182,68 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
             Finals coming up
           </div>
         </div>
-        <span style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.ocean,
-          display: "inline-flex", alignItems: "center", gap: 4,
-        }}>
-          See all →
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.ocean }}>
+            {finals.length}{winLabel ? ` · ${winLabel}` : ""}
+          </span>
+          <span aria-hidden="true" style={{
+            transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s",
+            fontSize: 12, color: C.mountain,
+          }}>▼</span>
         </span>
-      </div>
+      </button>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {preview.map((f) => (
-          <div key={f.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 4, alignSelf: "stretch", background: f.color || C.pepBlue,
-              borderRadius: 2, flexShrink: 0, minHeight: 28,
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: "'EB Garamond', serif", fontSize: 14, fontWeight: 700,
-                color: C.pepBlack, lineHeight: 1.2,
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>
-                <span style={{
-                  fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                  color: C.ocean, marginRight: 6, fontWeight: 400, letterSpacing: 0.5,
-                }}>{f.code}</span>
-                {f.title}
+      {open && (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+            {finals.map((f) => (
+              <div key={f.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 4, alignSelf: "stretch", background: f.color || C.pepBlue,
+                  borderRadius: 2, flexShrink: 0, minHeight: 28,
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: "'EB Garamond', serif", fontSize: 14, fontWeight: 700,
+                    color: C.pepBlack, lineHeight: 1.2,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    <span style={{
+                      fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                      color: C.ocean, marginRight: 6, fontWeight: 400, letterSpacing: 0.5,
+                    }}>{f.code}</span>
+                    {f.title}
+                  </div>
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+                    color: C.mountain, marginTop: 1,
+                  }}>
+                    {f.final_date
+                      ? (f.final_time ? `${formatFinalDate(f.final_date)} · ${f.final_time}` : formatFinalDate(f.final_date))
+                      : (winLabel ? `TBD · ${winLabel}` : "TBD")
+                    }
+                  </div>
+                </div>
               </div>
-              <div style={{
-                fontFamily: "'DM Mono', monospace", fontSize: 10.5,
-                color: C.mountain, marginTop: 1,
-              }}>
-                {f.final_date
-                  ? (f.final_time ? `${formatFinalDate(f.final_date)} · ${f.final_time}` : formatFinalDate(f.final_date))
-                  : (winLabel ? `TBD · ${winLabel}` : "TBD")
-                }
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {finals.length > preview.length && (
-        <div style={{
-          fontFamily: "'Roboto', sans-serif", fontSize: 11.5, color: C.mountain,
-          marginTop: 8, textAlign: "center",
-        }}>
-          +{finals.length - preview.length} more
-        </div>
+          {onJumpToTab && (
+            <button
+              onClick={() => onJumpToTab("schedule")}
+              className="bap-press"
+              style={{
+                marginTop: 10, background: "transparent", border: "none", padding: 0,
+                cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 11,
+                color: C.ocean, display: "inline-flex", alignItems: "center", gap: 4,
+              }}
+            >
+              Ver en Schedule / See all →
+            </button>
+          )}
+        </>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -6238,6 +6257,9 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
 // Renders nothing when the gating fails (e.g. mid-semester with no
 // finals assigned, or for a non-personalized student).
 function FinalsCard({ data, profile, today }) {
+  // Collapsed by default — pinned above the Schedule sub-tabs as a quiet
+  // header the student expands when they want exam dates/times.
+  const [open, setOpen] = useState(false);
   if (!shouldShowFinalsUI(data, profile, today)) return null;
   const finals = getStudentFinals(data, profile);
   if (finals.length === 0) return null;
@@ -6249,13 +6271,19 @@ function FinalsCard({ data, profile, today }) {
       background: C.parchment,
       border: `1px solid ${C.fog}`,
       borderLeft: `4px solid ${C.pepBlue}`,
-      borderRadius: 12, padding: "12px 14px 14px",
+      borderRadius: 12, padding: open ? "12px 14px 14px" : "12px 14px",
       marginBottom: 16,
     }}>
-      <div style={{
-        display: "flex", alignItems: "baseline", justifyContent: "space-between",
-        marginBottom: 10, gap: 8,
-      }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="bap-press"
+        style={{
+          width: "100%", background: "transparent", border: "none", padding: 0,
+          cursor: "pointer", font: "inherit", textAlign: "left",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+        }}
+      >
         <div>
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
@@ -6265,16 +6293,23 @@ function FinalsCard({ data, profile, today }) {
             Finals
           </div>
         </div>
-        {winLabel && (
-          <span style={{
-            fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.ocean,
-            background: C.white, border: `1px solid ${C.fog}`,
-            padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap",
-          }}>{winLabel}</span>
-        )}
-      </div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {winLabel && (
+            <span style={{
+              fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: C.ocean,
+              background: C.white, border: `1px solid ${C.fog}`,
+              padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap",
+            }}>{winLabel}</span>
+          )}
+          <span aria-hidden="true" style={{
+            transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s",
+            fontSize: 12, color: C.mountain,
+          }}>▼</span>
+        </span>
+      </button>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {open && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
         {finals.map((f) => {
           const hasDate = !!f.final_date;
           return (
@@ -6331,6 +6366,7 @@ function FinalsCard({ data, profile, today }) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -10391,6 +10427,17 @@ export default function App() {
   // re-render of the whole component tree.
   const navRef = useRef(null);
   const navBtnRefs = useRef({});
+  // The single scroll container wraps every tab; only its children swap on
+  // a tab change, so without this it inherits the previous tab's scroll
+  // offset. That left Calendar blank when arrived at from Schedule (which
+  // auto-scrolls down to today's week) on days with no upcoming-event
+  // anchor to pull it back. Reset to top on every tab change; the views
+  // that auto-scroll to "today" (Schedule, Calendar) then re-anchor from a
+  // clean baseline via their own rAF scrollIntoView effects.
+  const contentRef = useRef(null);
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [tab]);
   const [pillTransform, setPillTransform] = useState({ x: 0, color: C.bapBlue });
 
   // Lazy-init from localStorage cache so repeat opens render instantly.
@@ -11110,7 +11157,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minHeight: 0, padding: "20px 16px 100px", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain" }}>
+      <div ref={contentRef} style={{ flex: 1, minHeight: 0, padding: "20px 16px 100px", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain" }}>
         {status === "loading" ? (
           <LoadingScreen tips={data.tips} />
         ) : (
