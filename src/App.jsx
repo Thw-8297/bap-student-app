@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -5877,6 +5877,38 @@ function InstagramGlyph({ size = 18, color = C.pepOrange }) {
   );
 }
 
+// View-toggle glyphs for the Places listing's List / Map / Near control
+// (icon-only as of 2026-06-10m). ListViewIcon = bulleted list, MapViewIcon =
+// folded map, NavArrowIcon = navigation arrow (location sort). Each { size,color }.
+function ListViewIcon({ size = 17, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      <circle cx="4.5" cy="6" r="1.8"/>
+      <rect x="9" y="4.6" width="12.5" height="2.8" rx="1.4"/>
+      <circle cx="4.5" cy="12" r="1.8"/>
+      <rect x="9" y="10.6" width="12.5" height="2.8" rx="1.4"/>
+      <circle cx="4.5" cy="18" r="1.8"/>
+      <rect x="9" y="16.6" width="12.5" height="2.8" rx="1.4"/>
+    </svg>
+  );
+}
+function MapViewIcon({ size = 17, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+      <line x1="9" y1="3" x2="9" y2="18"/>
+      <line x1="15" y1="6" x2="15" y2="21"/>
+    </svg>
+  );
+}
+function NavArrowIcon({ size = 17, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+    </svg>
+  );
+}
+
 // ─── Address → Google Maps Link ───
 // Renders an address as a tappable link that opens Google Maps (native app on
 // mobile; maps.google.com on desktop). If `mapsUrl` is provided (e.g. from the
@@ -7830,6 +7862,24 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
     </button>
   );
 
+  // Icon-only variant of the Near toggle, used only in the Places listing's
+  // List / Map / Near control so all three sit as matching icon buttons. The
+  // text "Cerca / Near" lives in aria-label + title. Other tabs keep nearMeButton.
+  const nearMeIconLabel = geoStatus === "loading"
+    ? "Buscando ubicación / Locating…"
+    : "Cerca / Near — ordenar por distancia / sort by distance";
+  const nearMeIconButton = (
+    <button onClick={handleNearMe} className="bap-press" aria-label={nearMeIconLabel} aria-pressed={nearMe} title={nearMeIconLabel} style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      padding: "6px 14px", minHeight: 34, borderRadius: 14,
+      border: nearMe ? `1.5px solid ${C.ocean}` : `1.5px solid ${C.fog}`,
+      background: nearMe ? C.ice : C.white,
+      cursor: "pointer", transition: "all 0.2s",
+    }}>
+      <NavArrowIcon size={17} color={nearMe ? C.ocean : C.stone} />
+    </button>
+  );
+
   const nearMeNote = (geoStatus === "denied" || geoStatus === "unavailable") ? (
     <span style={{ fontFamily: "'EB Garamond', serif", fontStyle: "italic", fontSize: 12, color: C.mountain }}>
       {geoStatus === "denied"
@@ -8107,32 +8157,37 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
         // The "Near you" pill joins the list/map toggle on one line (list view
         // only — the map already centres on the located fix).
         const showNearMe = !showMap && anyCoords(allPlaces);
+        // Icon-only toggles (2026-06-10m): a bulleted-list glyph for List, a
+        // folded-map glyph for Map, and (appended) a navigation-arrow glyph for
+        // Near. Labels live in aria-label/title so the row stays wordless.
         const viewToggle = (
           <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
             {[
-              { key: "list", label: "Lista / List", enabled: true },
-              { key: "map", label: "🗺 Mapa / Map", enabled: online },
+              { key: "list", Icon: ListViewIcon, aria: "Lista / List view", enabled: true },
+              { key: "map", Icon: MapViewIcon, aria: "Mapa / Map view", enabled: online },
             ].map((opt) => {
               const active = (opt.key === "map" ? showMap : !showMap);
+              const iconColor = !opt.enabled ? C.fog : active ? C.ocean : C.stone;
               return (
                 <button
                   key={opt.key}
                   onClick={() => opt.enabled && setPlacesView(opt.key)}
                   className="bap-press"
                   disabled={!opt.enabled}
-                  title={!opt.enabled ? "Necesitás conexión / Needs connection" : undefined}
+                  aria-label={opt.aria}
+                  aria-pressed={active}
+                  title={!opt.enabled ? "Necesitás conexión / Needs connection" : opt.aria}
                   style={{
-                    padding: "5px 13px", borderRadius: 14,
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    padding: "6px 14px", minHeight: 34, borderRadius: 14,
                     border: active ? `1.5px solid ${C.ocean}` : `1.5px solid ${C.fog}`,
                     background: active ? C.ice : C.white,
-                    color: !opt.enabled ? C.fog : active ? C.ocean : C.stone,
-                    fontFamily: "'DM Mono', monospace", fontSize: 11.5, fontWeight: active ? 500 : 400,
-                    cursor: opt.enabled ? "pointer" : "not-allowed", transition: "all 0.2s", whiteSpace: "nowrap",
+                    cursor: opt.enabled ? "pointer" : "not-allowed", transition: "all 0.2s",
                   }}
-                >{opt.label}</button>
+                ><opt.Icon size={17} color={iconColor} /></button>
               );
             })}
-            {showNearMe && nearMeButton}
+            {showNearMe && nearMeIconButton}
           </div>
         );
 
