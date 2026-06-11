@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-11 — Mundial game-day treatment on Today (Argentina). When a `mundial`-typed Calendar event dated today has a title containing 'Argentina' (e.g. 'Mundial: 🇦🇷 Argentina vs Austria 🇦🇹'), the Today tab puts on the albiceleste jersey. (1) Greeting strip: celeste-forward gradient (still ending in Pep Blue so the white text keeps contrast), a rotating Sol de Mayo in place of the sun, drifting papelitos (celeste/white/gold) over it, and the mono label flips to '¡Hoy juega Argentina! / Game day'; personalized greeting + date unchanged. (2) New <MundialGameTile> hero rendered between the greeting strip and the weather/dólar row: jersey-stripe background, an oversized number-10 watermark, the matchup with flags, a live 'Arranca en X' kickoff countdown from the row's start_time (falls back to '¡En cancha!' after kickoff), tap jumps to Schedule (where the game also shows in the Weekly Overview via visibility: week). New helpers getArgentinaGameForDate(data, dateStr) / cleanMundialTitle(title); new glyph <SolDeMayoIcon> (32-ray flag sun with a face, rays generated in a loop) and <Papelitos> (fixed-config confetti, stable across the minute-tick) + a bap-papel-fall keyframe. All motion honors prefers-reduced-motion (papelitos hidden, Sol de Mayo static; the gradient skin + tile still render). Detection is a title-match over the Calendar data the Director already maintains, so NO schema change, NO CACHE_VERSION bump (stays 7), no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1449,6 +1449,35 @@ const EVENT_STYLES = {
   mundial:     { bg: "#FFF8E1", border: "#F9A825", icon: "⚽", label: "Mundial" },
 };
 
+// ── Mundial (World Cup) game-day detection ──
+// When Argentina plays, the Today tab puts on the albiceleste jersey:
+// the greeting strip gets a celeste-forward skin with a Sol de Mayo and
+// drifting papelitos, and a festive game tile surfaces above the fold.
+// No schema change drives this — it reads the Calendar data the Director
+// already maintains. Any `mundial`-typed event dated today whose title
+// mentions "Argentina" (e.g. "Mundial: 🇦🇷 Argentina vs Austria 🇦🇹")
+// triggers the treatment; kickoff comes from the row's `start_time`.
+function getArgentinaGameForDate(data, dateStr) {
+  if (!dateStr) return null;
+  const events = (data && data.calendarEvents) || [];
+  // Mundial games are single-day, so match on the start date directly.
+  const game = events.find((e) =>
+    String(e.type || "").toLowerCase() === "mundial" &&
+    String(e.date || "").slice(0, 10) === dateStr &&
+    /argentina/i.test(e.title || "")
+  );
+  return game || null;
+}
+
+// Strip a leading "Mundial:" / "Mundial –" label from the matchup title.
+// The game tile already says "Mundial" in its own caption, so the prefix
+// would just be redundant; the flags and "Argentina vs X" are what we
+// want to show. Leaves a flag-led title like "🇦🇷 Argentina vs Austria 🇦🇹"
+// intact when there's no prefix to strip.
+function cleanMundialTitle(title) {
+  return String(title || "").replace(/^\s*mundial\s*[:\-–·]\s*/i, "").trim();
+}
+
 function formatDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
@@ -1801,6 +1830,75 @@ function SunIcon({ size = 36 }) {
         <line x1="19" y1="45" x2="13" y2="51" />
       </g>
     </svg>
+  );
+}
+
+// Sol de Mayo — the sun at the center of the Argentine flag. Shown in
+// place of the rotating SunIcon on the greeting strip when Argentina
+// plays in the Mundial. Gold disc + a face + two interleaved rings of
+// straight rays (16 long + 16 short) approximating the flag's 32-ray
+// sun. Rays are generated in a loop so the geometry stays exact.
+function SolDeMayoIcon({ size = 64 }) {
+  const cx = 32, cy = 32;
+  const gold = "#F6B40E", face = "#B26B00";
+  const rays = [];
+  const N = 16;
+  for (let i = 0; i < N; i++) {
+    // Long straight ray
+    const aL = (i / N) * Math.PI * 2;
+    const lx = cx + Math.cos(aL) * 30, ly = cy + Math.sin(aL) * 30;
+    const b1x = cx + Math.cos(aL - 0.10) * 14, b1y = cy + Math.sin(aL - 0.10) * 14;
+    const b2x = cx + Math.cos(aL + 0.10) * 14, b2y = cy + Math.sin(aL + 0.10) * 14;
+    rays.push(`M ${b1x.toFixed(1)} ${b1y.toFixed(1)} L ${lx.toFixed(1)} ${ly.toFixed(1)} L ${b2x.toFixed(1)} ${b2y.toFixed(1)} Z`);
+    // Short ray, offset half a step between the long ones
+    const aS = ((i + 0.5) / N) * Math.PI * 2;
+    const sx = cx + Math.cos(aS) * 23, sy = cy + Math.sin(aS) * 23;
+    const c1x = cx + Math.cos(aS - 0.08) * 14, c1y = cy + Math.sin(aS - 0.08) * 14;
+    const c2x = cx + Math.cos(aS + 0.08) * 14, c2y = cy + Math.sin(aS + 0.08) * 14;
+    rays.push(`M ${c1x.toFixed(1)} ${c1y.toFixed(1)} L ${sx.toFixed(1)} ${sy.toFixed(1)} L ${c2x.toFixed(1)} ${c2y.toFixed(1)} Z`);
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      {rays.map((d, i) => <path key={i} d={d} fill={gold} />)}
+      <circle cx={cx} cy={cy} r="13" fill={gold} stroke={face} strokeWidth="1.2" />
+      <circle cx="28" cy="30" r="1.5" fill={face} />
+      <circle cx="36" cy="30" r="1.5" fill={face} />
+      <path d="M27 35 Q32 39 37 35" stroke={face} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Papelitos — the drifting paper confetti of a Bombonera matchday, in
+// the flag's celeste / white / gold. Rendered as a full-bleed overlay
+// inside the greeting strip on Argentina game days. Config is a fixed
+// array (not Math.random) so the pattern is stable across renders and
+// the minute-tick re-render doesn't reshuffle it. The whole layer is
+// hidden under prefers-reduced-motion via the .bap-papelitos rule.
+const PAPELITOS = [
+  { left: "6%",  w: 6, h: 9,  color: "#75AADB", delay: "0s",   dur: "5.2s" },
+  { left: "15%", w: 5, h: 8,  color: "#FFFFFF", delay: "1.6s", dur: "6.1s" },
+  { left: "24%", w: 7, h: 10, color: "#F6B40E", delay: "0.8s", dur: "4.8s" },
+  { left: "33%", w: 5, h: 7,  color: "#FFFFFF", delay: "2.7s", dur: "5.6s" },
+  { left: "42%", w: 6, h: 9,  color: "#75AADB", delay: "0.3s", dur: "6.4s" },
+  { left: "51%", w: 5, h: 8,  color: "#F6B40E", delay: "3.1s", dur: "5.0s" },
+  { left: "60%", w: 7, h: 10, color: "#FFFFFF", delay: "1.1s", dur: "5.9s" },
+  { left: "69%", w: 6, h: 9,  color: "#75AADB", delay: "2.2s", dur: "4.6s" },
+  { left: "78%", w: 5, h: 8,  color: "#F6B40E", delay: "0.6s", dur: "6.2s" },
+  { left: "87%", w: 6, h: 9,  color: "#FFFFFF", delay: "1.9s", dur: "5.3s" },
+  { left: "94%", w: 5, h: 7,  color: "#75AADB", delay: "3.4s", dur: "5.7s" },
+];
+
+function Papelitos() {
+  return (
+    <div className="bap-papelitos" aria-hidden="true">
+      {PAPELITOS.map((p, i) => (
+        <span key={i} style={{
+          position: "absolute", top: 0, left: p.left,
+          width: p.w, height: p.h, background: p.color,
+          borderRadius: 1, animationDelay: p.delay, animationDuration: p.dur,
+        }} />
+      ))}
+    </div>
   );
 }
 
@@ -3981,6 +4079,10 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
   const todayAnchor = new Date(now);
   todayAnchor.setHours(12, 0, 0, 0);
   const todayStr = toDateStr(todayAnchor);
+  // Mundial: is Argentina playing today? Drives the greeting-strip
+  // albiceleste skin and the game tile below. Cheap find over the
+  // calendar; recompute per render is fine.
+  const argGame = getArgentinaGameForDate(data, todayStr);
   const { items, holiday } = useMemo(
     () => getTodayItems(data, profile),
     [data, profile, todayStr]
@@ -4020,18 +4122,24 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
   const tip = tipList[tipIdx] || tipList[0];
 
   // ── Greeting strip ──
+  // On Argentina game days the strip puts on the jersey: a celeste-
+  // forward gradient (still ending in Pep Blue so the white text keeps
+  // its contrast), a rotating Sol de Mayo in place of the sun, and
+  // drifting papelitos. Everything else about the strip is unchanged.
+  const argGradient = "linear-gradient(135deg, #6CACE4 0%, #5795D6 38%, #0057B8 78%, #00205B 100%)";
   const greetingStrip = (
     <div style={{
-      background: gradient, color: "#FFFFFF", borderRadius: 16,
+      background: argGame ? argGradient : gradient, color: "#FFFFFF", borderRadius: 16,
       padding: "20px 20px 18px", marginBottom: 14, position: "relative",
       overflow: "hidden", boxShadow: "0 4px 16px rgba(0, 32, 91, 0.18)",
     }}>
-      <div className={isDayHour ? "bap-sun-rotate" : ""} style={{
-        position: "absolute", top: -10, right: -10, opacity: 0.22,
+      <div className={(argGame || isDayHour) ? "bap-sun-rotate" : ""} style={{
+        position: "absolute", top: -10, right: -10, opacity: argGame ? 0.36 : 0.22,
         transform: "scale(1.7)", transformOrigin: "center",
       }}>
-        {isDayHour ? <SunIcon size={64} /> : <MoonIcon size={64} />}
+        {argGame ? <SolDeMayoIcon size={64} /> : isDayHour ? <SunIcon size={64} /> : <MoonIcon size={64} />}
       </div>
+      {argGame && <Papelitos />}
       {/* Non-touch refresh affordance. The pull-to-refresh gesture is
           touch-only, so a desktop/keyboard/assistive-tech user (and the
           Director, who edits the sheet on a laptop) has no way to force a
@@ -4062,26 +4170,29 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
           </svg>
         </span>
       </button>
-      <div style={{
-        fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
-        letterSpacing: 2, color: C.bapBlue, marginBottom: 4,
-      }}>Hoy / Today</div>
-      <div lang="es" style={{
-        fontFamily: "'EB Garamond', serif", fontSize: 26, fontWeight: 700,
-        lineHeight: 1.05, letterSpacing: -0.4,
-      }}>{(() => {
-        // Prefer the preferred_name over first_name so a student
-        // who goes by "Cris" instead of "Cristina" sees the right
-        // greeting. Falls back to the bare greeting in preview
-        // mode (no SHEET_ID, currentUser is null) or for users
-        // whose roster row has no first/preferred name.
-        const userName = (currentUser && (currentUser.preferred_name || currentUser.first_name)) || "";
-        return userName ? `${greeting.es}, ${userName}` : greeting.es;
-      })()}</div>
-      <div lang="es" style={{
-        fontFamily: "'EB Garamond', serif", fontStyle: "italic",
-        fontSize: 16, color: C.fog, marginTop: 4,
-      }}>{dateLabel}</div>
+      <div style={{ position: "relative", zIndex: 2 }}>
+        <div lang="es" style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+          letterSpacing: 2, color: argGame ? "#FFFFFF" : C.bapBlue, marginBottom: 4,
+        }}>{argGame ? "¡Hoy juega Argentina! / Game day" : "Hoy / Today"}</div>
+        <div lang="es" style={{
+          fontFamily: "'EB Garamond', serif", fontSize: 26, fontWeight: 700,
+          lineHeight: 1.05, letterSpacing: -0.4,
+          textShadow: argGame ? "0 1px 3px rgba(0, 32, 91, 0.30)" : "none",
+        }}>{(() => {
+          // Prefer the preferred_name over first_name so a student
+          // who goes by "Cris" instead of "Cristina" sees the right
+          // greeting. Falls back to the bare greeting in preview
+          // mode (no SHEET_ID, currentUser is null) or for users
+          // whose roster row has no first/preferred name.
+          const userName = (currentUser && (currentUser.preferred_name || currentUser.first_name)) || "";
+          return userName ? `${greeting.es}, ${userName}` : greeting.es;
+        })()}</div>
+        <div lang="es" style={{
+          fontFamily: "'EB Garamond', serif", fontStyle: "italic",
+          fontSize: 16, color: C.fog, marginTop: 4,
+        }}>{dateLabel}</div>
+      </div>
     </div>
   );
 
@@ -4646,6 +4757,7 @@ function TodayView({ data, onJumpToTab, profile, currentUser, onRefreshData, pro
         }}
       >
         {greetingStrip}
+        <MundialGameTile data={data} todayStr={todayStr} now={now} onJumpToTab={onJumpToTab} />
         <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
           {weatherTile}
           {dolarTile}
@@ -6276,6 +6388,94 @@ function formatFinalsWindow(startStr, endStr) {
 
 // ─── Today tile: Finals coming up ───
 //
+// Game-day hero tile for the Today dashboard. Surfaces only when
+// Argentina plays in the Mundial today (a `mundial`-typed calendar
+// event dated today whose title mentions Argentina). Jersey stripes,
+// a number-10 watermark, the matchup, and a live kickoff countdown
+// driven by the row's start_time. Tap jumps to the Schedule tab, where
+// the game also appears in the Weekly Overview (visibility: week).
+function MundialGameTile({ data, todayStr, now, onJumpToTab }) {
+  const game = getArgentinaGameForDate(data, todayStr);
+  if (!game) return null;
+
+  const matchup = cleanMundialTitle(game.title) || "¡Vamos, Argentina!";
+  const kickoffMin = toMinutes(game.start_time);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const countdown = kickoffMin != null ? formatCountdown(kickoffMin, nowMin) : null;
+
+  // Status pill: counting down before kickoff, "in play" after, and a
+  // generic rally cry when no kickoff time is on the row.
+  let pillEs, pillEn;
+  if (countdown) { pillEs = `Arranca ${countdown}`; pillEn = "Kickoff soon"; }
+  else if (kickoffMin != null && nowMin >= kickoffMin) { pillEs = "¡En cancha!"; pillEn = "In play"; }
+  else { pillEs = "¡Vamos!"; pillEn = "Today"; }
+
+  const stripes = "repeating-linear-gradient(90deg, rgba(117,170,219,0.16) 0 13px, rgba(255,255,255,0) 13px 26px)";
+
+  return (
+    <button
+      onClick={() => { if (onJumpToTab) onJumpToTab("schedule"); }}
+      className="bap-press"
+      aria-label={`Mundial: ${matchup}. ${pillEs}`}
+      style={{
+        position: "relative", overflow: "hidden",
+        background: C.white, border: "1px solid #9FC4E8", borderRadius: 14,
+        padding: "13px 15px 15px", marginBottom: 14, cursor: "pointer",
+        width: "100%", textAlign: "left", font: "inherit", display: "block",
+        boxShadow: "0 3px 12px rgba(0, 87, 184, 0.10)",
+      }}
+    >
+      <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: stripes, zIndex: 0 }} />
+      <div aria-hidden="true" style={{
+        position: "absolute", right: 8, bottom: -16, zIndex: 0,
+        fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 78,
+        lineHeight: 1, color: "#75AADB", opacity: 0.18, pointerEvents: "none",
+      }}>10</div>
+
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div lang="es" style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase",
+            letterSpacing: 1.4, color: C.ocean,
+            display: "inline-flex", alignItems: "center", gap: 5,
+          }}>
+            <span aria-hidden="true">⚽</span> Hoy juega Argentina · Mundial
+          </div>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.ocean }}>
+            Ver →
+          </span>
+        </div>
+
+        <div style={{
+          fontFamily: "'EB Garamond', serif", fontSize: 20, fontWeight: 700,
+          color: C.pepBlack, lineHeight: 1.12,
+        }}>{matchup}</div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9, flexWrap: "wrap" }}>
+          <span lang="es" style={{
+            background: C.pepBlue, color: C.white,
+            fontFamily: "'DM Mono', monospace", fontSize: 12,
+            padding: "4px 10px", borderRadius: 8, whiteSpace: "nowrap",
+          }}>{pillEs}</span>
+          {game.start_time ? (
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: C.mountain }}>
+              {game.start_time}{game.end_time ? `–${game.end_time}` : ""}
+            </span>
+          ) : null}
+        </div>
+
+        {game.description ? (
+          <div style={{
+            fontFamily: "'Roboto', sans-serif", fontSize: 12.5,
+            color: C.mountain, marginTop: 8, lineHeight: 1.35,
+            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>{game.description}</div>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
 // Compact preview that appears on the Today dashboard 14 days before
 // the program-wide finals window starts (or as soon as any enrolled
 // class has a final_date assigned). Tapping the tile jumps to the
@@ -10596,6 +10796,12 @@ export default function App() {
           0%   { opacity: 0; transform: translate(-50%, 12px); }
           100% { opacity: 1; transform: translate(-50%, 0); }
         }
+        @keyframes bap-papel-fall {
+          0%   { transform: translateY(-16px) rotate(0deg);    opacity: 0; }
+          12%  { opacity: 0.92; }
+          88%  { opacity: 0.92; }
+          100% { transform: translateY(150px) rotate(220deg);  opacity: 0; }
+        }
         .bap-toast-in { animation: bap-toast-in 260ms cubic-bezier(0.4, 0, 0.2, 1); }
         .bap-pulse-dot {
           width: 6px; height: 6px; border-radius: 50%;
@@ -10620,6 +10826,15 @@ export default function App() {
           animation: bap-steam 3.5s ease-in-out infinite;
         }
         .bap-steam.delayed { animation-delay: 1.7s; }
+        .bap-papelitos {
+          position: absolute; inset: 0; overflow: hidden;
+          pointer-events: none; z-index: 1;
+        }
+        .bap-papelitos > span {
+          animation-name: bap-papel-fall;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+        }
         .bap-tip-text { transition: opacity 0.3s ease-in-out; }
         .bap-tip-text.fading { opacity: 0; }
         .bap-press {
@@ -10662,6 +10877,7 @@ export default function App() {
           .bap-toast-in  { animation: none; }
           .bap-sun-rotate { animation: none; }
           .bap-steam     { animation: none; }
+          .bap-papelitos { display: none; }
         }
       `;
       document.head.appendChild(style);
