@@ -161,7 +161,7 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
       const discEl = makeDiscEl({ size: 28, bg: color, ringColor: "#fff", ringWidth: 2 });
       if (p._Icon) {
         const root = createRoot(discEl);
-        root.render(createElement(p._Icon, { size: 15, color: "#fff" }));
+        root.render(createElement(p._Icon, { size: 15, color: p._glyphInk || "#fff" }));
         roots.push(root);
       }
       const marker = L.marker([p.lat, p.lng], {
