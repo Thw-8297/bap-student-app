@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-11b — PWA auto-update reliability on installed Android PWAs. Added an app-level useEffect (top of <App>, runs once on mount) that forces a service-worker update check — navigator.serviceWorker.getRegistration().then(reg => reg.update()) — on every visibilitychange→visible (app regains focus), plus an hourly setInterval backstop and once on mount. Closes the gap where an installed Android PWA, resumed from background without a real navigation, never re-checked the worker script, so a freshly deployed build sat undetected (the '24h-cold open showed stale content until a double hard-close' report). DETECT-ONLY by design: we do NOT reload the page on update (no controllerchange-driven reload), so a session is never interrupted mid-task — the activated new worker's build simply shows on the student's next cold launch. The SW itself is unchanged (vite.config.js still registerType:'autoUpdate' + skipWaiting + clientsClaim); this only triggers the check more often. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11 — Mundial game-day treatment on Today (Argentina). When a `mundial`-typed Calendar event dated today has a title containing 'Argentina' (e.g. 'Mundial: 🇦🇷 Argentina vs Austria 🇦🇹'), the Today tab puts on the albiceleste jersey. (1) Greeting strip: celeste-forward gradient (still ending in Pep Blue so the white text keeps contrast), a rotating Sol de Mayo in place of the sun, drifting papelitos (celeste/white/gold) over it, and the mono label flips to '¡Hoy juega Argentina! / Game day'; personalized greeting + date unchanged. (2) New <MundialGameTile> hero rendered between the greeting strip and the weather/dólar row: jersey-stripe background, an oversized number-10 watermark, the matchup with flags, a live 'Arranca en X' kickoff countdown from the row's start_time (falls back to '¡En cancha!' after kickoff), tap jumps to Schedule (where the game also shows in the Weekly Overview via visibility: week). New helpers getArgentinaGameForDate(data, dateStr) / cleanMundialTitle(title); new glyph <SolDeMayoIcon> (32-ray flag sun with a face, rays generated in a loop) and <Papelitos> (fixed-config confetti, stable across the minute-tick) + a bap-papel-fall keyframe. All motion honors prefers-reduced-motion (papelitos hidden, Sol de Mayo static; the gradient skin + tile still render). Detection is a title-match over the Calendar data the Director already maintains, so NO schema change, NO CACHE_VERSION bump (stays 7), no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-13 — Add-to-calendar (.ics) export on Calendar-tab events + assigned Finals rows, plus a reduced-motion fix for inline transitions (BottomSheet slide/backdrop, FAQ + finals chevrons, settings toggle thumb) via a new useReducedMotion hook. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11b — PWA auto-update reliability on installed Android PWAs. Added an app-level useEffect (top of <App>, runs once on mount) that forces a service-worker update check — navigator.serviceWorker.getRegistration().then(reg => reg.update()) — on every visibilitychange→visible (app regains focus), plus an hourly setInterval backstop and once on mount. Closes the gap where an installed Android PWA, resumed from background without a real navigation, never re-checked the worker script, so a freshly deployed build sat undetected (the '24h-cold open showed stale content until a double hard-close' report). DETECT-ONLY by design: we do NOT reload the page on update (no controllerchange-driven reload), so a session is never interrupted mid-task — the activated new worker's build simply shows on the student's next cold launch. The SW itself is unchanged (vite.config.js still registerType:'autoUpdate' + skipWaiting + clientsClaim); this only triggers the check more often. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11 — Mundial game-day treatment on Today (Argentina). When a `mundial`-typed Calendar event dated today has a title containing 'Argentina' (e.g. 'Mundial: 🇦🇷 Argentina vs Austria 🇦🇹'), the Today tab puts on the albiceleste jersey. (1) Greeting strip: celeste-forward gradient (still ending in Pep Blue so the white text keeps contrast), a rotating Sol de Mayo in place of the sun, drifting papelitos (celeste/white/gold) over it, and the mono label flips to '¡Hoy juega Argentina! / Game day'; personalized greeting + date unchanged. (2) New <MundialGameTile> hero rendered between the greeting strip and the weather/dólar row: jersey-stripe background, an oversized number-10 watermark, the matchup with flags, a live 'Arranca en X' kickoff countdown from the row's start_time (falls back to '¡En cancha!' after kickoff), tap jumps to Schedule (where the game also shows in the Weekly Overview via visibility: week). New helpers getArgentinaGameForDate(data, dateStr) / cleanMundialTitle(title); new glyph <SolDeMayoIcon> (32-ray flag sun with a face, rays generated in a loop) and <Papelitos> (fixed-config confetti, stable across the minute-tick) + a bap-papel-fall keyframe. All motion honors prefers-reduced-motion (papelitos hidden, Sol de Mayo static; the gradient skin + tile still render). Detection is a title-match over the Calendar data the Director already maintains, so NO schema change, NO CACHE_VERSION bump (stays 7), no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -1027,6 +1027,34 @@ function activeAnnouncementKeys(announcements, todayStr) {
 }
 
 // ============================================================
+// REDUCED-MOTION HOOK
+// Reads the user's reduced-motion preference at runtime so inline
+// transition styles (which can't be reached by the CSS @media block)
+// can be gated the same way as class-based animations.
+// ============================================================
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(prefersReducedMotion);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReduced(mq.matches);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+  return reduced;
+}
+
+// ============================================================
 // PROMPTS CACHE — Per-student form definitions + responses
 // Lives at its own localStorage key (bap-prompts-cache), separate
 // from the content-data cache and the user record. The cache is
@@ -1573,6 +1601,208 @@ function countDays(startDate, endDate) {
   const s = new Date(startDate + "T12:00:00");
   const e = new Date(endDate + "T12:00:00");
   return Math.round((e - s) / 86400000) + 1;
+}
+
+// ============================================================
+// ICS / ADD-TO-CALENDAR HELPERS
+// Generates a standards-compliant single-VEVENT .ics file and
+// triggers a browser download. Buenos Aires is a constant GMT-3
+// (no DST), so we hard-code +3h to convert local to UTC.
+// ============================================================
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+// RFC5545 text escaping: \, ; , and newline
+function icsEscape(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
+// Format a Date as YYYYMMDDTHHMMSSZ (UTC)
+function icsUtcStamp(d) {
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}` +
+    `T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+}
+
+// Parse YYYY-MM-DD → { y, m, d }
+function parseYMD(dateStr) {
+  const parts = dateStr.split("-").map(Number);
+  return { y: parts[0], m: parts[1], d: parts[2] };
+}
+
+// Add 1 day to a YYYY-MM-DD string (handles month/year rollover)
+function nextDayStr(dateStr) {
+  const { y, m, d } = parseYMD(dateStr);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+}
+
+// Format a YYYY-MM-DD as an ICS DATE value (no time)
+function icsDate(dateStr) {
+  return dateStr.replace(/-/g, "");
+}
+
+// Build a UTC timestamp from a BA local date + minutes-since-midnight
+// BA is GMT-3 (constant), so UTC = local + 3h.
+function icsUtcFromBAMinutes(dateStr, minutes) {
+  const { y, m, d } = parseYMD(dateStr);
+  const hh = Math.floor(minutes / 60);
+  const mm = minutes % 60;
+  const utc = new Date(Date.UTC(y, m - 1, d, hh + 3, mm, 0));
+  return icsUtcStamp(utc);
+}
+
+// Build a full VCALENDAR string for one event.
+//   allDay: true  → DTSTART;VALUE=DATE / DTEND;VALUE=DATE (endDateStr = exclusive last day)
+//   allDay: false → DTSTART/DTEND as UTC timestamps (startMin/endMin in minutes)
+function buildEventIcs({ uid, title, description, location, allDay, startDateStr, endDateStr, startMin, endMin }) {
+  const now = icsUtcStamp(new Date());
+  const crlf = "\r\n";
+  const sum = icsEscape(title || "");
+  const desc = description ? `DESCRIPTION:${icsEscape(description)}${crlf}` : "";
+  const loc  = location  ? `LOCATION:${icsEscape(location)}${crlf}` : "";
+  let dtStart, dtEnd;
+  if (allDay) {
+    dtStart = `DTSTART;VALUE=DATE:${icsDate(startDateStr)}`;
+    dtEnd   = `DTEND;VALUE=DATE:${icsDate(endDateStr)}`;
+  } else {
+    dtStart = `DTSTART:${icsUtcFromBAMinutes(startDateStr, startMin)}`;
+    dtEnd   = `DTEND:${icsUtcFromBAMinutes(endDateStr ?? startDateStr, endMin ?? startMin + 60)}`;
+  }
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Buenos Aires Program//BAP App//EN",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${now}`,
+    dtStart,
+    dtEnd,
+    `SUMMARY:${sum}`,
+    desc.trimEnd(),
+    loc.trimEnd(),
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].filter(Boolean).join(crlf) + crlf;
+}
+
+// Slugify a title for a safe filename
+function slugifyForFilename(name) {
+  return String(name || "event")
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .trim()
+    .replace(/[\s-]+/g, "-")
+    .slice(0, 60) || "event";
+}
+
+function downloadIcs(filename, icsString) {
+  try {
+    const blob = new Blob([icsString], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (_) { /* non-critical */ }
+}
+
+// Build + download ICS for a Calendar-tab event row
+function downloadCalendarEventIcs(e) {
+  const uid = `bap-cal-${djb2((e.title || "") + (e.date || ""))}@baprogram.vercel.app`;
+  const startMin = toMinutes(e.start_time);
+  if (startMin !== null) {
+    // Timed event
+    const endMin = toMinutes(e.end_time) ?? startMin + 60;
+    const ics = buildEventIcs({
+      uid, title: e.title, description: e.description || "", location: "",
+      allDay: false, startDateStr: e.date, startMin, endMin,
+    });
+    downloadIcs(slugifyForFilename(e.title) + ".ics", ics);
+  } else {
+    // All-day (possibly multi-day)
+    const exclusiveEnd = nextDayStr(e.end_date || e.date);
+    const ics = buildEventIcs({
+      uid, title: e.title, description: e.description || "", location: "",
+      allDay: true, startDateStr: e.date, endDateStr: exclusiveEnd,
+    });
+    downloadIcs(slugifyForFilename(e.title) + ".ics", ics);
+  }
+}
+
+// Build + download ICS for a Finals row
+function downloadFinalIcs(f) {
+  const uid = `bap-final-${djb2((f.code || "") + (f.final_date || ""))}@baprogram.vercel.app`;
+  const title = `Final · ${f.code} ${f.title}`;
+  const description = "Examen final / Final exam";
+  const location = f.location || "";
+
+  if (f.final_time) {
+    // Try to parse the time range (e.g. "9:00–11:00", "14:00")
+    // Split on en-dash or hyphen
+    const parts = f.final_time.split(/[–-]/);
+    const startMin = toMinutes(parts[0] ? parts[0].trim() : "");
+    if (startMin !== null) {
+      const endMin = parts[1] ? (toMinutes(parts[1].trim()) ?? startMin + 60) : startMin + 60;
+      const ics = buildEventIcs({
+        uid, title, description, location,
+        allDay: false, startDateStr: f.final_date, startMin, endMin,
+      });
+      downloadIcs(slugifyForFilename(title) + ".ics", ics);
+      return;
+    }
+  }
+  // Fallback: all-day
+  const exclusiveEnd = nextDayStr(f.final_date);
+  const ics = buildEventIcs({
+    uid, title, description, location,
+    allDay: true, startDateStr: f.final_date, endDateStr: exclusiveEnd,
+  });
+  downloadIcs(slugifyForFilename(title) + ".ics", ics);
+}
+
+// ─── Calendar Plus icon ───
+function CalendarPlusIcon({ size = 15, color = C.ocean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+      <line x1="12" y1="14" x2="12" y2="18"/>
+      <line x1="10" y1="16" x2="14" y2="16"/>
+    </svg>
+  );
+}
+
+// Compact "Add to calendar" pill — reusable for Calendar events and Finals rows
+function AddToCalendarButton({ onClick }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      aria-label="Agendar / Add to calendar"
+      title="Agendar / Add to calendar"
+      className="bap-press"
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        fontFamily: "'DM Mono', monospace", fontSize: 10.5,
+        color: C.ocean, background: C.ice,
+        border: `1px solid ${C.fog}`,
+        borderRadius: 8, padding: "3px 9px",
+        cursor: "pointer", flexShrink: 0,
+      }}
+    >
+      <CalendarPlusIcon size={13} color={C.ocean} />
+      Agendar
+    </button>
+  );
 }
 
 // ============================================================
@@ -3198,6 +3428,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
   const [show, setShow] = useState(open);
   const [animateIn, setAnimateIn] = useState(false);
   const sheetRef = useRef(null);
+  const reduced = useReducedMotion();
   // Focus-trap + Escape + focus-return. Keyed on `show` so focus moves in
   // when the sheet mounts and returns to the trigger when it unmounts.
   useDialogA11y(sheetRef, { open: show, onClose });
@@ -3251,7 +3482,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
         position: "fixed", inset: 0,
         background: animateIn ? "rgba(29, 37, 45, 0.55)" : "rgba(29, 37, 45, 0)",
         zIndex: 200,
-        transition: "background 0.26s ease-out",
+        transition: reduced ? "none" : "background 0.26s ease-out",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
@@ -3264,7 +3495,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
           borderRadius: "20px 20px 0 0",
           maxHeight: "92vh", display: "flex", flexDirection: "column",
           transform: animateIn ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+          transition: reduced ? "none" : "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
           boxShadow: "0 -8px 28px rgba(0, 32, 91, 0.20)",
           overflow: "hidden", outline: "none",
         }}
@@ -5902,6 +6133,9 @@ function CalendarView({ data }) {
                             {countDays(e.date, e.end_date)} days
                           </div>
                         )}
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                          <AddToCalendarButton onClick={() => downloadCalendarEventIcs(e)} />
+                        </div>
                       </div>
                     </div>
                   </Fragment>
@@ -6487,6 +6721,7 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
   // doesn't crowd the Today dashboard with exam rows the student isn't
   // actively checking.
   const [open, setOpen] = useState(false);
+  const reduced = useReducedMotion();
   // Memoize the heavy derivations on the calendar day (not on `now` itself),
   // so the 1-minute clock tick doesn't re-run the full class scan + sort
   // + days-until math every tick. data/profile are stable refs from App.
@@ -6535,7 +6770,7 @@ function TodayFinalsTile({ data, profile, now, onJumpToTab }) {
             {finals.length}{winLabel ? ` · ${winLabel}` : ""}
           </span>
           <span aria-hidden="true" style={{
-            transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: reduced ? "none" : "transform 0.2s",
             fontSize: 12, color: C.mountain,
           }}>▼</span>
         </span>
@@ -6608,6 +6843,8 @@ function FinalsCard({ data, profile, today }) {
   // Collapsed by default — pinned above the Schedule sub-tabs as a quiet
   // header the student expands when they want exam dates/times.
   const [open, setOpen] = useState(false);
+  const reduced = useReducedMotion();
+  // Early-returns must come after all hook calls (Rules of Hooks).
   if (!shouldShowFinalsUI(data, profile, today)) return null;
   const finals = getStudentFinals(data, profile);
   if (finals.length === 0) return null;
@@ -6650,7 +6887,7 @@ function FinalsCard({ data, profile, today }) {
             }}>{winLabel}</span>
           )}
           <span aria-hidden="true" style={{
-            transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: reduced ? "none" : "transform 0.2s",
             fontSize: 12, color: C.mountain,
           }}>▼</span>
         </span>
@@ -6708,6 +6945,11 @@ function FinalsCard({ data, profile, today }) {
                     fontFamily: "'Roboto', sans-serif", fontSize: 11.5,
                     color: C.mountain, marginTop: 2,
                   }}>{f.location}</div>
+                )}
+                {hasDate && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                    <AddToCalendarButton onClick={() => downloadFinalIcs(f)} />
+                  </div>
                 )}
               </div>
             </div>
@@ -8538,6 +8780,7 @@ function SearchInput({ value, onChange, placeholder, ariaLabel }) {
 function FaqView({ data }) {
   const [open, setOpen] = useState(null);
   const [query, setQuery] = useState("");
+  const reduced = useReducedMotion();
 
   // Filter on title + content, case-insensitive. Original index is kept
   // as the stable key for `open` so filtering doesn't reshuffle which
@@ -8572,7 +8815,7 @@ function FaqView({ data }) {
             fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 16, color: C.pepBlue, textAlign: "left",
           }}>
             {p.title}
-            <span aria-hidden="true" style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12, color: C.mountain }}>▼</span>
+            <span aria-hidden="true" style={{ transform: open === i ? "rotate(180deg)" : "rotate(0deg)", transition: reduced ? "none" : "transform 0.2s", fontSize: 12, color: C.mountain }}>▼</span>
           </button>
           {open === i && (
             <div style={{ padding: "0 16px 14px", fontSize: 14, color: C.mountain, fontFamily: "'Roboto', sans-serif", lineHeight: 1.7, whiteSpace: "pre-line" }}>
@@ -8900,6 +9143,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
   // drives the in-app ConfirmDialog that replaced the native window.confirm.
   const cardRef = useRef(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const reduced = useReducedMotion();
   useDialogA11y(cardRef, { open, onClose });
   if (!open) return null;
 
@@ -9102,14 +9346,14 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
                 width: 48, height: 28, borderRadius: 14,
                 background: profile.filterEnabled ? C.ocean : C.fog,
                 border: "none", cursor: "pointer", position: "relative",
-                transition: "background 0.18s ease-out", flexShrink: 0,
+                transition: reduced ? "none" : "background 0.18s ease-out", flexShrink: 0,
               }}
             >
               <span style={{
                 position: "absolute", top: 3, left: profile.filterEnabled ? 23 : 3,
                 width: 22, height: 22, borderRadius: "50%", background: C.white,
                 boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                transition: "left 0.18s ease-out",
+                transition: reduced ? "none" : "left 0.18s ease-out",
               }} />
             </button>
           </div>
