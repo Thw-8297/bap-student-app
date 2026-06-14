@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#00205B" />
@@ -20,6 +20,18 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: sans-serif; background: #F5F3F0; }
+      /* iOS safe-area knobs (review backlog Tier 4 #12). Two tuning levers:
+         --safe-top drives the header/gear/overlay-header top offset;
+         --bap-nav-pad-bottom drives the bottom nav reservation (intentionally
+         smaller than the full home-indicator inset, which read as over-padded)
+         and everything anchored to the bottom. Defined at parse time so
+         var()s resolve before first paint. On non-notched / non-iOS the
+         env()s are 0, so max(16px, ...) preserves the prior flat layout. */
+      :root {
+        --safe-top: env(safe-area-inset-top);
+        --safe-bottom: env(safe-area-inset-bottom);
+        --bap-nav-pad-bottom: max(16px, calc(env(safe-area-inset-bottom) - 10px));
+      }
     </style>
   </head>
   <body>
