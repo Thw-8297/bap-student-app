@@ -11810,8 +11810,16 @@ export default function App() {
 
       {/* Bottom nav */}
       <nav ref={navRef} aria-label="Secciones / Sections" style={{
-        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+        // Centered via left/right/margin rather than translateX: a transform on a
+        // position:fixed element is an iOS gotcha that can make bottom:0 anchor to
+        // the safe-area inset instead of the true screen bottom, leaving the page
+        // background showing through the home-indicator zone. The downward white
+        // box-shadow is a self-correcting safe-area filler: it paints white below
+        // the nav to cover that zone if any gap remains, and renders harmlessly
+        // off-screen if bottom:0 already reaches the physical bottom.
+        position: "fixed", bottom: 0, left: 0, right: 0, margin: "0 auto",
         width: "100%", maxWidth: 480, background: C.white,
+        boxShadow: `0 60px 0 0 ${C.white}`,
         borderTop: `1px solid ${C.fog}`, display: "flex", justifyContent: "space-around",
         padding: "8px 0 var(--bap-nav-pad-bottom)", zIndex: 100,
       }}>
