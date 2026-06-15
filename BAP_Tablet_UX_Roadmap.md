@@ -12,7 +12,7 @@ Six Director decisions are now locked (see Section 2; three from v1, three added
 
 The phased plan is restructured accordingly:
 
-- **Phase 0 (ships to `main`):** Unlock orientation globally, add iPhone-landscape horizontal safe-area padding, keep phones portrait-shaped, re-verify the recently reworked bottom nav. This is a safety baseline, not a tablet feature. It must land before any other phase because the manifest change is global.
+- **Phase 0 (ships to `main`):** Unlock orientation globally, keep phones portrait-shaped, re-verify the recently reworked bottom nav in landscape. This is a safety baseline, not a tablet feature. It must land before any other phase because the manifest change is global. (Note: the horizontal safe-area padding originally scoped here was moved to Phase 1; see "iPhone landscape horizontal safe-area" in Section 6 for why it is a no-op, or actively wrong, while the layout is a centered narrow column.)
 - **Phase 1 (branch + mockup sign-off, iPad-first centerpiece):** The side-navigation rail. The rail activates ONLY in landscape orientation with enough width; portrait iPad keeps the bottom nav. Rail color is navy (Pep Blue). Aspect-ratio-and-orientation-aware breakpoint hook; left rail replacing the bottom nav at landscape tablet widths; widened content pane with text-measure caps; all concrete bugs fixed (FAB formula, PlacesMap resize observer and height cap, overlay widths, pointer-device hover); Director dashboards widened. This is the identity-touching change. Code only starts after a design mockup has been reviewed and the Director has signed off.
 - **Phase 2 (branch, per-view, follows Phase 1):** Master-detail layouts on top of the rail: Local list plus Leaflet map side by side (2a); Calendar month plus day detail (2b); Schedule week list plus day detail (2c, lowest confidence, design must be validated at mockup stage before code).
 
@@ -264,13 +264,13 @@ The map height is `min(68vh, 520px)`. On an iPad in landscape (~768 pt tall), 68
 **Bug 5 — Overlay and toast widths fixed at 480/448 px.**
 `<BottomSheet>` (`maxWidth: 480`), `<ProfileModal>` (`maxWidth: 480`), `<DirectorResponsesView>` (`maxWidth: 480`), `<DirectorPlacesView>` (`maxWidth: 480`), and `<PlaceToast>` (`maxWidth: 448`) are all hardcoded to phone widths. At tablet breakpoints these look like narrow strips centered in a wide screen. Fix: overlay widths track the active content-pane width. In the rail layout, BottomSheets become centered dialogs or right-side drawers (see Section 5), so their `maxWidth` is replaced by dialog-specific sizing.
 
-### iPhone landscape horizontal safe-area (Phase 0 requirement)
+### iPhone landscape horizontal safe-area (deferred to Phase 1)
 
-`viewport-fit=cover` is already in the `index.html` viewport meta (added 2026-06-13c). The safe-area top and bottom are already consumed via `--safe-top` and `--bap-nav-pad-bottom`. However, there is currently **no horizontal safe-area padding**. On a notched iPhone in landscape, the camera housing is on the left (or right, depending on orientation), and content can clip behind it.
+`viewport-fit=cover` is already in the `index.html` viewport meta (added 2026-06-13c). The safe-area top and bottom are already consumed via `--safe-top` and `--bap-nav-pad-bottom`. There is currently no horizontal safe-area padding.
 
-Phase 0 must add `padding-left: max(0px, env(safe-area-inset-left))` and `padding-right: max(0px, env(safe-area-inset-right))` to the root shell and, importantly, to the content div. On an iPad these `env()` values return 0; on a portrait iPhone they return 0 (notch is at the top, not the side); on a landscape iPhone with a notch or Dynamic Island they return the inset width (typically ~44–59 px). The `max(0px, ...)` guard makes the expression a no-op everywhere except the cases it needs to protect.
+This was originally scoped into Phase 0 on the theory that unlocking landscape would expose a clip-behind-the-notch bug. On closer reading of the layout, that does not happen while the app is a centered narrow column, and adding the padding now would be actively wrong. The root shell is `maxWidth: 480, margin: 0 auto` (App.jsx). On a landscape iPhone (~932 pt wide), the 480 pt column is centered with roughly 226 pt of margin on each side, so the camera housing (inset ~44-59 pt from the screen edge) sits in the empty margin, not over content; nothing clips. Adding `padding-left: env(safe-area-inset-left)` to the inner content div in that state would shove content ~47 pt inward on one side, asymmetrically, flipping with rotation direction; that is a visible regression, not a fix.
 
-This horizontal padding must ship in the same commit as the manifest orientation change in Phase 0. Unlocking landscape without the horizontal safe-area guard would expose the clip bug immediately.
+Horizontal safe-area padding becomes correct (and necessary) only once content actually reaches the screen edge, which is the wider-column and rail layouts in Phase 1. It is therefore part of Phase 1, applied at the surfaces that go edge-to-edge, not a blanket padding on the centered column. Phase 0 ships the orientation unlock alone; the centered column already does not clip in landscape.
 
 ### Bottom nav regression surface
 
@@ -291,16 +291,17 @@ The `100vh` behavior in iPad Safari browser-tab (where the address bar consumes 
 ### Phase 0: Orientation safety baseline (ships to `main`, no sign-off required)
 
 **What ships:**
-1. `manifest.json`: change `"orientation": "portrait"` to `"orientation": "any"`. One-line change.
-2. `index.html` and root shell: add horizontal safe-area padding (`padding-left/right: max(0px, env(safe-area-inset-left/right))`) to the root shell's content div. Without this, a notched iPhone in landscape clips content behind the camera housing.
-3. Re-verify the bottom nav on iPhone portrait (must be byte-identical; this is a zero-tolerance check) and on iPhone landscape (must not clip or break). Use Preview MCP for a first pass; then real-device verification on an iPhone before pushing to `main`.
-4. Note the iPad Safari browser-tab `100vh` address-bar quirk in testing notes; do not attempt to fix it.
+1. `manifest.json`: change `"orientation": "portrait"` to `"orientation": "any"`. One-line change. This is the entire code change in Phase 0.
+2. Re-verify the bottom nav on iPhone portrait (must be byte-identical; this is a zero-tolerance check) and on iPhone landscape (must not clip or break). Use Preview MCP for a first pass; then real-device verification on an iPhone before merging to `main`.
+3. Note the iPad Safari browser-tab `100vh` address-bar quirk in testing notes; do not attempt to fix it.
+
+(The horizontal safe-area padding originally listed here was moved to Phase 1; see the "iPhone landscape horizontal safe-area" subsection in Section 6. While the layout is a centered narrow column, the notch sits in the empty side margin, so the padding is unnecessary and, applied to the centered content div, would create a visible asymmetric inset in landscape.)
 
 **What does NOT change:** any visual layout, any column width, any component, any app logic, the service worker, `CACHE_VERSION`.
 
-**Effort:** S (1–2 hours coding, 1–2 hours on-device verification). These estimates are floors, not ceilings.
-**Risk:** Low. The orientation manifest change has zero visual impact; it just permits rotation where it was blocked for Android PWAs. The horizontal safe-area padding is a no-op on every device except a notched iPhone in landscape, which is the only surface being protected.
-**Shipping path:** Directly to `main` per the tiered shipping rules. A branch is still a good practice given the on-device verification step; merge to `main` once verified.
+**Effort:** S (one-line code change; the time is in on-device verification). These estimates are floors, not ceilings.
+**Risk:** Low. The orientation manifest change has zero visual impact; it just permits rotation where it was blocked for Android PWAs. The only thing to confirm is that landscape on an iPhone shows the centered column without breaking, which the layout already handles.
+**Shipping path:** Build on a branch, push for a Vercel preview, rotate-test a real iPhone and iPad against the preview, then merge to `main`. The change is low-risk but the whole point of Phase 0 is "landscape does not break," which only a real-device rotation confirms.
 **Android PWA note:** Existing Android PWA installs will not auto-unlock landscape rotation after the manifest update. Students would need to uninstall and reinstall the PWA. This is a known caveat of how PWA manifests work; it does not require any action.
 
 ---
@@ -336,7 +337,7 @@ The `100vh` behavior in iPad Safari browser-tab (where the address bar consumes 
 |---|---|
 | iPhone portrait, installed PWA | Bottom nav byte-identical; no regression; all tabs, overlays, FAB |
 | iPhone portrait, Safari browser-tab | Same as above |
-| iPhone landscape, installed PWA | Does not clip (horizontal safe-area); bottom nav visible; no layout break; hook returns `"phone"` |
+| iPhone landscape, installed PWA | Centered column does not break; notch sits in the side margin (no clip); bottom nav visible; hook returns `"phone"` |
 | iPad mini portrait, installed PWA | Bottom nav retained (NOT rail); wider single column; denser grids; hook returns `"tablet-portrait"` |
 | iPad mini landscape, installed PWA | Rail renders; accent bar slides; BottomSheets are dialogs; FAB in right position; hook returns `"tablet"` |
 | iPad regular landscape, installed PWA | Rail + wider content pane; PlacesMap tiles after rotate; text measure cap on FAQ; hook returns `"wide"` |

@@ -5,7 +5,7 @@
   "description": "Pepperdine University Buenos Aires Program — Student App",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "lang": "en",
   "categories": ["education"],
   "background_color": "#F5F3F0",
