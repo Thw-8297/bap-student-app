@@ -9,7 +9,7 @@ const PlacesMap = lazy(() => import("./PlacesMap.jsx"));
 // ============================================================
 // BUILD VERSION — Update each time a new build is generated
 // ============================================================
-const BUILD_VERSION = "2026-06-15 — Calendar add-to-calendar button is now icon-only: removed the 'Agendar' text label from <AddToCalendarButton>, keeping just the CalendarPlusIcon (icon bumped 13→15px, padding tightened to a square 5px/7px), with the bilingual 'Agendar / Add to calendar' aria-label + title retained so screen readers still announce it. Affects both call sites (Calendar-tab event rows and assigned Finals rows). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-14c — Shell height 100dvh → 100vh so the bottom nav reaches the physical screen bottom. With viewport-fit=cover on the installed iOS PWA, 100dvh was resolving to the safe-area height (excluding the home-indicator zone), so the flex column — and the in-flow nav pinned to its bottom — stopped ~34px short of the physical bottom, reading (with the white body backstop) as the nav floating high over a white strip. 100vh (the large viewport, = full screen in standalone) lets the column fill the screen so the nav sits at the true bottom with just its normal safe-area padding. Completes the 2026-06-14b in-flow-nav change. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-14b — Bottom-nav home-indicator fix (iOS): the bottom nav is now a normal in-flow flex child at the bottom of the 100dvh column instead of position:fixed. iOS wouldn't reliably paint a fixed element (or its box-shadow) into the home-indicator safe area, so the prior transform + box-shadow approach was non-deterministic (looked fixed after one reinstall, regressed on the next relaunch). In flow, the nav physically occupies the true bottom so its white background + safe-area bottom padding own the home indicator with no gap; content (flex:1) is the scroll container and its big nav-clearance bottom padding dropped (108px → 24px). body background → white as a sub-pixel backstop. App.jsx + index.html; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-14 — Greeting-strip polish: the Today refresh button now nests into the decorative sun (moved top:12/right:12 → top:5/right:5 so it centers on the sun, which sits ~22px from the top-right corner, and reads as the sun's disc with the rays radiating around it). SunIcon reworked from 8 straight pepBlue spokes on a blue dot into a Sol de Mayo–inspired form: 12 straight rays alternating with 12 wavy flame rays (S-curve quadratics), generated in a loop; rendered white/celeste (gold stays exclusive to the Mundial SolDeMayoIcon) with the day-watermark opacity bumped 0.22 → 0.3 so the new rays read around the button. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-13c — iOS safe-area insets (review backlog Tier 4 #12), shipped after two prior parked attempts. Tuned against a real Dynamic-Island standalone PWA (top 59 / bottom 34 / sides 0) using a temporary in-app env() readout, then removed. SAME-DAY FOLLOW-UP: fixed a home-indicator gap under the bottom nav — the fixed nav is now centered via left/right/margin instead of translateX (a transform on a position:fixed element made iOS anchor bottom:0 to the safe-area inset, letting the parchment page background show through the home-indicator zone) plus a downward white box-shadow as a self-correcting safe-area filler. index.html gets viewport-fit=cover + two parse-time :root tuning vars: --safe-top (env(safe-area-inset-top)) and --bap-nav-pad-bottom (max(16px, calc(env(safe-area-inset-bottom) - 10px)) — deliberately LESS than the full home-indicator inset, which read over-padded). The fix the two prior attempts missed is decoupling: the header + the 3 full-screen overlay headers bleed the navy gradient the full top inset behind the status bar (padding-top max(16px, var(--safe-top))) while the gear is offset (max(12px, calc(var(--safe-top) - 4px))) to clear the battery; the bottom nav reserves var(--bap-nav-pad-bottom) and the .bap-nav-pill bottom now TRACKS that reservation (fixes the 09i stranded-pill bug), with content padding-bottom, the Places FAB, PlaceToast, the 3 overlay footers, and the BottomSheet body all shifted by the same reservation. On non-notched / non-iOS the env()s are 0, so max(16px, …) preserves the prior flat layout byte-for-byte. Looseness is tunable in one line via --safe-top. Gates left untouched (centered full-bleed; cover only improves them). No CACHE_VERSION bump, no Apps Script change, no new dependency. index.html + App.jsx. PRIOR: 2026-06-13b — Category-disc contrast fix (WCAG 1.4.11/1.4.3). New discGlyphColor(fill) helper (with relLuminance) flips glyph ink to navy (pepBlue) on light category disc fills (bapBlue/sky/stone) while dark fills (pepOrange/ocean/mountain/pepBlue) keep white — threshold 3.5:1 white-on-fill cleanly separates the two groups. Applied at all 5 disc sites: PlaceCard, PlaceSubmitForm category picker, the Places category-picker grid (both the <Icon> and the ♥ span), EventCard, and EventsTodayTile. Also enriches the map-places objects with _glyphInk so PlacesMap.jsx pins consume the same rule for their category glyph (p._glyphInk || '#fff'). Category caption TEXT recolored from the category color to neutral Mountain gray at 3 sites: EventCard date badge, PlaceCard DM Mono uppercase caption, and DirectorPlacesView category chip — the colored disc still carries the category cue. The 7px legend dot (background: meta.color) in DirectorPlacesView and all selection borders (border: meta.color in PlaceSubmitForm) are deliberately left unchanged — color is fine for non-text UI elements above 3px. Brand color tokens, disc fills, ring colors, and the campus pin are all untouched. CACHE_VERSION stays 7, no Apps Script change, no new dependency. App.jsx + PlacesMap.jsx. PRIOR: 2026-06-13 — Add-to-calendar (.ics) export on Calendar-tab events + assigned Finals rows, plus a reduced-motion fix for inline transitions (BottomSheet slide/backdrop, FAQ + finals chevrons, settings toggle thumb) via a new useReducedMotion hook. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11b — PWA auto-update reliability on installed Android PWAs. Added an app-level useEffect (top of <App>, runs once on mount) that forces a service-worker update check — navigator.serviceWorker.getRegistration().then(reg => reg.update()) — on every visibilitychange→visible (app regains focus), plus an hourly setInterval backstop and once on mount. Closes the gap where an installed Android PWA, resumed from background without a real navigation, never re-checked the worker script, so a freshly deployed build sat undetected (the '24h-cold open showed stale content until a double hard-close' report). DETECT-ONLY by design: we do NOT reload the page on update (no controllerchange-driven reload), so a session is never interrupted mid-task — the activated new worker's build simply shows on the student's next cold launch. The SW itself is unchanged (vite.config.js still registerType:'autoUpdate' + skipWaiting + clientsClaim); this only triggers the check more often. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11 — Mundial game-day treatment on Today (Argentina). When a `mundial`-typed Calendar event dated today has a title containing 'Argentina' (e.g. 'Mundial: 🇦🇷 Argentina vs Austria 🇦🇹'), the Today tab puts on the albiceleste jersey. (1) Greeting strip: celeste-forward gradient (still ending in Pep Blue so the white text keeps contrast), a rotating Sol de Mayo in place of the sun, drifting papelitos (celeste/white/gold) over it, and the mono label flips to '¡Hoy juega Argentina! / Game day'; personalized greeting + date unchanged. (2) New <MundialGameTile> hero rendered between the greeting strip and the weather/dólar row: jersey-stripe background, an oversized number-10 watermark, the matchup with flags, a live 'Arranca en X' kickoff countdown from the row's start_time (falls back to '¡En cancha!' after kickoff), tap jumps to Schedule (where the game also shows in the Weekly Overview via visibility: week). New helpers getArgentinaGameForDate(data, dateStr) / cleanMundialTitle(title); new glyph <SolDeMayoIcon> (32-ray flag sun with a face, rays generated in a loop) and <Papelitos> (fixed-config confetti, stable across the minute-tick) + a bap-papel-fall keyframe. All motion honors prefers-reduced-motion (papelitos hidden, Sol de Mayo static; the gradient skin + tile still render). Detection is a title-match over the Calendar data the Director already maintains, so NO schema change, NO CACHE_VERSION bump (stays 7), no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
+const BUILD_VERSION = "2026-06-15 — Tablet UX Stage 1: rail foundation. New useBreakpoint() hook (3-tier: phone / tablet-portrait / rail); top-level layout branches for all three; a 104px navy left-rail component (BAP logo + vertical tab nav + sync status + gear button) that replaces the top header band and bottom nav in landscape iPad layout. Five concurrent bug fixes: (1) FAB right formula tracks layout width; (2) PlacesMap ResizeObserver calls map.invalidateSize() on container resize; (3) PlacesMap height cap raised at tablet+ widths; (4) pointer:fine hover affordances injected into bap-personality-styles; (5) BottomSheet, ProfileModal, DirectorResponsesView, DirectorPlacesView, PlaceToast all widen to 640 at tablet+, and BottomSheet presents as a centered dialog (not bottom-slide) at tablet+. Light text-measure cap: content area gains maxWidth + auto horizontal margins on tablet+ to keep line lengths readable. Phone path is byte-identical to the prior build. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx + PlacesMap.jsx. PRIOR: 2026-06-15 — Calendar add-to-calendar button is now icon-only: removed the 'Agendar' text label from <AddToCalendarButton>, keeping just the CalendarPlusIcon (icon bumped 13→15px, padding tightened to a square 5px/7px), with the bilingual 'Agendar / Add to calendar' aria-label + title retained so screen readers still announce it. Affects both call sites (Calendar-tab event rows and assigned Finals rows). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-14c — Shell height 100dvh → 100vh so the bottom nav reaches the physical screen bottom. With viewport-fit=cover on the installed iOS PWA, 100dvh was resolving to the safe-area height (excluding the home-indicator zone), so the flex column — and the in-flow nav pinned to its bottom — stopped ~34px short of the physical bottom, reading (with the white body backstop) as the nav floating high over a white strip. 100vh (the large viewport, = full screen in standalone) lets the column fill the screen so the nav sits at the true bottom with just its normal safe-area padding. Completes the 2026-06-14b in-flow-nav change. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-14b — Bottom-nav home-indicator fix (iOS): the bottom nav is now a normal in-flow flex child at the bottom of the 100dvh column instead of position:fixed. iOS wouldn't reliably paint a fixed element (or its box-shadow) into the home-indicator safe area, so the prior transform + box-shadow approach was non-deterministic (looked fixed after one reinstall, regressed on the next relaunch). In flow, the nav physically occupies the true bottom so its white background + safe-area bottom padding own the home indicator with no gap; content (flex:1) is the scroll container and its big nav-clearance bottom padding dropped (108px → 24px). body background → white as a sub-pixel backstop. App.jsx + index.html; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-14 — Greeting-strip polish: the Today refresh button now nests into the decorative sun (moved top:12/right:12 → top:5/right:5 so it centers on the sun, which sits ~22px from the top-right corner, and reads as the sun's disc with the rays radiating around it). SunIcon reworked from 8 straight pepBlue spokes on a blue dot into a Sol de Mayo–inspired form: 12 straight rays alternating with 12 wavy flame rays (S-curve quadratics), generated in a loop; rendered white/celeste (gold stays exclusive to the Mundial SolDeMayoIcon) with the day-watermark opacity bumped 0.22 → 0.3 so the new rays read around the button. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-13c — iOS safe-area insets (review backlog Tier 4 #12), shipped after two prior parked attempts. Tuned against a real Dynamic-Island standalone PWA (top 59 / bottom 34 / sides 0) using a temporary in-app env() readout, then removed. SAME-DAY FOLLOW-UP: fixed a home-indicator gap under the bottom nav — the fixed nav is now centered via left/right/margin instead of translateX (a transform on a position:fixed element made iOS anchor bottom:0 to the safe-area inset, letting the parchment page background show through the home-indicator zone) plus a downward white box-shadow as a self-correcting safe-area filler. index.html gets viewport-fit=cover + two parse-time :root tuning vars: --safe-top (env(safe-area-inset-top)) and --bap-nav-pad-bottom (max(16px, calc(env(safe-area-inset-bottom) - 10px)) — deliberately LESS than the full home-indicator inset, which read over-padded). The fix the two prior attempts missed is decoupling: the header + the 3 full-screen overlay headers bleed the navy gradient the full top inset behind the status bar (padding-top max(16px, var(--safe-top))) while the gear is offset (max(12px, calc(var(--safe-top) - 4px))) to clear the battery; the bottom nav reserves var(--bap-nav-pad-bottom) and the .bap-nav-pill bottom now TRACKS that reservation (fixes the 09i stranded-pill bug), with content padding-bottom, the Places FAB, PlaceToast, the 3 overlay footers, and the BottomSheet body all shifted by the same reservation. On non-notched / non-iOS the env()s are 0, so max(16px, …) preserves the prior flat layout byte-for-byte. Looseness is tunable in one line via --safe-top. Gates left untouched (centered full-bleed; cover only improves them). No CACHE_VERSION bump, no Apps Script change, no new dependency. index.html + App.jsx. PRIOR: 2026-06-13b — Category-disc contrast fix (WCAG 1.4.11/1.4.3). New discGlyphColor(fill) helper (with relLuminance) flips glyph ink to navy (pepBlue) on light category disc fills (bapBlue/sky/stone) while dark fills (pepOrange/ocean/mountain/pepBlue) keep white — threshold 3.5:1 white-on-fill cleanly separates the two groups. Applied at all 5 disc sites: PlaceCard, PlaceSubmitForm category picker, the Places category-picker grid (both the <Icon> and the ♥ span), EventCard, and EventsTodayTile. Also enriches the map-places objects with _glyphInk so PlacesMap.jsx pins consume the same rule for their category glyph (p._glyphInk || '#fff'). Category caption TEXT recolored from the category color to neutral Mountain gray at 3 sites: EventCard date badge, PlaceCard DM Mono uppercase caption, and DirectorPlacesView category chip — the colored disc still carries the category cue. The 7px legend dot (background: meta.color) in DirectorPlacesView and all selection borders (border: meta.color in PlaceSubmitForm) are deliberately left unchanged — color is fine for non-text UI elements above 3px. Brand color tokens, disc fills, ring colors, and the campus pin are all untouched. CACHE_VERSION stays 7, no Apps Script change, no new dependency. App.jsx + PlacesMap.jsx. PRIOR: 2026-06-13 — Add-to-calendar (.ics) export on Calendar-tab events + assigned Finals rows, plus a reduced-motion fix for inline transitions (BottomSheet slide/backdrop, FAQ + finals chevrons, settings toggle thumb) via a new useReducedMotion hook. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11b — PWA auto-update reliability on installed Android PWAs. Added an app-level useEffect (top of <App>, runs once on mount) that forces a service-worker update check — navigator.serviceWorker.getRegistration().then(reg => reg.update()) — on every visibilitychange→visible (app regains focus), plus an hourly setInterval backstop and once on mount. Closes the gap where an installed Android PWA, resumed from background without a real navigation, never re-checked the worker script, so a freshly deployed build sat undetected (the '24h-cold open showed stale content until a double hard-close' report). DETECT-ONLY by design: we do NOT reload the page on update (no controllerchange-driven reload), so a session is never interrupted mid-task — the activated new worker's build simply shows on the student's next cold launch. The SW itself is unchanged (vite.config.js still registerType:'autoUpdate' + skipWaiting + clientsClaim); this only triggers the check more often. No CACHE_VERSION bump, no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-11 — Mundial game-day treatment on Today (Argentina). When a `mundial`-typed Calendar event dated today has a title containing 'Argentina' (e.g. 'Mundial: 🇦🇷 Argentina vs Austria 🇦🇹'), the Today tab puts on the albiceleste jersey. (1) Greeting strip: celeste-forward gradient (still ending in Pep Blue so the white text keeps contrast), a rotating Sol de Mayo in place of the sun, drifting papelitos (celeste/white/gold) over it, and the mono label flips to '¡Hoy juega Argentina! / Game day'; personalized greeting + date unchanged. (2) New <MundialGameTile> hero rendered between the greeting strip and the weather/dólar row: jersey-stripe background, an oversized number-10 watermark, the matchup with flags, a live 'Arranca en X' kickoff countdown from the row's start_time (falls back to '¡En cancha!' after kickoff), tap jumps to Schedule (where the game also shows in the Weekly Overview via visibility: week). New helpers getArgentinaGameForDate(data, dateStr) / cleanMundialTitle(title); new glyph <SolDeMayoIcon> (32-ray flag sun with a face, rays generated in a loop) and <Papelitos> (fixed-config confetti, stable across the minute-tick) + a bap-papel-fall keyframe. All motion honors prefers-reduced-motion (papelitos hidden, Sol de Mayo static; the gradient skin + tile still render). Detection is a title-match over the Calendar data the Director already maintains, so NO schema change, NO CACHE_VERSION bump (stays 7), no Apps Script change, no new dependency. App.jsx only. PRIOR: 2026-06-10m — Places List/Map/Near toggles are now icon-only. The three controls at the top of a Places listing swap their text labels for glyphs: a bulleted-list icon (List), a folded-map icon (Map), and a navigation-arrow icon (Near / distance sort). New inline-SVG components ListViewIcon, MapViewIcon, NavArrowIcon ({size,color}); each button keeps its active/inactive pill treatment + ≥34px height and carries a bilingual aria-label/title + aria-pressed (the row is now wordless). Scoped to Places only — the shared text 'Cerca / Near' pill on Health/Churches/Explore is unchanged (a Places-only nearMeIconButton was added alongside the existing nearMeButton). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10l — Pull-to-refresh now also refreshes Places. The Today pull-to-refresh gesture (and the refresh button) call refreshAllData, which previously re-pulled only the CONTENT endpoint (fetchAllData with ?bust=1) and never touched Places — Places has its own fetch (auth-script ?action=places) wired to a mount-only effect + a 10-min bap-places-cache, so a Director's sheet edit to a place could not be picked up in-app without a full reload. Fix: refreshPlaces() (relocated above refreshAllData to avoid a TDZ in the dep array) is now kicked off in parallel inside refreshAllData and awaited in its finally, so one refresh re-pulls content AND Places and the spinner covers both. The auth-script handlePlaces has no server cache, so the re-pull returns the live sheet row immediately. Verified via a fetch spy: a single refresh fires action=places alongside the content bust. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10k — Glyph-only contact/link buttons + Contacts reorder. (1) New inline-SVG link glyphs PhoneGlyph / WhatsAppGlyph / EnvelopeGlyph / MapPinGlyph / GlobeGlyph / InstagramGlyph ({size,color}). (2) ActionBtn (Contacts/Resources) refactored from `icon`+text to `Glyph`+bilingual aria-label/title, icon-only with a ≥40px tap target; an optional `value` keeps real data visible (the Emergency phone NUMBER, the office EMAIL). (3) LinkButton (all Local sub-views: events/places/health/churches) is now icon-only — globe=website, WhatsApp/Instagram marks, phone=tel — label in aria-label/title. (4) AddressLink, the two PlaceCard/Director 'Open in Maps' fallbacks, the Courses 'Email Prof.' button, and the 'Cerca / Near' toggle pin all swapped from emoji (📞💬✉📍📷→) to the SVG glyphs. (5) Contacts tab REORDERED: the Emergency card is pinned to the top, the Buenos Aires Program office card moved below it (Staff / Local numbers / Resources unchanged). Note: in the Local cards WhatsApp/Instagram render in the uniform pepOrange link-pill color (brand-color is used in the green Contacts WhatsApp button). App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10j — Removed the Apps sub-view from the Local tab. The 'Apps' entry is gone from the Local hub (LOCAL_SECTIONS) and its `sub === \"apps\"` render block + the now-dead derived locals (appsFilter, appsCategories, filteredApps, sortedApps) are deleted. DATA PLUMBING KEPT INTACT: the Apps sheet tab, Code.gs TABS entry, and normalizeData's data.apps parsing all remain, so NO CACHE_VERSION bump — resurrecting the feature is just re-adding the LOCAL_SECTIONS entry + the render block (see 'Removed / dormant features' in BAP_App_Project_Knowledge.md). AppGridIcon is retained (still used by the Places 'All' category tile); ColectivoIcon + SectionDivider are now unused but kept dormant for a future Apps resurrection. App.jsx only; no Apps Script change, no new dependency. PRIOR: 2026-06-10i — Local-tab reset reliability fix. Tapping the Local bottom-nav tab from any Local sub-view returns to the category hub more robustly: <LocalView>'s reset effect now compares the resetSignal VALUE against the last-seen value (lastResetSignal ref) instead of a boolean 'skip first run' guard. The old guard was defeated by React StrictMode's double-effect-invoke — the second mount invoke fired the reset and wiped a Today deep-link (e.g. the 'This Week' tile), landing on the hub instead of the intended listing. The value-compare is StrictMode-safe (mount runs are no-ops) and still fires on a genuine re-tap. App.jsx only; no CACHE_VERSION bump, no Apps Script change, no new dependency. PRIOR: 2026-06-10h — Weekly Overview now carries forward/backward week chevrons at the BOTTOM of the day list too (mirrors the existing top nav: same bounded MIN/MAX offsets, disabled treatment, and a centered week-range label), so a student who has scrolled through the week can move to the next/previous week without scrolling back up. PRIOR: 2026-06-10g — Schedule day headers now bilingual (Lunes / Monday) on both the Weekly Overview day cards and the Class Schedule Mon–Fri grid. New WEEK_DAYS_FULL_ES constant. PRIOR: 2026-06-10f — Android map fix: the Places map container now establishes its own stacking context (position:relative + zIndex:0 + isolation:isolate) so Leaflet's internal z-indices (panes/controls up to ~1000) stay contained instead of leaking to the root and painting over the place-info BottomSheet on Android (which lacks the iOS scroll-container stacking context that incidentally trapped them). PlacesMap.jsx only. PRIOR: 2026-06-10e — Local-tab polish: re-tapping the Local bottom-nav tab while already on Local now collapses back to the category hub (resetSignal → LocalView); nightlife glyph swapped from a cocktail to a crescent-moon-and-stars (non-alcoholic); museum/exhibit painting glyph reworked to read as a framed landscape; the Places list/map + 'Cerca / Near' pills now sit on one line (shortened from 'Cerca tuyo / Near you'). Front-end only, no CACHE_VERSION bump. PRIOR: 2026-06-10d — Tier 2 #5a security: auth GETs → POST. identifyUser / fetchPrompts / fetchAdminResponses / fetchAdminPlaces now POST text/plain (JSON body) instead of putting token + cwid + birthday in the URL query string, so per-user credentials no longer land in the Apps Script execution log. Same handlers serve both verbs server-side; doGet stays for backward compatibility with old cached builds. REQUIRES the matching AuthCode.gs re-deploy (doPost now routes identify/prompts/admin_responses/admin_places, plus #5b: an append-only PlacesVetLog audit tab + idempotent state-machine in handleVetPlace). The `places` read (token-only, no PII) stays GET. No CACHE_VERSION bump, no new dependency. PRIOR: 2026-06-10c — Calendar blank-tab fix + collapsible finals; 2026-06-10b — Tier 6 batch (search, announcement unread cue, saved count/share).";
 
 // ============================================================
 // ★ CONFIGURATION — Only edit this section ★
@@ -3471,6 +3471,8 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
   const [animateIn, setAnimateIn] = useState(false);
   const sheetRef = useRef(null);
   const reduced = useReducedMotion();
+  const sbp = useBreakpoint();
+  const isWide = sbp !== "phone";
   // Focus-trap + Escape + focus-return. Keyed on `show` so focus moves in
   // when the sheet mounts and returns to the trigger when it unmounts.
   useDialogA11y(sheetRef, { open: show, onClose });
@@ -3525,7 +3527,9 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
         background: animateIn ? "rgba(29, 37, 45, 0.55)" : "rgba(29, 37, 45, 0)",
         zIndex: 200,
         transition: reduced ? "none" : "background 0.26s ease-out",
-        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        display: "flex",
+        alignItems: isWide ? "center" : "flex-end",
+        justifyContent: "center",
       }}
     >
       <div
@@ -3533,19 +3537,29 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: C.parchment, width: "100%", maxWidth: 480,
-          borderRadius: "20px 20px 0 0",
+          background: C.parchment, width: "100%", maxWidth: isWide ? 640 : 480,
+          borderRadius: isWide ? 20 : "20px 20px 0 0",
           maxHeight: "92vh", display: "flex", flexDirection: "column",
-          transform: animateIn ? "translateY(0)" : "translateY(100%)",
-          transition: reduced ? "none" : "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
-          boxShadow: "0 -8px 28px rgba(0, 32, 91, 0.20)",
+          transform: reduced ? undefined
+            : isWide
+              ? animateIn ? "scale(1) translateY(0)" : "scale(0.96) translateY(0)"
+              : animateIn ? "translateY(0)" : "translateY(100%)",
+          opacity: isWide ? (animateIn ? 1 : 0) : 1,
+          transition: reduced ? "none" : isWide
+            ? "transform 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease-out"
+            : "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+          boxShadow: isWide
+            ? "0 8px 32px rgba(0,32,91,0.24)"
+            : "0 -8px 28px rgba(0, 32, 91, 0.20)",
           overflow: "hidden", outline: "none",
         }}
       >
-        {/* Drag handle (decorative; tap-to-close still works via the × button or backdrop) */}
-        <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 2px", flexShrink: 0 }}>
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: C.fog }} />
-        </div>
+        {/* Drag handle (phone only; centered dialog on tablet+) */}
+        {!isWide && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 2px", flexShrink: 0 }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: C.fog }} />
+          </div>
+        )}
         {/* Header */}
         <div style={{
           padding: "8px 18px 14px",
@@ -3577,7 +3591,7 @@ function BottomSheet({ open, onClose, titleEs, titleEn, children }) {
           >×</button>
         </div>
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "14px 16px calc(12px + var(--bap-nav-pad-bottom))" }}>
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: isWide ? "14px 20px 20px" : "14px 16px calc(12px + var(--bap-nav-pad-bottom))" }}>
           {children}
         </div>
       </div>
@@ -8174,11 +8188,12 @@ function PlaceSubmitForm({ open, onClose, onSubmit }) {
 // auto-clears (the parent owns the timer). Sits above the bottom nav,
 // below any open BottomSheet. Driven by a non-empty `message`.
 function PlaceToast({ message }) {
+  const ptbp = useBreakpoint();
   if (!message) return null;
   return (
     <div style={{
       position: "fixed", left: "50%", bottom: "calc(68px + var(--bap-nav-pad-bottom))", transform: "translateX(-50%)",
-      zIndex: 210, width: "calc(100% - 32px)", maxWidth: 448,
+      zIndex: 210, width: "calc(100% - 32px)", maxWidth: ptbp !== "phone" ? 616 : 448,
       background: C.ice, borderLeft: `4px solid ${C.ocean}`, borderRadius: 10,
       boxShadow: "0 6px 22px rgba(29,37,45,0.18)",
       padding: "12px 16px",
@@ -8194,6 +8209,7 @@ function PlaceToast({ message }) {
 
 // ─── Local ───
 function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [], onToggleSavePlace, onSubChange, onOpenSuggest, onRegisterBack }) {
+  const lbp = useBreakpoint();
   // The Local tab opens to the category hub (sub === null). Deep-links from
   // Today (the "This Week" events tile, the empty-state "Explorar BA" button)
   // pass an initialSub so they land straight on that listing; a normal
@@ -8740,7 +8756,9 @@ function LocalView({ data, initialSub, resetSignal, places = [], savedPlaces = [
           aria-label="Sugerir un lugar / Suggest a place"
           style={{
             position: "fixed", bottom: "calc(74px + var(--bap-nav-pad-bottom))", zIndex: 90,
-            right: "max(20px, calc(50% - 240px + 20px))",
+            right: lbp === "rail" ? 24 : lbp === "tablet-portrait"
+              ? "max(20px, calc(50% - 320px + 20px))"
+              : "max(20px, calc(50% - 240px + 20px))",
             width: 56, height: 56, borderRadius: 28,
             background: C.pepBlue, color: C.white, border: "none", cursor: "pointer",
             boxShadow: "0 6px 18px rgba(0,32,91,0.32)",
@@ -9046,6 +9064,44 @@ const TABS = [
   { key: "contacts", label: "Contacts", icon: icons.contacts, color: C.pepOrange },
 ];
 
+// ─── Breakpoint hook ───
+// Returns one of three layout tiers so the same App tree can render
+// appropriately on a phone, a portrait iPad, and a landscape iPad.
+//
+// Tier logic (orientation AND height aware so a landscape phone — which
+// is wide but short — does NOT get the rail layout):
+//   "rail"            w >= 1024 && landscape && h >= 600   (landscape iPad)
+//   "tablet-portrait" w >= 768  && h >= 700                (portrait iPad)
+//   "phone"           everything else (phones incl. landscape)
+//
+// Subscribes to both "resize" and "orientationchange" so it stays
+// accurate on iOS, where rotating the device fires orientationchange
+// before the browser finishes reflowing — the resize follow-up lands
+// ~100 ms later and re-evaluates the stable final dimensions.
+function computeBreakpoint() {
+  if (typeof window === "undefined") return "phone";
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const landscape = w > h;
+  if (w >= 1024 && landscape && h >= 600) return "rail";
+  if (w >= 768 && h >= 700) return "tablet-portrait";
+  return "phone";
+}
+
+function useBreakpoint() {
+  const [bp, setBp] = useState(computeBreakpoint);
+  useEffect(() => {
+    const update = () => setBp(computeBreakpoint());
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+  return bp;
+}
+
 // ─── Gear icon for the header settings entry point ───
 function GearIcon({ size = 20, color = "#FFFFFF" }) {
   return (
@@ -9053,6 +9109,118 @@ function GearIcon({ size = 20, color = "#FFFFFF" }) {
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
     </svg>
+  );
+}
+
+// ─── Rail navigation (landscape iPad only) ───
+// A 104px navy left column that replaces the top header band and bottom
+// nav when `bp === "rail"`. Structure (top to bottom):
+//   - Logo mark: /logo.png in a white circle with a bapBlue border
+//   - "Buenos Aires" label in DM Mono fog
+//   - Flex-spacer (push nav to middle of rail)
+//   - <nav>: one button per tab; active tab = white rounded pill bg;
+//     inactive = translucent white label
+//   - Sync-status dot + "Sinc." label (when isHealthy)
+//   - Gear button (opens ProfileModal since the header gear is gone)
+//
+// The component accepts `tab`, `setTab`, `isHealthy`, `onOpenSettings`,
+// and all the tab-switch side effects via a single `onTabClick` prop
+// so the rail stays stateless and the App wires all the same logic it
+// uses for the bottom nav.
+function RailNav({ tab, onTabClick, isHealthy, onOpenSettings }) {
+  return (
+    <div style={{
+      width: 104, flexShrink: 0,
+      background: C.pepBlue,
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "max(20px, var(--safe-top)) 0 max(20px, var(--bap-nav-pad-bottom))",
+      gap: 0, height: "100vh", boxSizing: "border-box",
+    }}>
+      {/* Logo mark */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <img
+          src={LOGO_URI}
+          alt="Buenos Aires Program"
+          style={{
+            width: 44, height: 44, borderRadius: "50%",
+            border: `2px solid ${C.bapBlue}`,
+            background: C.white,
+          }}
+        />
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
+          textTransform: "uppercase", color: C.fog, textAlign: "center", lineHeight: 1.3,
+          maxWidth: 80,
+        }}>
+          Buenos<br />Aires
+        </div>
+      </div>
+
+      {/* Spacer above nav */}
+      <div style={{ flex: 1 }} />
+
+      {/* Tab navigation */}
+      <nav aria-label="Secciones / Sections" style={{
+        display: "flex", flexDirection: "column", alignItems: "stretch",
+        gap: 4, width: "100%", padding: "0 8px", boxSizing: "border-box",
+      }}>
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          const color = active ? t.color : "rgba(255,255,255,0.62)";
+          return (
+            <button
+              key={t.key}
+              onClick={() => onTabClick(t.key)}
+              aria-current={active ? "page" : undefined}
+              className="bap-press"
+              style={{
+                background: active ? C.white : "transparent",
+                border: "none", cursor: "pointer", borderRadius: 10,
+                display: "flex", flexDirection: "column", alignItems: "center",
+                gap: 3, padding: "9px 4px",
+                transition: "background 0.2s ease-out",
+              }}
+            >
+              {t.icon(color)}
+              <span style={{
+                fontSize: 9, fontWeight: active ? 700 : 400,
+                color, fontFamily: "'Roboto', sans-serif",
+                letterSpacing: 0.2, lineHeight: 1,
+              }}>{t.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Spacer below nav */}
+      <div style={{ flex: 1 }} />
+
+      {/* Sync status */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 4,
+        marginBottom: 12,
+        fontFamily: "'DM Mono', monospace", fontSize: 9,
+        color: isHealthy ? C.bapBlue : "rgba(255,255,255,0.45)",
+      }}>
+        {isHealthy && <span className="bap-pulse-dot" aria-hidden="true" />}
+        {isHealthy ? "Sinc." : "Offline"}
+      </div>
+
+      {/* Gear / settings */}
+      <button
+        onClick={onOpenSettings}
+        aria-label="Ajustes / Settings"
+        className="bap-press"
+        style={{
+          width: 40, height: 40, borderRadius: 20,
+          background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        <GearIcon size={18} color={C.white} />
+      </button>
+    </div>
   );
 }
 
@@ -9183,6 +9351,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
   // Hooks must run before the early return below. cardRef + useDialogA11y
   // give the modal role="dialog" focus-trap/Escape/focus-return; pendingConfirm
   // drives the in-app ConfirmDialog that replaced the native window.confirm.
+  const pbp = useBreakpoint();
   const cardRef = useRef(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const reduced = useReducedMotion();
@@ -9249,7 +9418,7 @@ function ProfileModal({ open, onClose, profile, onChange, classes, currentUser, 
         aria-label="Tu perfil / Your profile"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: C.parchment, width: "100%", maxWidth: 480,
+          background: C.parchment, width: "100%", maxWidth: pbp !== "phone" ? 640 : 480,
           margin: "0 auto", display: "flex", flexDirection: "column",
           maxHeight: "100vh", outline: "none",
         }}
@@ -9637,6 +9806,7 @@ function tallySelectField(field, responses) {
 // ─── DirectorResponsesView ───
 
 function DirectorResponsesView({ open, onClose, loading, error, payload, onRefresh }) {
+  const drvbp = useBreakpoint();
   const [selectedPromptId, setSelectedPromptId] = useState(null);
   const cardRef = useRef(null);
   useDialogA11y(cardRef, { open, onClose });
@@ -9675,7 +9845,7 @@ function DirectorResponsesView({ open, onClose, loading, error, payload, onRefre
         aria-label="Respuestas / Responses"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: C.parchment, width: "100%", maxWidth: 480,
+          background: C.parchment, width: "100%", maxWidth: drvbp !== "phone" ? 640 : 480,
           margin: "0 auto", display: "flex", flexDirection: "column",
           maxHeight: "100vh", outline: "none",
         }}
@@ -10144,6 +10314,7 @@ function sortAdminPlaces(places) {
 function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, onVet }) {
   // Local credit choices keyed by place_id; seeded from show_credit on
   // first touch. The id currently being vetted disables its buttons.
+  const dpvbp = useBreakpoint();
   const [creditMap, setCreditMap] = useState({});
   const [vettingId, setVettingId] = useState("");
   const cardRef = useRef(null);
@@ -10300,7 +10471,7 @@ function DirectorPlacesView({ open, onClose, loading, error, places, onRefresh, 
       zIndex: 220, display: "flex", justifyContent: "center", alignItems: "stretch", padding: 0,
     }}>
       <div ref={cardRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Revisar lugares / Review places" onClick={(e) => e.stopPropagation()} style={{
-        background: C.parchment, width: "100%", maxWidth: 480,
+        background: C.parchment, width: "100%", maxWidth: dpvbp !== "phone" ? 640 : 480,
         margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "100vh", outline: "none",
       }}>
         {/* Header */}
@@ -10866,6 +11037,7 @@ function UserGate({ cohortToken, onAuth, onCohortReset }) {
 // ============================================================
 
 export default function App() {
+  const bp = useBreakpoint();
   const [tab, setTab] = useState("today");
   // Which Local sub-section to open on the next Local-tab entry. Set by
   // Today's deep-links (events tile → "events", empty-state "Explorar BA"
@@ -10900,6 +11072,18 @@ export default function App() {
     if (tabKey === "local") { setLocalInitialSub(sub); setLocalSub(sub); setLocalPlacesLabel(null); }
     setTab(tabKey);
   }, []);
+
+  // Shared tab-switch handler used by both the bottom nav and the rail nav.
+  // Mirrors the bottom nav's onClick logic exactly so either nav stays in sync.
+  const handleTabClick = useCallback((key) => {
+    if (key === "local") {
+      if (tab === "local") setLocalResetSignal((n) => n + 1);
+      setLocalInitialSub(null);
+      setLocalSub(null);
+      setLocalPlacesLabel(null);
+    }
+    setTab(key);
+  }, [tab]);
 
   // Cohort auth token. Lazy-init from localStorage so a student who
   // has already entered the passcode on this device skips the gate.
@@ -11198,6 +11382,13 @@ export default function App() {
           .bap-sun-rotate { animation: none; }
           .bap-steam     { animation: none; }
           .bap-papelitos { display: none; }
+        }
+        @media (pointer: fine) {
+          .bap-press:hover { background-color: rgba(0,0,0,0.04); }
+          .bap-filter-pill:hover { border-color: ${C.ocean}; }
+          .bap-faq-header:hover { background: ${C.ice}; }
+          .bap-link-btn:hover { opacity: 0.80; }
+          .bap-card-row:hover { background: rgba(0,0,0,0.025); }
         }
       `;
       document.head.appendChild(style);
@@ -11741,10 +11932,39 @@ export default function App() {
     );
   }
 
+  // Outer column width varies by breakpoint; rail gets no top header/bottom nav.
+  const colMaxWidth = bp === "tablet-portrait" ? 640 : 480;
+
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", height: "100vh", background: C.parchment, display: "flex", flexDirection: "column" }}>
-      {/* Header */}
-      <div style={{ padding: "max(16px, var(--safe-top)) 20px 16px", background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`, color: C.white, position: "relative", overflow: "hidden" }}>
+    <div style={{
+      display: "flex", flexDirection: "row",
+      height: "100vh", background: C.parchment,
+      // Center the whole app on wide screens (desktop preview etc.)
+      maxWidth: bp === "rail" ? "none" : colMaxWidth,
+      margin: bp === "rail" ? 0 : "0 auto",
+    }}>
+      {/* Rail nav — landscape tablet only; replaces header band + bottom nav */}
+      {bp === "rail" && (
+        <RailNav
+          tab={tab}
+          onTabClick={handleTabClick}
+          isHealthy={isHealthy}
+          onOpenSettings={() => setProfileOpen(true)}
+        />
+      )}
+
+      {/* Main column — the phone/tablet content area */}
+      <div style={{
+        flex: 1, minWidth: 0,
+        display: "flex", flexDirection: "column",
+        height: "100vh",
+        // On tablet-portrait we keep a centred column at max 640
+        maxWidth: bp === "tablet-portrait" ? 640 : bp === "phone" ? 480 : "none",
+        margin: bp === "tablet-portrait" ? "0 auto" : 0,
+        width: bp === "tablet-portrait" ? "100%" : undefined,
+      }}>
+      {/* Header — phone and tablet-portrait only; rail has RailNav instead */}
+      {bp !== "rail" && <div style={{ padding: "max(16px, var(--safe-top)) 20px 16px", background: `linear-gradient(135deg, ${C.pepBlue} 0%, ${C.ocean} 100%)`, color: C.white, position: "relative", overflow: "hidden" }}>
         <SouthernCrossDecoration />
         <button
           onClick={() => setProfileOpen(true)}
@@ -11786,10 +12006,17 @@ export default function App() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Content */}
-      <div ref={contentRef} style={{ flex: 1, minHeight: 0, padding: "20px 16px 24px", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain" }}>
+      <div ref={contentRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain" }}>
+        {/* Inner wrapper caps line-length at rail widths so content */}
+        {/* never spans the full 900+ px of a landscape iPad column. */}
+        <div style={{
+          padding: "20px 16px 24px",
+          maxWidth: bp === "rail" ? 760 : "none",
+          margin: bp === "rail" ? "0 auto" : undefined,
+        }}>
         {status === "loading" ? (
           <LoadingScreen tips={data.tips} />
         ) : (
@@ -11829,6 +12056,7 @@ export default function App() {
             {tab === "contacts" && <ContactsView data={data} />}
           </>
         )}
+        </div>{/* end inner measure cap */}
       </div>
 
       {/* Bottom nav — in NORMAL FLOW (a flex child of the 100dvh column),
@@ -11837,10 +12065,11 @@ export default function App() {
           bottom:0 nav left the page background showing through that zone.
           As an in-flow element the nav physically occupies the true bottom
           of the column, so its white background + safe-area bottom padding
-          own the home indicator deterministically — no gap possible. The
+          own the home indicator deterministically -- no gap possible. The
           content area above is the scroll container (flex:1). position is
-          relative so the absolute .bap-nav-pill anchors to the nav. */}
-      <nav ref={navRef} aria-label="Secciones / Sections" style={{
+          relative so the absolute .bap-nav-pill anchors to the nav.
+          Hidden in rail mode: RailNav handles navigation there. */}
+      {bp !== "rail" && <nav ref={navRef} aria-label="Secciones / Sections" style={{
         position: "relative", flexShrink: 0,
         background: C.white, borderTop: `1px solid ${C.fog}`,
         display: "flex", justifyContent: "space-around",
@@ -11892,7 +12121,9 @@ export default function App() {
             background: pillTransform.color,
           }}
         />
-      </nav>
+      </nav>}
+
+      </div>{/* end main column */}
 
       {/* Profile / settings modal */}
       <ProfileModal

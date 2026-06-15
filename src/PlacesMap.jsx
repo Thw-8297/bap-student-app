@@ -201,6 +201,7 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
       map.remove();
       mapRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     // Rebuild when the located set, the user fix, or the campus anchor change.
     // A place's identity is its id+coords, so a near-you re-sort (same set)
     // doesn't thrash the map.
@@ -211,16 +212,31 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     campus ? `${campus.lat},${campus.lng}` : "",
   ]);
 
+  // Bug 2 fix: when the container resizes (orientation change, panel width
+  // shift in rail mode), tell Leaflet to remeasure so tiles fill the new
+  // bounds instead of leaving a grey strip on one side.
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current) mapRef.current.invalidateSize();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div
       ref={elRef}
       style={{
-        height: "min(68vh, 520px)", width: "100%",
+        height: (typeof window !== "undefined" && window.innerWidth >= 768)
+          ? "min(76vh, 760px)" : "min(68vh, 520px)",
+        width: "100%",
         borderRadius: 14, overflow: "hidden", border: "1px solid #B9D9EB",
-        // Contain Leaflet's internal z-indices (panes ~200–700, controls ~1000)
-        // inside this element's own stacking context. Without it, on Android —
+        // Contain Leaflet's internal z-indices (panes ~200-700, controls ~1000)
+        // inside this element's own stacking context. Without it, on Android --
         // which lacks the iOS scroll-container stacking context that happens to
-        // trap them — those high z-indices leak to the root and paint OVER the
+        // trap them -- those high z-indices leak to the root and paint OVER the
         // place-info BottomSheet (portaled to <body> at z-index 200). isolate +
         // a positioned z-index:0 both force the context; belt-and-suspenders.
         position: "relative", zIndex: 0, isolation: "isolate",
