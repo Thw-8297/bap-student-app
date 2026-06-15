@@ -9047,12 +9047,12 @@ function ContactsView({ data }) {
 
 // ─── Nav Icons ───
 const icons = {
-  today: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
-  schedule: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-  calendar: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,
-  local: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-  faq: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  contacts: (clr) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>,
+  today: (clr, size = 22) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
+  schedule: (clr, size = 22) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  calendar: (clr, size = 22) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,
+  local: (clr, size = 22) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  faq: (clr, size = 22) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  contacts: (clr, size = 22) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>,
 };
 
 const TABS = [
@@ -9130,27 +9130,27 @@ function GearIcon({ size = 20, color = "#FFFFFF" }) {
 function RailNav({ tab, onTabClick, isHealthy, onOpenSettings }) {
   return (
     <div style={{
-      width: 104, flexShrink: 0,
+      width: 140, flexShrink: 0,
       background: C.pepBlue,
       display: "flex", flexDirection: "column", alignItems: "center",
-      padding: "max(20px, var(--safe-top)) 0 max(20px, var(--bap-nav-pad-bottom))",
+      padding: "max(22px, var(--safe-top)) 0 max(20px, var(--bap-nav-pad-bottom))",
       gap: 0, height: "100vh", boxSizing: "border-box",
     }}>
       {/* Logo mark */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginBottom: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <img
           src={LOGO_URI}
           alt="Buenos Aires Program"
           style={{
-            width: 44, height: 44, borderRadius: "50%",
+            width: 64, height: 64, borderRadius: "50%",
             border: `2px solid ${C.bapBlue}`,
             background: C.white,
           }}
         />
         <div style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
+          fontFamily: "'DM Mono', monospace", fontSize: 10.5, letterSpacing: 1.2,
           textTransform: "uppercase", color: C.fog, textAlign: "center", lineHeight: 1.3,
-          maxWidth: 80,
+          maxWidth: 116,
         }}>
           Buenos<br />Aires
         </div>
@@ -9175,15 +9175,15 @@ function RailNav({ tab, onTabClick, isHealthy, onOpenSettings }) {
               className="bap-press"
               style={{
                 background: active ? C.white : "transparent",
-                border: "none", cursor: "pointer", borderRadius: 10,
+                border: "none", cursor: "pointer", borderRadius: 12,
                 display: "flex", flexDirection: "column", alignItems: "center",
-                gap: 3, padding: "9px 4px",
+                gap: 5, padding: "12px 6px",
                 transition: "background 0.2s ease-out",
               }}
             >
-              {t.icon(color)}
+              {t.icon(color, 28)}
               <span style={{
-                fontSize: 9, fontWeight: active ? 700 : 400,
+                fontSize: 12, fontWeight: active ? 700 : 400,
                 color, fontFamily: "'Roboto', sans-serif",
                 letterSpacing: 0.2, lineHeight: 1,
               }}>{t.label}</span>
