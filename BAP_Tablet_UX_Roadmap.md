@@ -12,7 +12,7 @@ Six Director decisions are now locked (see Section 2; three from v1, three added
 
 The phased plan is restructured accordingly:
 
-- **Phase 0 (ships to `main`):** Unlock orientation globally, keep phones portrait-shaped, re-verify the recently reworked bottom nav in landscape. This is a safety baseline, not a tablet feature. It must land before any other phase because the manifest change is global. (Note: the horizontal safe-area padding originally scoped here was moved to Phase 1; see "iPhone landscape horizontal safe-area" in Section 6 for why it is a no-op, or actively wrong, while the layout is a centered narrow column.)
+- **Phase 0 (✅ shipped to `main` 2026-06-15, PR #1):** Unlocked orientation globally (`manifest.json` `orientation` → `any`), phones stay portrait-shaped, bottom nav re-verified in landscape against the Vercel preview on a real device. Safety baseline, not a tablet feature. (Note: the horizontal safe-area padding originally scoped here was moved to Phase 1; see "iPhone landscape horizontal safe-area" in Section 6 for why it is a no-op, or actively wrong, while the layout is a centered narrow column.)
 - **Phase 1 (branch + mockup sign-off, iPad-first centerpiece):** The side-navigation rail. The rail activates ONLY in landscape orientation with enough width; portrait iPad keeps the bottom nav. Rail color is navy (Pep Blue). Aspect-ratio-and-orientation-aware breakpoint hook; left rail replacing the bottom nav at landscape tablet widths; widened content pane with text-measure caps; all concrete bugs fixed (FAB formula, PlacesMap resize observer and height cap, overlay widths, pointer-device hover); Director dashboards widened. This is the identity-touching change. Code only starts after a design mockup has been reviewed and the Director has signed off.
 - **Phase 2 (branch, per-view, follows Phase 1):** Master-detail layouts on top of the rail: Local list plus Leaflet map side by side (2a); Calendar month plus day detail (2b); Schedule week list plus day detail (2c, lowest confidence, design must be validated at mockup stage before code).
 
@@ -288,7 +288,7 @@ The `100vh` behavior in iPad Safari browser-tab (where the address bar consumes 
 
 ## 7. Phased Roadmap
 
-### Phase 0: Orientation safety baseline (ships to `main`, no sign-off required)
+### Phase 0: Orientation safety baseline (✅ shipped to `main` 2026-06-15, PR #1)
 
 **What ships:**
 1. `manifest.json`: change `"orientation": "portrait"` to `"orientation": "any"`. One-line change. This is the entire code change in Phase 0.
