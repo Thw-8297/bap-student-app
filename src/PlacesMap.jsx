@@ -87,7 +87,7 @@ const CAP_SVG =
      <path d="M5 11.5V15c0 1.66 3.13 3 7 3s7-1.34 7-3v-3.5l-7 3.18-7-3.18z"/>
    </svg>`;
 
-export default function PlacesMap({ places = [], userLoc = null, campus = null, onSelectPlace }) {
+export default function PlacesMap({ places = [], userLoc = null, campus = null, onSelectPlace, fill = false }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   // Hold the latest onSelectPlace so markers (built once per data signature)
@@ -225,14 +225,24 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     return () => ro.disconnect();
   }, []);
 
+  // When fill=true (master-detail right pane), the map fills its parent
+  // container 100% so the two-pane wrapper drives the height. Otherwise
+  // use the viewport-relative caps that work for the phone/portrait flows.
+  const heightStyle = fill
+    ? "100%"
+    : (typeof window !== "undefined" && window.innerWidth >= 768)
+      ? "min(76vh, 760px)"
+      : "min(68vh, 520px)";
+
   return (
     <div
       ref={elRef}
       style={{
-        height: (typeof window !== "undefined" && window.innerWidth >= 768)
-          ? "min(76vh, 760px)" : "min(68vh, 520px)",
+        height: heightStyle,
         width: "100%",
-        borderRadius: 14, overflow: "hidden", border: "1px solid #B9D9EB",
+        borderRadius: fill ? 0 : 14,
+        overflow: "hidden",
+        border: fill ? "none" : "1px solid #B9D9EB",
         // Contain Leaflet's internal z-indices (panes ~200-700, controls ~1000)
         // inside this element's own stacking context. Without it, on Android --
         // which lacks the iOS scroll-container stacking context that happens to
