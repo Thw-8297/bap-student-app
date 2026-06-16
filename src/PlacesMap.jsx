@@ -26,6 +26,12 @@ import "leaflet/dist/leaflet.css";
 
 const BA_CENTER = [-34.6037, -58.3816]; // CABA fallback center
 
+// Place-pin disc shadows: the resting state (matches makeDiscEl) and the
+// focused state (an Ocean ring on top), toggled by the focusedPlaceId effect
+// when a left-list card is tapped in the rail master-detail layout.
+const DISC_SHADOW = "0 1px 5px rgba(0,0,0,0.4)";
+const DISC_SHADOW_FOCUS = "0 0 0 3px rgba(0,87,184,0.7), 0 1px 5px rgba(0,0,0,0.4)";
+
 // Leaflet's default .leaflet-div-icon paints a white box + gray border behind
 // every divIcon; strip it so our discs float clean. Also style the campus's
 // permanent label on-brand (Pep-Blue chip, no arrow). Injected once, idempotent.
@@ -87,7 +93,7 @@ const CAP_SVG =
      <path d="M5 11.5V15c0 1.66 3.13 3 7 3s7-1.34 7-3v-3.5l-7 3.18-7-3.18z"/>
    </svg>`;
 
-export default function PlacesMap({ places = [], userLoc = null, campus = null, onSelectPlace, fill = false }) {
+export default function PlacesMap({ places = [], userLoc = null, campus = null, onSelectPlace, fill = false, focusedPlaceId = null }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   // Hold the latest onSelectPlace so markers (built once per data signature)
@@ -106,6 +112,13 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     for (const p of places) m[p.place_id] = p;
     placesByIdRef.current = m;
   }, [places]);
+
+  // Place-pin markers keyed by place_id (and their disc element), so the
+  // focusedPlaceId effect can pan to / emphasize a pin when its left-list card
+  // is tapped. Rebuilt alongside the markers. emphasizedRef tracks which pin
+  // currently wears the focus ring so we can clear it before moving on.
+  const markersByIdRef = useRef({});
+  const emphasizedRef = useRef(null);
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
@@ -129,6 +142,9 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     const latlngs = [];
     // React roots mounted into place-pin discs; unmounted on cleanup.
     const roots = [];
+    // Fresh marker registry for this build; the focus effect reads from it.
+    markersByIdRef.current = {};
+    emphasizedRef.current = null;
 
     // Campus anchor — distinct from category pins: larger, Pep-Blue, orange
     // ring, mortarboard glyph (a static SVG string), with a permanent label so
@@ -174,6 +190,7 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
       });
       // Light hover/tap context without committing to the sheet.
       marker.bindTooltip(escapeHtml(p.name), { direction: "top", offset: [0, -14] });
+      markersByIdRef.current[p.place_id] = { marker, el: discEl };
       latlngs.push([p.lat, p.lng]);
     });
 
@@ -211,6 +228,34 @@ export default function PlacesMap({ places = [], userLoc = null, campus = null, 
     userLoc ? `${userLoc.lat},${userLoc.lng}` : "",
     campus ? `${campus.lat},${campus.lng}` : "",
   ]);
+
+  // Rail master-detail: when a left-list card is tapped (focusedPlaceId
+  // changes), pan to that pin and dress it with an Ocean focus ring + its
+  // tooltip, clearing the ring from the previously focused pin. A place with
+  // no coordinates has no marker, so the effect is a no-op for it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    // Clear the prior focus ring.
+    const prevId = emphasizedRef.current;
+    if (prevId) {
+      const prev = markersByIdRef.current[prevId];
+      if (prev) {
+        if (prev.el) prev.el.style.boxShadow = DISC_SHADOW;
+        if (prev.marker) prev.marker.setZIndexOffset(0);
+      }
+      emphasizedRef.current = null;
+    }
+    if (!focusedPlaceId) return;
+    const entry = markersByIdRef.current[focusedPlaceId];
+    if (!entry || !entry.marker) return; // no pin for this place — nothing to do
+    map.panTo(entry.marker.getLatLng(), { animate: true });
+    if (entry.el) entry.el.style.boxShadow = DISC_SHADOW_FOCUS;
+    entry.marker.setZIndexOffset(900);
+    entry.marker.openTooltip();
+    emphasizedRef.current = focusedPlaceId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedPlaceId]);
 
   // Bug 2 fix: when the container resizes (orientation change, panel width
   // shift in rail mode), tell Leaflet to remeasure so tiles fill the new

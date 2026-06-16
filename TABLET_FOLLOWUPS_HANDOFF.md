@@ -71,7 +71,21 @@ Anchors you will need:
 
 ## 2. Follow-up A — Local: list-card tap should pan/select on the map
 
-**Status today:** In the Local master-detail (rail), tapping a *map pin* works
+**✅ SHIPPED 2026-06-16** (build version `2026-06-16 — Tablet UX follow-up A`),
+essentially as the "suggested approach" below. A `focusedPlaceId` state in
+`LocalView` (cleared on `placesFilter` change) is set when a left-list
+`<PlaceCard>` is tapped — wrapped in a click container with a 2 px Ocean
+selection ring; a coordless place just shows the ring. It's threaded to
+`<PlacesMap focusedPlaceId>`, which now keeps a `markersByIdRef` (id → `{ marker,
+el }`) + `emphasizedRef` and runs a `focusedPlaceId` effect: `map.panTo` the
+marker, swap its disc `boxShadow` to a focus ring (`DISC_SHADOW` ↔
+`DISC_SHADOW_FOCUS`), `openTooltip`, clearing the prior pin first. `PlaceCard`'s
+share + save buttons got `e.stopPropagation()` so they don't also pan. Pin-tap
+still opens the place card (`selectedMapPlace` BottomSheet); list-tap is
+pan/highlight only. Rail-only; phone + tablet-portrait untouched. The brief below
+is the original task record.
+
+**Status (original):** In the Local master-detail (rail), tapping a *map pin* works
 (`onSelectPlace` → `selectedMapPlace` → the place-card dialog). Tapping a
 `<PlaceCard>` in the LEFT list does **not** affect the map. Bidirectional sync was
 deferred to keep the Stage 2a build clean.
