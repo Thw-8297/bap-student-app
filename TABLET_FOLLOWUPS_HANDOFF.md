@@ -188,7 +188,25 @@ description); filter pills still work; phone/portrait Calendar unchanged.
 
 ## 4. Follow-up C (minor) — master-detail pane height is approximate
 
-**Status today:** all three master-detail blocks size their two-pane wrapper with a
+**✅ SHIPPED 2026-06-16 — measurement approach (not the flex refactor below).**
+A new `useFillHeight()` hook (next to `useBreakpoint` in App.jsx) returns a
+callback ref + a height; the ref reads the wrapper's real
+`getBoundingClientRect().top` on attach and re-measures on
+`resize`/`orientationchange` (via `rAF`), returning `innerHeight − top −
+bottomGap` (floored 420, measured during commit so no first-frame flash). It
+replaced the `calc(100vh − 44px − … − 52px)` + `minHeight:480` in all three
+rail blocks (Local Places, Calendar 2-col, Schedule Weekly Overview). The
+guessed `52px` (SectionTitle) is gone, so the fit is exact; bonus, the measured
+`top` also captures Schedule's sub-pill row + optional FinalsCard that sit above
+the pane. **The flex-column refactor below was deliberately NOT taken** — it
+would change the scroll container shared by every rail tab (risking the
+tab-change `scrollTop` reset + Calendar/Schedule today-anchor scroll) and is
+complicated by Local + Schedule's mixed single-pane/master-detail sub-states;
+the per-block measurement is self-contained and far lower-risk. The brief below
+is the original task record. **All three tablet follow-ups (A/B/C) are now
+shipped.**
+
+**Status (original):** all three master-detail blocks size their two-pane wrapper with a
 magic-number `calc()`:
 `height: "calc(100vh - 44px - var(--safe-top,0px) - var(--bap-nav-pad-bottom,16px) - 52px)"`
 plus `minHeight: 480`, and escape the App-level content padding with
