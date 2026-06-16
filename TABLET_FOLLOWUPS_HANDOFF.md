@@ -133,7 +133,21 @@ link buttons on the card still work; phone Local unchanged.
 
 ## 3. Follow-up B — Calendar: richer (or restructured) rail detail pane
 
-**Status today:** The Calendar rail layout (`if (cbp === "rail")` ~6423) is a
+**✅ SHIPPED 2026-06-16 — Director chose Option 2 (drop the detail pane).** The
+Calendar rail layout is no longer master-detail: in `cbp === "rail"`,
+`<CalendarView>` renders a single scrollable column where each month's events
+flow into a **2-column CSS grid** of fuller cards (date + day, type badge,
+title, N-days pill, time, **description**, address, add-to-calendar), with the
+month header and the "Hoy · Today" divider spanning both columns
+(`gridColumn: "1 / -1"`). This surfaces the description/time/address that the
+compact phone + non-rail cards never showed. Removed the dead selection
+machinery (`selectedEventKey`, `flatEvents`, `prevFilterRef` effect,
+`resolvedKey`/`detailEvent`); kept `firstNotPastKey` + the today-divider
+scroll-anchor (now targets the in-grid divider). Empty filter → "No hay
+eventos / No events". Non-rail path byte-identical. The brief below is the
+original task record.
+
+**Status (original):** The Calendar rail layout (`if (cbp === "rail")` ~6423) is a
 two-pane master-detail: left = month-grouped selectable event list, right =
 selected-event detail (type badge, title, date/range, time, description,
 `AddressLink`, `AddToCalendarButton`). The detail block is centered
