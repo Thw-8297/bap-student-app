@@ -1,6 +1,6 @@
 # BAP Student App — Tablet UX Roadmap
 
-**Status:** Version 3 — three additional Director decisions locked 2026-06-15: navy rail color; portrait iPad keeps the bottom nav (rail and master-detail are a landscape-only package); master-detail scope is Local, Calendar, and Schedule (Schedule pending a mockup-stage design check). The side-navigation rail is the target; iPad-first. All tablet work ships on a branch and is gated by a design mockup and Director sign-off, except Phase 0 (orientation safety baseline), which ships directly to `main`.
+**Status:** Version 3 — **Phases 0, 1, and 2 all shipped to `main` 2026-06-15/16** (mockup-reviewed and Director-signed-off; PR #2 for the rail + master-detail). The decisions that drove it: navy rail color; portrait iPad keeps the bottom nav (rail and master-detail are a landscape-only package); master-detail scope is Local, Calendar, and Schedule. The side-navigation rail is the target; iPad-first. Sections below are kept as the design record; the per-phase headers are marked with their ship status.
 
 **Date:** 2026-06-15
 
@@ -306,7 +306,7 @@ The `100vh` behavior in iPad Safari browser-tab (where the address bar consumes 
 
 ---
 
-### Phase 1: The rail (branch + design mockup + Director sign-off before code starts)
+### Phase 1: The rail (✅ shipped to `main` 2026-06-16, PR #2)
 
 **Sequence:** (a) Design a mockup of the rail layout (rail column, header treatment, vertical pill animation, BottomSheet-as-dialog, FAB position). (b) Director reviews and signs off. (c) Code starts on a branch. (d) Thorough testing matrix (see below). (e) Merge to `main`.
 
@@ -350,7 +350,7 @@ The `100vh` behavior in iPad Safari browser-tab (where the address bar consumes 
 
 ---
 
-### Phase 2: Master-detail (branch, per-view, follows Phase 1)
+### Phase 2: Master-detail (✅ shipped to `main` 2026-06-16, PR #2, with Phase 1)
 
 **Prerequisite:** Phase 1 is merged to `main` and the rail is stable.
 
