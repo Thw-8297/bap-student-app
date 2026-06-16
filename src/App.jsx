@@ -6493,7 +6493,6 @@ function CalendarView({ data }) {
                           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: C.mountain }}>{getDayOfWeek(e.date)}</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ width: 3, height: "100%", background: s.border, borderRadius: 2, position: "absolute" }} />
                           <div style={{ paddingLeft: 8, borderLeft: `3px solid ${s.border}` }}>
                             <div style={{ fontFamily: "'EB Garamond', serif", fontWeight: 700, fontSize: 13, color: C.pepBlack, lineHeight: 1.25 }}>
                               {e.type === "mundial" && <span style={{ marginRight: 4 }}>⚽</span>}{e.title}
@@ -6533,7 +6532,7 @@ function CalendarView({ data }) {
         ? (e.end_time ? `${e.start_time}–${e.end_time}` : e.start_time)
         : null;
       rightDetail = (
-        <div style={{ padding: "28px 32px", maxWidth: 560 }}>
+        <div style={{ padding: "32px 40px", maxWidth: 600, width: "100%", margin: "auto", boxSizing: "border-box" }}>
           {/* Type badge */}
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: s.bg, border: `1.5px solid ${s.border}`, borderRadius: 8, padding: "4px 10px", marginBottom: 18 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 600, color: C.mountain, textTransform: "uppercase", letterSpacing: 1.2 }}>
@@ -6601,8 +6600,8 @@ function CalendarView({ data }) {
         }}>
           {leftList}
         </div>
-        {/* Right pane (flex:1): selected event detail with its own scroll */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", background: C.white }}>
+        {/* Right pane (flex:1): selected event detail, centered in its own scroll */}
+        <div style={{ flex: 1, minWidth: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", background: C.white, display: "flex", flexDirection: "column" }}>
           {rightDetail}
         </div>
       </div>
