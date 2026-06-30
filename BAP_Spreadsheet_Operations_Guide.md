@@ -334,6 +334,8 @@ A vertical key-value table.
 - `finals_window_start` — YYYY-MM-DD. First day of the program-wide final-exam window. Used to gate when the Finals UI appears (the FinalsCard on the Schedule tab and the Finals coming up tile on Today both surface 14 days before this date) and to populate the "TBD · {window}" copy on classes whose individual `final_date` hasn't been assigned yet. Leave blank to disable the finals UI entirely.
 - `finals_window_end` — YYYY-MM-DD. Last day of the program-wide final-exam window. For Summer terms, this is typically the same date as `finals_window_start` (a single day). For Fall and Spring, it usually spans 2-3 days.
 
+> **The finals window now also drives a "Good luck on finals" mask on the Today tab** (added 2026-06-30). On any day inside `[finals_window_start, finals_window_end]` (inclusive), every student — not just those who've personalized their classes — sees a festive cap-and-gown skin on the greeting strip ("¡Semana de finales! / Finals week") plus a "¡Mucha suerte en los finales! / Good luck on finals!" card. It turns on by itself the day finals start and turns off by itself the day after they end, entirely from these two keys — no developer involvement. So keeping this window accurate matters for two reasons now: the practical finals card/tile AND the morale mask. (On a day Argentina also plays a Mundial game, that treatment takes visual priority and the finals skin steps aside for the day.)
+
 Adding new keys here doesn't do anything until the app code is updated to read them. The structure is forward-compatible but not auto-magical.
 
 ### Classes *(required)*
@@ -623,4 +625,4 @@ The Google Sheet has revision history built in (File → Version history → See
 
 ---
 
-*Last updated: 2026-06-11 (Argentina Mundial game-day treatment on the Today tab — a `mundial` Calendar row dated today whose title contains "Argentina" triggers an albiceleste greeting strip + a festive game tile with a live kickoff countdown from `start_time`. No sheet schema change; just title the game with "Argentina" and set `start_time`.)*
+*Last updated: 2026-06-30 (Finals "Good luck" mask on the Today tab — a cohort-wide cap-and-gown greeting-strip skin + "¡Mucha suerte en los finales!" card that auto-activates on any day inside the `Settings` finals window `[finals_window_start, finals_window_end]` and auto-retires after it. No sheet schema change; just keep the finals window accurate.)*
